@@ -41,18 +41,19 @@ create database karnataka_surveyors owner surveyor_user;
 \q
 ```
 
-## 4. Upload The Project
+## 4. Get The Project From GitHub
 
-From your Windows PowerShell, run this from the project folder:
+Run on the VPS:
 
-```powershell
-scp -r . root@89.116.134.189:/opt/surveyor-app
+```bash
+git clone https://github.com/surajtalageri15-bot/klswataluk.git /opt/surveyor-app
 ```
 
-Then SSH back into the VPS:
+If `/opt/surveyor-app` already exists, update it instead:
 
-```powershell
-ssh root@89.116.134.189
+```bash
+cd /opt/surveyor-app
+git pull origin master
 ```
 
 ## 5. Configure App Environment
@@ -67,8 +68,15 @@ PGSSLMODE=disable
 PORT=3000
 EOF
 npm ci
+```
+
+The GitHub repository does not include private member data. To load your surveyor data into PostgreSQL, first upload `data/db.json` privately to `/opt/surveyor-app/data/db.json`, then run:
+
+```bash
 npm run import:pg
 ```
+
+Do not commit `data/db.json` to GitHub.
 
 ## 6. Run App As A Service
 
