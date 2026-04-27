@@ -11,6 +11,8 @@ const state = {
   userFilters: { search: "", role: "", district: "" }
 };
 
+let latestJoinLink = "";
+
 const app = document.querySelector("#app");
 
 const columns = [
@@ -642,6 +644,15 @@ function renderUsers() {
           <button class="primary" type="submit">Create login</button>
           <div class="message" id="userMessage"></div>
         </form>
+        <div class="join-link-panel">
+          <h2>Create member join link</h2>
+          <div class="two">
+            ${selectField("joinDistrict", "District", lists.districts)}
+            ${selectField("joinTaluk", "Taluk", [])}
+          </div>
+          <button class="secondary" id="createJoinLink">Create share link</button>
+          <div class="message success" id="joinLinkMessage">${latestJoinLink ? `<a href="${latestJoinLink}" target="_blank">${latestJoinLink}</a>` : ""}</div>
+        </div>
       </section>
       <section class="box section">
         <div class="section-head">
@@ -671,6 +682,8 @@ function renderUsers() {
 
   const districtSelect = document.querySelector('#userForm select[name="district"]');
   const talukSelect = document.querySelector('#userForm select[name="taluk"]');
+  const joinDistrict = document.querySelector('select[name="joinDistrict"]');
+  const joinTaluk = document.querySelector('select[name="joinTaluk"]');
   const roleSelect = document.querySelector('#userForm select[name="role"]');
   roleSelect.addEventListener("change", () => {
     const needsTaluk = roleSelect.value === "taluk";
@@ -679,6 +692,21 @@ function renderUsers() {
   });
   districtSelect.addEventListener("change", () => {
     talukSelect.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, districtSelect.value))}`;
+  });
+  joinDistrict.addEventListener("change", () => {
+    joinTaluk.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, joinDistrict.value))}`;
+  });
+  document.querySelector("#createJoinLink").addEventListener("click", async () => {
+    if (!joinDistrict.value || !joinTaluk.value) {
+      document.querySelector("#joinLinkMessage").textContent = "Select district and taluk";
+      return;
+    }
+    const data = await request("/api/join-links", {
+      method: "POST",
+      body: JSON.stringify({ district: joinDistrict.value, taluk: joinTaluk.value })
+    });
+    latestJoinLink = `${window.location.origin}${data.link}`;
+    document.querySelector("#joinLinkMessage").innerHTML = `<a href="${latestJoinLink}" target="_blank">${latestJoinLink}</a>`;
   });
 
   document.querySelector("#userForm").addEventListener("submit", async (event) => {

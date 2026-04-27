@@ -1,4 +1,5 @@
 let lists = { districts: [], taluksByDistrict: {} };
+let scopedJoin = null;
 
 const form = document.querySelector("#publicMembershipForm");
 const districtSelect = document.querySelector("#district");
@@ -33,12 +34,26 @@ async function request(path, options = {}) {
 }
 
 async function boot() {
-  const data = await request("/api/public-config");
+  const params = new URLSearchParams(window.location.search);
+  const configParams = new URLSearchParams();
+  if (params.get("district")) configParams.set("district", params.get("district"));
+  if (params.get("taluk")) configParams.set("taluk", params.get("taluk"));
+  const data = await request(`/api/public-config?${configParams.toString()}`);
   lists = data.lists;
+  scopedJoin = data.scope;
   districtSelect.innerHTML = `<option value="">Select</option>${options(lists.districts)}`;
   const years = [];
   for (let year = 2026; year >= 1998; year -= 1) years.push(String(year));
   batchYearSelect.innerHTML = `<option value="">— ಬ್ಯಾಚ್ ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(years)}`;
+  if (scopedJoin) {
+    districtSelect.value = scopedJoin.district;
+    const taluks = lists.taluksByDistrict[scopedJoin.district] || [];
+    talukSelect.innerHTML = `<option value="">— ತಾಲ್ಲೂಕು ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(taluks)}`;
+    talukSelect.value = scopedJoin.taluk;
+    districtSelect.disabled = true;
+    talukSelect.disabled = true;
+    form.insertAdjacentHTML("afterbegin", `<input type="hidden" name="district" value="${escapeHtml(scopedJoin.district)}"><input type="hidden" name="taluk" value="${escapeHtml(scopedJoin.taluk)}">`);
+  }
 }
 
 dateOfBirthInput.addEventListener("change", () => {
@@ -55,6 +70,7 @@ dateOfBirthInput.addEventListener("change", () => {
 });
 
 districtSelect.addEventListener("change", () => {
+  if (scopedJoin) return;
   const taluks = lists.taluksByDistrict[districtSelect.value] || [];
   talukSelect.innerHTML = `<option value="">— ತಾಲ್ಲೂಕು ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(taluks)}`;
 });
@@ -72,7 +88,12 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify(Object.fromEntries(new FormData(form)))
     });
     form.reset();
-    talukSelect.innerHTML = `<option value="">— ಮೊದಲು ಜಿಲ್ಲೆ ಆಯ್ಕೆ ಮಾಡಿ —</option>`;
+    if (scopedJoin) {
+      districtSelect.value = scopedJoin.district;
+      talukSelect.value = scopedJoin.taluk;
+    } else {
+      talukSelect.innerHTML = `<option value="">— ಮೊದಲು ಜಿಲ್ಲೆ ಆಯ್ಕೆ ಮಾಡಿ —</option>`;
+    }
     message.textContent = "Membership submitted for verification.";
     message.classList.add("success");
   } catch (error) {

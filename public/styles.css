@@ -394,6 +394,19 @@ textarea {
   font-size: 16px;
 }
 
+.join-link-panel {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+}
+
+.join-link-panel a {
+  color: var(--green-dark);
+  word-break: break-all;
+}
+
 .account-meta {
   display: flex;
   gap: 6px;

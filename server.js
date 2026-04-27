@@ -4,7 +4,7 @@ const fssync = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const store = require("./db");
-const { masterLists } = require("./taluks");
+const { canonicalDistrict, isMasterTaluk, masterLists } = require("./taluks");
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
@@ -123,11 +123,24 @@ function assertMember(member) {
   return null;
 }
 
+function joinScopeFromParams(params) {
+  const district = canonicalDistrict(params.get("district") || "");
+  const taluk = String(params.get("taluk") || "").trim();
+  if (!district || !taluk || !isMasterTaluk(district, taluk)) return null;
+  return {
+    district,
+    taluk,
+    title: `${taluk} Membership Form`
+  };
+}
+
 async function api(req, res, pathname) {
   const user = await currentUser(req);
 
   if (pathname === "/api/public-config" && req.method === "GET") {
-    return json(res, 200, { lists: masterLists() });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const scope = joinScopeFromParams(url.searchParams);
+    return json(res, 200, { lists: masterLists(), scope });
   }
 
   if (pathname === "/api/login" && req.method === "POST") {
@@ -282,6 +295,20 @@ async function api(req, res, pathname) {
     const dashboard = await store.getDashboard(user);
     const users = await store.listUsers(user);
     return json(res, 200, { users: users.map(publicUser), lists: dashboard.lists });
+  }
+
+  if (pathname === "/api/join-links" && req.method === "POST") {
+    requireAdmin(user);
+    const body = await parseBody(req);
+    const district = canonicalDistrict(body.district || "");
+    const taluk = String(body.taluk || "").trim();
+    if (!district || !taluk) return json(res, 400, { error: "District and taluk are required" });
+    if (!isMasterTaluk(district, taluk)) return json(res, 400, { error: "Select a valid taluk for this district" });
+    const params = new URLSearchParams({ district, taluk });
+    return json(res, 201, {
+      link: `/membership.html?${params.toString()}`,
+      scope: { district, taluk, title: `${taluk} Membership Form` }
+    });
   }
 
   if (pathname === "/api/taluk-corrections" && req.method === "GET") {
