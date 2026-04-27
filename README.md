@@ -64,3 +64,17 @@ For Render, Railway, or other hosted PostgreSQL providers, copy their database c
 When `DATABASE_URL` is set, the app creates the required PostgreSQL tables automatically and reads/writes all users and member records from PostgreSQL. When `DATABASE_URL` is not set, it uses the local JSON file for development.
 
 Do not upload `data\db.json` to a public GitHub repository because it contains member data. It is ignored by Git.
+
+## Taluk Master
+
+The app uses a fixed Karnataka master list of 239 taluks across 31 districts for dashboards, member filters, and taluk-team assignment dropdowns. This prevents messy Excel values, alternate spellings, Kannada/English variants, and address-like text from becoming separate taluk options.
+
+After importing data into PostgreSQL, run this once to standardize clear taluk spelling variants:
+
+```powershell
+$env:DATABASE_URL="postgres://username:password@host:5432/karnataka_surveyors"
+$env:PGSSLMODE="disable"
+npm run normalize:taluks
+```
+
+Rows that cannot be confidently matched are left unchanged for manual correction.

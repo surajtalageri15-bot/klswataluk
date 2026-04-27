@@ -1,6 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
+const { canonicalDistrict, masterLists, masterTalukCount, normalizedTaluk } = require("./taluks");
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
@@ -53,6 +54,15 @@ function toMember(row) {
   delete item.role;
   delete item.active;
   return item;
+}
+
+function normalizeMemberLocation(member) {
+  const district = canonicalDistrict(member.district);
+  return {
+    ...member,
+    district,
+    taluk: normalizedTaluk(district, member.taluk)
+  };
 }
 
 async function readJsonDb() {
@@ -122,9 +132,9 @@ async function initDb() {
 
 function visibleWhere(user, startIndex = 1) {
   if (user.role === "admin") return { clause: "true", values: [], next: startIndex };
-  const values = [user.taluk];
-  let clause = `taluk = $${startIndex}`;
-  let next = startIndex + 1;
+  const values = [];
+  let clause = "true";
+  let next = startIndex;
   if (user.district) {
     values.push(user.district);
     clause += ` and district = $${next}`;
@@ -135,7 +145,10 @@ function visibleWhere(user, startIndex = 1) {
 
 function memberVisibleTo(user, member) {
   if (user.role === "admin") return true;
-  return member.taluk === user.taluk && (!user.district || member.district === user.district);
+  const memberLocation = normalizeMemberLocation(member);
+  const userDistrict = canonicalDistrict(user.district);
+  const userTaluk = normalizedTaluk(userDistrict, user.taluk);
+  return memberLocation.taluk === userTaluk && (!userDistrict || memberLocation.district === userDistrict);
 }
 
 function summarize(members) {
@@ -146,11 +159,12 @@ function summarize(members) {
   const talukCounts = {};
 
   for (const member of members) {
-    if (member.district) districts.add(member.district);
-    if (member.taluk) taluks.add(member.taluk);
-    gender[member.gender || "Not specified"] = (gender[member.gender || "Not specified"] || 0) + 1;
-    districtCounts[member.district] = (districtCounts[member.district] || 0) + 1;
-    talukCounts[member.taluk] = (talukCounts[member.taluk] || 0) + 1;
+    const normalized = normalizeMemberLocation(member);
+    if (normalized.district) districts.add(normalized.district);
+    if (normalized.taluk) taluks.add(normalized.taluk);
+    gender[normalized.gender || "Not specified"] = (gender[normalized.gender || "Not specified"] || 0) + 1;
+    districtCounts[normalized.district] = (districtCounts[normalized.district] || 0) + 1;
+    talukCounts[normalized.taluk] = (talukCounts[normalized.taluk] || 0) + 1;
   }
 
   return {
@@ -187,63 +201,54 @@ async function findUserByLogin(username, password) {
 async function getDashboard(user) {
   if (hasPostgres) {
     const visible = visibleWhere(user);
-    const members = (await pool.query(`select * from members where ${visible.clause}`, visible.values)).rows.map(toMember);
+    const members = (await pool.query(`select * from members where ${visible.clause}`, visible.values)).rows
+      .map(toMember)
+      .filter((member) => memberVisibleTo(user, member));
     const metaRows = (await pool.query("select key, value from app_meta")).rows;
     const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
-    return { summary: summarize(members), meta, lists: listsFromMembers(members) };
+    const summary = summarize(members);
+    summary.taluks = masterTalukCount(user);
+    return { summary, meta, lists: masterLists(user) };
   }
   const db = await readJsonDb();
   const members = db.members.filter((member) => memberVisibleTo(user, member));
-  return { summary: summarize(members), meta: db.meta, lists: listsFromMembers(members) };
+  const summary = summarize(members);
+  summary.taluks = masterTalukCount(user);
+  return { summary, meta: db.meta, lists: masterLists(user) };
 }
 
 async function listMembers(user, filters) {
   if (hasPostgres) {
     const visible = visibleWhere(user);
-    const values = [...visible.values];
-    const where = [visible.clause];
-
-    if (filters.district) {
-      values.push(filters.district);
-      where.push(`district = $${values.length}`);
-    }
-    if (filters.taluk) {
-      values.push(filters.taluk);
-      where.push(`taluk = $${values.length}`);
-    }
-    if (filters.search) {
-      values.push(`%${filters.search.toLowerCase()}%`);
-      where.push(`(
-        lower(name) like $${values.length}
-        or lower(ls_number) like $${values.length}
-        or lower(coalesce(login_id, '')) like $${values.length}
-        or lower(coalesce(phone_number, '')) like $${values.length}
-        or lower(coalesce(qualification, '')) like $${values.length}
-      )`);
-    }
-
-    const count = await pool.query(`select count(*)::int as total from members where ${where.join(" and ")}`, values);
-    values.push(filters.size);
-    values.push((filters.page - 1) * filters.size);
     const rows = await pool.query(
-      `select * from members where ${where.join(" and ")} order by district, taluk, name limit $${values.length - 1} offset $${values.length}`,
-      values
+      `select * from members where ${visible.clause} order by district, taluk, name`,
+      visible.values
     );
-    return { rows: rows.rows.map(toMember), page: filters.page, size: filters.size, total: count.rows[0].total };
+    let visibleRows = rows.rows.map(toMember).map(normalizeMemberLocation).filter((member) => memberVisibleTo(user, member));
+    visibleRows = filterMemberRows(visibleRows, filters);
+    const total = visibleRows.length;
+    const start = (filters.page - 1) * filters.size;
+    return { rows: visibleRows.slice(start, start + filters.size), page: filters.page, size: filters.size, total };
   }
 
   const db = await readJsonDb();
-  let rows = db.members.filter((member) => memberVisibleTo(user, member));
-  if (filters.district) rows = rows.filter((member) => member.district === filters.district);
-  if (filters.taluk) rows = rows.filter((member) => member.taluk === filters.taluk);
-  if (filters.search) {
-    const search = filters.search.toLowerCase();
-    rows = rows.filter((member) => [member.name, member.lsNumber, member.loginId, member.phoneNumber, member.qualification]
-      .some((value) => String(value || "").toLowerCase().includes(search)));
-  }
+  let rows = db.members.filter((member) => memberVisibleTo(user, member)).map(normalizeMemberLocation);
+  rows = filterMemberRows(rows, filters);
   const total = rows.length;
   const start = (filters.page - 1) * filters.size;
   return { rows: rows.slice(start, start + filters.size), page: filters.page, size: filters.size, total };
+}
+
+function filterMemberRows(rows, filters) {
+  let filtered = rows;
+  if (filters.district) filtered = filtered.filter((member) => member.district === filters.district);
+  if (filters.taluk) filtered = filtered.filter((member) => member.taluk === filters.taluk);
+  if (filters.search) {
+    const search = filters.search.toLowerCase();
+    filtered = filtered.filter((member) => [member.name, member.lsNumber, member.loginId, member.phoneNumber, member.qualification]
+      .some((value) => String(value || "").toLowerCase().includes(search)));
+  }
+  return filtered;
 }
 
 async function getMember(id) {
@@ -386,23 +391,7 @@ async function updateUser(id, user) {
 }
 
 function listsFromMembers(members) {
-  const districts = [...new Set(members.map((member) => member.district).filter(Boolean))].sort();
-  const taluks = [...new Set(members.map((member) => member.taluk).filter(Boolean))].sort();
-  const taluksByDistrict = {};
-
-  for (const member of members) {
-    if (!member.district || !member.taluk) continue;
-    if (!taluksByDistrict[member.district]) taluksByDistrict[member.district] = new Set();
-    taluksByDistrict[member.district].add(member.taluk);
-  }
-
-  return {
-    districts,
-    taluks,
-    taluksByDistrict: Object.fromEntries(
-      Object.entries(taluksByDistrict).map(([district, districtTaluks]) => [district, [...districtTaluks].sort()])
-    )
-  };
+  return masterLists();
 }
 
 async function touchMeta() {

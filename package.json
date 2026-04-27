@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "import": "python scripts/import_excel.py",
-    "import:pg": "node scripts/import_postgres.js"
+    "import:pg": "node scripts/import_postgres.js",
+    "normalize:taluks": "node scripts/normalize_taluks.js"
   },
   "dependencies": {
     "pg": "^8.20.0"
