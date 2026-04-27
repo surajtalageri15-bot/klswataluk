@@ -4,6 +4,7 @@ const state = {
   dashboard: null,
   users: [],
   corrections: { rows: [], page: 1, size: 50, total: 0 },
+  pending: { rows: [], page: 1, size: 25, total: 0 },
   members: { rows: [], page: 1, size: 25, total: 0 },
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" }
@@ -137,6 +138,20 @@ async function loadMembers(page = 1) {
   state.members = await request(`/api/members?${params.toString()}`);
 }
 
+async function loadPending(page = 1) {
+  state.pending.page = page;
+  const params = new URLSearchParams({
+    page: String(page),
+    size: "100",
+    search: "",
+    district: "",
+    taluk: ""
+  });
+  const data = await request(`/api/members?${params.toString()}`);
+  const pendingRows = data.rows.filter((member) => member.status === "Pending verification");
+  state.pending = { ...data, size: 100, rows: pendingRows, total: pendingRows.length };
+}
+
 async function loadUsers() {
   if (!["admin", "district"].includes(state.user.role)) return;
   const data = await request("/api/users");
@@ -167,6 +182,7 @@ function renderApp() {
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
+          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
           ${["admin", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
@@ -188,6 +204,7 @@ function renderApp() {
       state.tab = button.dataset.tab;
       if (state.tab === "dashboard") await loadDashboard();
       if (state.tab === "members") await loadMembers();
+      if (state.tab === "pending") await loadPending();
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "users") await loadUsers();
       if (state.tab === "corrections") await loadCorrections();
@@ -203,6 +220,7 @@ function renderApp() {
 
   if (state.tab === "dashboard") renderDashboard();
   if (state.tab === "members") renderMembers();
+  if (state.tab === "pending") renderPendingQueue();
   if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "users") renderUsers();
   if (state.tab === "corrections") renderCorrections();
@@ -211,6 +229,7 @@ function renderApp() {
 function pageTitle() {
   if (state.tab === "dashboard") return "Dashboard";
   if (state.tab === "members") return "Member Data";
+  if (state.tab === "pending") return "Pending Verification Queue";
   if (state.tab === "membership") return "Membership Form";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "corrections") return "Taluk Correction";
@@ -362,6 +381,77 @@ function renderMembers() {
       await request(`/api/members/${button.dataset.delete}`, { method: "DELETE" });
       await loadDashboard();
       await loadMembers(state.members.page);
+      renderApp();
+    });
+  });
+}
+
+function renderPendingQueue() {
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>LS Number</th>
+              <th>District</th>
+              <th>Taluk</th>
+              <th>Phone</th>
+              <th>Qualification</th>
+              <th>Remarks</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.pending.rows.map((member) => `
+              <tr>
+                <td>${escapeHtml(member.name)}</td>
+                <td>${escapeHtml(member.lsNumber)}</td>
+                <td>${escapeHtml(member.district)}</td>
+                <td>${escapeHtml(member.taluk)}</td>
+                <td>${escapeHtml(member.phoneNumber)}</td>
+                <td>${escapeHtml(member.qualification)}</td>
+                <td>${escapeHtml(member.remarks)}</td>
+                <td class="actions">
+                  <button class="primary" data-status="Active" data-member="${member.id}">Approve</button>
+                  <button class="secondary" data-status="Needs correction" data-member="${member.id}">Needs correction</button>
+                  <button class="danger" data-status="Rejected" data-member="${member.id}">Reject</button>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="muted">Pending records on this page: ${state.pending.rows.length}</span>
+        <div class="actions">
+          <button class="secondary" id="refreshPending">Refresh</button>
+        </div>
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#refreshPending").addEventListener("click", async () => {
+    await loadPending();
+    renderApp();
+  });
+  document.querySelectorAll("[data-status]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const status = button.dataset.status;
+      const member = state.pending.rows.find((item) => item.id === button.dataset.member);
+      let remarks = member.remarks || "";
+      if (status !== "Active") {
+        const note = prompt(`Enter note for ${status}:`, remarks);
+        if (note === null) return;
+        remarks = note;
+      }
+      await request(`/api/members/${button.dataset.member}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status, remarks })
+      });
+      await loadDashboard();
+      await loadPending();
       renderApp();
     });
   });

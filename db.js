@@ -337,6 +337,34 @@ async function exportMembers(user, filters) {
   return rows.rows;
 }
 
+async function updateMemberStatus(id, status, remarks = "") {
+  const allowed = ["Pending verification", "Active", "Rejected", "Needs correction", "Inactive"];
+  if (!allowed.includes(status)) {
+    const error = new Error("Invalid member status");
+    error.status = 400;
+    throw error;
+  }
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update members set status = $2, remarks = case when $3 = '' then remarks else $3 end, updated_at = now()
+       where id = $1 returning *`,
+      [id, status, remarks]
+    );
+    await touchMeta();
+    return toMember(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  const member = db.members.find((item) => item.id === id);
+  if (!member) return null;
+  member.status = status;
+  if (remarks) member.remarks = remarks;
+  member.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return member;
+}
+
 function filterMemberRows(rows, filters) {
   let filtered = rows;
   if (filters.district) filtered = filtered.filter((member) => member.district === filters.district);
@@ -722,6 +750,7 @@ module.exports = {
   exportMembers,
   createMember,
   updateMember,
+  updateMemberStatus,
   listTalukCorrections,
   exportTalukCorrections,
   correctMemberTaluk,

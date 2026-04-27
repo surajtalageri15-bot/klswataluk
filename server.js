@@ -267,6 +267,17 @@ async function api(req, res, pathname) {
     return json(res, 200, { ok: true });
   }
 
+  const statusMatch = pathname.match(/^\/api\/members\/([^/]+)\/status$/);
+  if (statusMatch && req.method === "PUT") {
+    if (!canEditMembers(user)) return json(res, 403, { error: "District President access is view-only" });
+    const member = await store.getMember(statusMatch[1]);
+    if (!member) return json(res, 404, { error: "Member not found" });
+    if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your area" });
+    const body = await parseBody(req);
+    const updated = await store.updateMemberStatus(member.id, String(body.status || ""), String(body.remarks || ""));
+    return json(res, 200, { member: updated });
+  }
+
   if (pathname === "/api/users" && req.method === "GET") {
     if (!canViewUsers(user)) return json(res, 403, { error: "User list access required" });
     const dashboard = await store.getDashboard(user);
