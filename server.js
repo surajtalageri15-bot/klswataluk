@@ -212,8 +212,7 @@ async function api(req, res, pathname) {
     return csvDownload(res, "surveyor-members.csv", [
       "name", "lsNumber", "loginId", "district", "taluk", "gender",
       "dateOfBirth", "age", "phoneNumber", "qualification", "batchYear", "status",
-      "maritalStatus", "kalyanaKarnataka", "category", "caste", "religion",
-      "disability", "otherTaluks", "address", "declarationAccepted", "remarks"
+      "remarks"
     ], rows);
   }
 
