@@ -2,7 +2,9 @@ let lists = { districts: [], taluksByDistrict: {} };
 
 const form = document.querySelector("#publicMembershipForm");
 const districtSelect = document.querySelector("#district");
-const talukSelect = document.querySelector("#taluk");
+const batchYearSelect = document.querySelector("#batchYear");
+const dateOfBirthInput = document.querySelector("#dateOfBirth");
+const ageInput = document.querySelector("#age");
 const message = document.querySelector("#formMessage");
 
 function escapeHtml(value) {
@@ -33,11 +35,23 @@ async function boot() {
   const data = await request("/api/public-config");
   lists = data.lists;
   districtSelect.innerHTML = `<option value="">Select</option>${options(lists.districts)}`;
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let year = currentYear; year >= 1998; year -= 1) years.push(String(year));
+  batchYearSelect.innerHTML = `<option value="">— ಬ್ಯಾಚ್ ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(years)}`;
 }
 
-districtSelect.addEventListener("change", () => {
-  const taluks = lists.taluksByDistrict[districtSelect.value] || [];
-  talukSelect.innerHTML = `<option value="">Select</option>${options(taluks)}`;
+dateOfBirthInput.addEventListener("change", () => {
+  if (!dateOfBirthInput.value) {
+    ageInput.value = "";
+    return;
+  }
+  const dob = new Date(dateOfBirthInput.value);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age -= 1;
+  ageInput.value = Number.isFinite(age) && age > 0 ? age : "";
 });
 
 form.addEventListener("submit", async (event) => {

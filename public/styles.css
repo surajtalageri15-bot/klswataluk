@@ -66,10 +66,63 @@ a.primary {
   color: var(--muted);
 }
 
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--green-dark);
+  font-weight: 800;
+  font-size: 20px;
+}
+
+.form-star {
+  font-weight: 800;
+  color: var(--gold);
+}
+
+.notice {
+  padding: 12px;
+  border: 1px solid #e4c58d;
+  border-radius: 8px;
+  background: #fff8e9;
+}
+
 .public-form-card {
   max-width: 980px;
   margin: 0 auto;
   padding: 22px;
+}
+
+.public-form-card h2 {
+  margin: 18px 0 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--green-dark);
+}
+
+.public-form-card h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.declaration {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8faf5;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.check-row {
+  grid-template-columns: 18px 1fr;
+  align-items: start;
+  color: var(--text);
+}
+
+.check-row input {
+  min-height: auto;
+  width: auto;
+  margin-top: 3px;
 }
 
 .login-visual {
@@ -138,6 +191,11 @@ label {
   color: var(--muted);
   font-size: 13px;
   font-weight: 650;
+}
+
+label span {
+  font-weight: 500;
+  color: #7a8375;
 }
 
 input,

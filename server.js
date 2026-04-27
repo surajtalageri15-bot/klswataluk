@@ -102,7 +102,16 @@ function normalizeMember(input, existing = {}) {
     qualification: String(input.qualification || "").trim(),
     batchYear: input.batchYear === "" || input.batchYear == null ? "" : Number(input.batchYear),
     status: String(input.status || existing.status || "Active").trim(),
-    remarks: String(input.remarks || "").trim()
+    remarks: String(input.remarks || "").trim(),
+    maritalStatus: String(input.maritalStatus || "").trim(),
+    kalyanaKarnataka: String(input.kalyanaKarnataka || "").trim(),
+    category: String(input.category || "").trim(),
+    caste: String(input.caste || "").trim(),
+    religion: String(input.religion || "").trim(),
+    disability: String(input.disability || "").trim(),
+    otherTaluks: String(input.otherTaluks || "").trim(),
+    address: String(input.address || "").trim(),
+    declarationAccepted: input.declarationAccepted === true || input.declarationAccepted === "true" || input.declarationAccepted === "on"
   };
 }
 
@@ -141,6 +150,26 @@ async function api(req, res, pathname) {
     });
     const validation = assertMember(member);
     if (validation) return json(res, 400, { error: validation });
+    const required = [
+      ["phoneNumber", "Mobile number is required"],
+      ["dateOfBirth", "Date of birth is required"],
+      ["gender", "Gender is required"],
+      ["maritalStatus", "Marital status is required"],
+      ["kalyanaKarnataka", "Kalyana Karnataka selection is required"],
+      ["category", "Category is required"],
+      ["caste", "Caste is required"],
+      ["religion", "Religion is required"],
+      ["disability", "Disability selection is required"],
+      ["loginId", "Login ID is required"],
+      ["batchYear", "Batch year is required"],
+      ["qualification", "Education is required"],
+      ["address", "Permanent address is required"]
+    ];
+    for (const [key, message] of required) {
+      if (!member[key]) return json(res, 400, { error: message });
+    }
+    if (!/^\d{10}$/.test(member.phoneNumber)) return json(res, 400, { error: "Enter a valid 10-digit mobile number" });
+    if (!member.declarationAccepted) return json(res, 400, { error: "Declaration must be accepted" });
     return json(res, 201, { ok: true, member: await store.createMember(member) });
   }
 
@@ -180,7 +209,9 @@ async function api(req, res, pathname) {
     });
     return csvDownload(res, "surveyor-members.csv", [
       "name", "lsNumber", "loginId", "district", "taluk", "gender",
-      "dateOfBirth", "age", "phoneNumber", "qualification", "batchYear", "status", "remarks"
+      "dateOfBirth", "age", "phoneNumber", "qualification", "batchYear", "status",
+      "maritalStatus", "kalyanaKarnataka", "category", "caste", "religion",
+      "disability", "otherTaluks", "address", "declarationAccepted", "remarks"
     ], rows);
   }
 

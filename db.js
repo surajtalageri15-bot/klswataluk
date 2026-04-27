@@ -42,6 +42,15 @@ function toCamel(row) {
     batchYear: row.batch_year ?? "",
     status: row.status || "Active",
     remarks: row.remarks || "",
+    maritalStatus: row.marital_status || "",
+    kalyanaKarnataka: row.kalyana_karnataka || "",
+    category: row.category || "",
+    caste: row.caste || "",
+    religion: row.religion || "",
+    disability: row.disability || "",
+    otherTaluks: row.other_taluks || "",
+    address: row.address || "",
+    declarationAccepted: row.declaration_accepted || false,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -113,6 +122,15 @@ async function initDb() {
       batch_year integer,
       status text not null default 'Active',
       remarks text,
+      marital_status text,
+      kalyana_karnataka text,
+      category text,
+      caste text,
+      religion text,
+      disability text,
+      other_taluks text,
+      address text,
+      declaration_accepted boolean not null default false,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
@@ -126,6 +144,18 @@ async function initDb() {
   await pool.query(`
     alter table users drop constraint if exists users_role_check;
     alter table users add constraint users_role_check check (role in ('admin', 'district', 'taluk'));
+  `);
+
+  await pool.query(`
+    alter table members add column if not exists marital_status text;
+    alter table members add column if not exists kalyana_karnataka text;
+    alter table members add column if not exists category text;
+    alter table members add column if not exists caste text;
+    alter table members add column if not exists religion text;
+    alter table members add column if not exists disability text;
+    alter table members add column if not exists other_taluks text;
+    alter table members add column if not exists address text;
+    alter table members add column if not exists declaration_accepted boolean not null default false;
   `);
 
   await pool.query(`
@@ -338,16 +368,21 @@ async function createMember(member) {
       `insert into members (
         id, source_row, district, name, ls_number, login_id, taluk, gender,
         date_of_birth, age, phone_number, qualification, batch_year, status, remarks,
-        created_at, updated_at
+        marital_status, kalyana_karnataka, category, caste, religion, disability,
+        other_taluks, address, declaration_accepted, created_at, updated_at
       ) values (
         $1, $2, $3, $4, $5, $6, $7, $8, nullif($9, '')::date, nullif($10, '')::integer,
-        $11, $12, nullif($13, '')::integer, $14, $15, $16, $17
+        $11, $12, nullif($13, '')::integer, $14, $15, $16, $17, $18, $19, $20, $21,
+        $22, $23, $24, $25, $26
       ) returning *`,
       [
         member.id, member.sourceRow || null, member.district, member.name, member.lsNumber, member.loginId,
         member.taluk, member.gender, member.dateOfBirth || "", member.age === "" ? "" : member.age,
         member.phoneNumber, member.qualification, member.batchYear === "" ? "" : member.batchYear,
-        member.status, member.remarks, member.createdAt, member.updatedAt
+        member.status, member.remarks, member.maritalStatus || "", member.kalyanaKarnataka || "",
+        member.category || "", member.caste || "", member.religion || "", member.disability || "",
+        member.otherTaluks || "", member.address || "", Boolean(member.declarationAccepted),
+        member.createdAt, member.updatedAt
       ]
     );
     await touchMeta();
@@ -367,13 +402,17 @@ async function updateMember(id, member) {
         district = $2, name = $3, ls_number = $4, login_id = $5, taluk = $6,
         gender = $7, date_of_birth = nullif($8, '')::date, age = nullif($9, '')::integer,
         phone_number = $10, qualification = $11, batch_year = nullif($12, '')::integer,
-        status = $13, remarks = $14, updated_at = now()
+        status = $13, remarks = $14, marital_status = $15, kalyana_karnataka = $16,
+        category = $17, caste = $18, religion = $19, disability = $20, other_taluks = $21,
+        address = $22, declaration_accepted = $23, updated_at = now()
       where id = $1 returning *`,
       [
         id, member.district, member.name, member.lsNumber, member.loginId, member.taluk,
         member.gender, member.dateOfBirth || "", member.age === "" ? "" : member.age,
         member.phoneNumber, member.qualification, member.batchYear === "" ? "" : member.batchYear,
-        member.status, member.remarks
+        member.status, member.remarks, member.maritalStatus || "", member.kalyanaKarnataka || "",
+        member.category || "", member.caste || "", member.religion || "", member.disability || "",
+        member.otherTaluks || "", member.address || "", Boolean(member.declarationAccepted)
       ]
     );
     await touchMeta();

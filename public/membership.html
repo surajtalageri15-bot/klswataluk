@@ -1,49 +1,76 @@
 <!doctype html>
-<html lang="en">
+<html lang="kn">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>KLSWA Membership Form</title>
+    <title>AKSPBS Membership Form</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <main class="public-form-shell">
-      <section class="public-form-intro">
-        <h1>KLSWA Membership Form</h1>
-        <p>Submit licensed surveyor membership details for verification.</p>
+      <section class="public-form-intro bilingual-intro">
+        <p class="eyebrow">ಅಖಿಲ ಕರ್ನಾಟಕ ಸರ್ಕಾರಿ ಪರವಾನಗಿ ಭೂಮಾಪಕರ ಸಂಘ</p>
+        <h1>AKSPBS - All Karnataka State Government Licensed Surveyors Union</h1>
+        <p class="form-star">★ ಕರ್ನಾಟಕದ ಕಾರ್ಯನಿರತ ಪರವಾನಗಿ ಭೂಮಾಪಕ ಸದಸ್ಯರ ಅಧಿಕೃತ ಮಾಹಿತಿ ಅರ್ಜಿ ★</p>
+        <p class="notice">⚠️ ಗಮನಿಸಿ: ಕೆಳಗಿನ ಎಲ್ಲಾ ಮಾಹಿತಿಗಳನ್ನು ಕಡ್ಡಾಯವಾಗಿ ತುಂಬಿರಿ. ಯಾವುದಾದರೂ ಮಾಹಿತಿ ತಪ್ಪಿದ್ದಲ್ಲಿ ಅರ್ಜಿ ಸ್ವೀಕರಿಸಲಾಗುವುದಿಲ್ಲ. | Note: All fields are mandatory. Incomplete forms will not be accepted.</p>
       </section>
+
       <section class="box public-form-card">
         <form id="publicMembershipForm" class="form-grid">
+          <h2>1. ವೈಯಕ್ತಿಕ ಮಾಹಿತಿ · Personal Details</h2>
           <div class="three">
-            <label>Name <input name="name" required></label>
-            <label>LS Number <input name="lsNumber" required></label>
-            <label>Login ID <input name="loginId"></label>
+            <label>* ಪೂರ್ಣ ಹೆಸರು * <span>(SSLC ಅಂಕ ಪಟ್ಟಿ ಆಧರಿಸಿ / As per SSLC Marks Card)</span><input name="name" placeholder="ಪೂರ್ಣ ಹೆಸರು" required></label>
+            <label>* ಚಾಲ್ತಿಯಲ್ಲಿರುವ ದೂರವಾಣಿ ಸಂಖ್ಯೆ * <span>(Current Mobile Number)</span><input name="phoneNumber" inputmode="numeric" maxlength="10" pattern="[0-9]{10}" placeholder="10-digit mobile number" required></label>
+            <label>* ಜನ್ಮ ದಿನಾಂಕ * <span>SSLC ಅಂಕ ಪಟ್ಟಿ ಆಧರಿಸಿ</span><input name="dateOfBirth" id="dateOfBirth" type="date" required></label>
           </div>
           <div class="three">
-            <label>District <select name="district" id="district" required><option value="">Select</option></select></label>
-            <label>Taluk <select name="taluk" id="taluk" required><option value="">Select district first</option></select></label>
-            <label>Gender
-              <select name="gender">
-                <option value="">Select</option>
-                <option>Male</option>
-                <option>Female</option>
-                <option>Other</option>
-              </select>
-            </label>
-          </div>
-          <div class="three">
-            <label>Date of Birth <input name="dateOfBirth" type="date"></label>
-            <label>Age <input name="age" type="number" min="18" max="100"></label>
-            <label>Phone Number <input name="phoneNumber" inputmode="tel"></label>
+            <label>ವಯಸ್ಸು (Age) <span>DOB ನಿಂದ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಲೆಕ್ಕಿಸಲಾಗುತ್ತದೆ</span><input name="age" id="age" placeholder="Auto-calculated" readonly required></label>
+            <label>* ಲಿಂಗ * <span>(Gender)</span><select name="gender" required><option value="">— ಆಯ್ಕೆ ಮಾಡಿ —</option><option>Male</option><option>Female</option><option>Other</option></select></label>
+            <label>* ವೈವಾಹಿಕ ಸ್ಥಿತಿ * <span>(Marital Status)</span><select name="maritalStatus" required><option value="">— ಆಯ್ಕೆ ಮಾಡಿ —</option><option>Married</option><option>Unmarried</option><option>Other</option></select></label>
           </div>
           <div class="two">
-            <label>Qualification <input name="qualification"></label>
-            <label>Batch Year <input name="batchYear" type="number" min="1900" max="2100"></label>
+            <label>* ಕಲ್ಯಾಣ ಕರ್ನಾಟಕ (HK=KK) * <span>ಹೌದು ಅಥವಾ ಇಲ್ಲಾ</span><select name="kalyanaKarnataka" required><option value="">— ಆಯ್ಕೆ ಮಾಡಿ —</option><option>Yes</option><option>No</option></select></label>
           </div>
-          <label>Remarks <textarea name="remarks" rows="3"></textarea></label>
+
+          <h2>2. ಸಾಮಾಜಿಕ ಮಾಹಿತಿ · Social Details</h2>
+          <div class="three">
+            <label>* ಪ್ರವರ್ಗ (Category) * <span>GM, SC, ST, Cat-1, 2A, 2B, 3A, 3B</span><select name="category" required><option value="">— ಆಯ್ಕೆ ಮಾಡಿ —</option><option>GM</option><option>SC</option><option>ST</option><option>Cat-1</option><option>2A</option><option>2B</option><option>3A</option><option>3B</option><option>Other</option></select></label>
+            <label>* ಜಾತಿ (Caste) * <span>ಲಿಂಗಾಯತ, ಉಪ್ಪಾರ, ಬ್ರಾಹ್ಮಣ etc.</span><input name="caste" placeholder="ಜಾತಿ ಹೆಸರು" required></label>
+            <label>* ಧರ್ಮ (Religion) * <span>SSLC TC ಆಧರಿಸಿ</span><input name="religion" placeholder="ಧರ್ಮ" required></label>
+          </div>
+          <div class="two">
+            <label>* ಅಂಗವಿಕಲತೆ (Disability) * <select name="disability" required><option value="">— ಆಯ್ಕೆ ಮಾಡಿ —</option><option>None</option><option>Yes</option></select></label>
+          </div>
+
+          <h2>3. ಪರವಾನಗಿ ಮತ್ತು ಕೆಲಸದ ಮಾಹಿತಿ · License & Work Details</h2>
+          <div class="three">
+            <label>* ಪರವಾನಗಿ ಸಂಖ್ಯೆ (License Number) * <input name="lsNumber" placeholder="ಪರವಾನಗಿ ಸಂಖ್ಯೆ" required></label>
+            <label>* ಪರವಾನಗಿ ಮೋಜಿಣಿ ಲಾಗಿನ್ ID * <span>ಉದಾ: SHIVARAJAN, SURAJRT21</span><input name="loginId" placeholder="Login ID" required></label>
+            <label>* ಆಯ್ಕೆಯಾದ ಬ್ಯಾಚ್ ನ ವರ್ಷ (Batch Year) * <select name="batchYear" id="batchYear" required><option value="">— ಬ್ಯಾಚ್ ಆಯ್ಕೆ ಮಾಡಿ —</option></select></label>
+          </div>
+          <div class="three">
+            <label>* ವಿದ್ಯಾರ್ಹತೆ (Education) * <span>JOC in Surveying, BE Civil Engineering</span><input name="qualification" placeholder="ವಿದ್ಯಾರ್ಹತೆ" required></label>
+            <label>* ಕೆಲಸದ ಜಿಲ್ಲೆ (Work District) * <select name="district" id="district" required><option value="">— ಜಿಲ್ಲೆ ಆಯ್ಕೆ ಮಾಡಿ —</option></select></label>
+            <label>* ತಾಲ್ಲೂಕು (Taluk) * <span>Manual entry</span><input name="taluk" placeholder="ಪಾಂಡವಪುರ, ಸಿರಸಿ, ಕಾರವಾರ..." required></label>
+          </div>
+          <div class="two">
+            <label>* ಕೆಲಸ ನಿರ್ವಹಿಸಿದ ಇತರೆ ತಾಲ್ಲೂಕುಗಳು * <select name="otherTaluks" required><option value="">— ಆಯ್ಕೆ ಮಾಡಿ —</option><option>None</option><option>Yes</option></select></label>
+          </div>
+
+          <h2>4. ವಿಳಾಸ · Address</h2>
+          <label>* ಖಾಯಂ ಪೂರ್ಣ ವಿಳಾಸ (Permanent Full Address) * <span>PIN CODE ಕಡ್ಡಾಯ / PIN CODE is mandatory</span><textarea name="address" rows="4" placeholder="ಮನೆ ಸಂಖ್ಯೆ, ಬೀದಿ, ಊರು, ತಾಲ್ಲೂಕು, ಜಿಲ್ಲೆ, PIN — 581314" required></textarea></label>
+
+          <h2>5. ಘೋಷಣೆ · Declaration</h2>
+          <div class="declaration">
+            <p>ನಾನು ಈ ಅರ್ಜಿಯಲ್ಲಿ ನೀಡಿರುವ ಎಲ್ಲಾ ಮಾಹಿತಿಗಳು ನನ್ನ ತಿಳುವಳಿಕೆಯ ಮಟ್ಟಿಗೆ ಸತ್ಯ ಹಾಗೂ ಸರಿಯಾದವು ಎಂದು ಘೋಷಿಸುತ್ತೇನೆ. ಯಾವುದೇ ಮಾಹಿತಿಯು ತಪ್ಪಾಗಿದೆ ಅಥವಾ ಮರೆಮಾಚಲಾಗಿದೆ ಎಂದು ಕಂಡುಬಂದಲ್ಲಿ ಸಂಸ್ಥೆ ಕೈಗೊಳ್ಳುವ ಕ್ರಮಗಳಿಗೆ ನಾನು ಸಂಪೂರ್ಣವಾಗಿ ಜವಾಬ್ದಾರನಾಗಿರುತ್ತೇನೆ.</p>
+            <p>I declare that all information provided in this application is true and correct to the best of my knowledge. I shall be fully responsible for any action taken by the organization if any information is found to be incorrect or concealed.</p>
+            <p>ನಿಮ್ಮಗಳ ಮಾಹಿತಿಯ ಗೌಪ್ಯತೆಯನ್ನು ಮತ್ತು ಗೌರವವನ್ನು ಸಂಘವು ಸದಾ ಕಾಪಾಡುತ್ತದೆ. · Your information will always be kept confidential and respected by the association.</p>
+          </div>
+          <label class="check-row"><input name="declarationAccepted" type="checkbox" required> ನಾನು ಮೇಲಿನ ಘೋಷಣೆಯನ್ನು ಓದಿ ಅರ್ಥ ಮಾಡಿಕೊಂಡಿದ್ದೇನೆ ಮತ್ತು ಒಪ್ಪಿಕೊಳ್ಳುತ್ತೇನೆ. · I have read and agree to the declaration above.</label>
+
           <div class="message" id="formMessage"></div>
           <div class="actions">
-            <button class="primary" type="submit">Submit membership</button>
+            <button class="primary" type="submit">ಮಾಹಿತಿ ಸಲ್ಲಿಸಿ - Submit details</button>
             <button class="secondary" type="reset">Clear</button>
           </div>
         </form>
