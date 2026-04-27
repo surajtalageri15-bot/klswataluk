@@ -245,6 +245,17 @@ async function listMembers(user, filters) {
   return { rows: rows.slice(start, start + filters.size), page: filters.page, size: filters.size, total };
 }
 
+async function exportMembers(user, filters) {
+  const rows = await listMembers(user, {
+    search: filters.search || "",
+    district: filters.district || "",
+    taluk: filters.taluk || "",
+    page: 1,
+    size: Number.MAX_SAFE_INTEGER
+  });
+  return rows.rows;
+}
+
 function filterMemberRows(rows, filters) {
   let filtered = rows;
   if (filters.district) filtered = filtered.filter((member) => member.district === filters.district);
@@ -355,6 +366,18 @@ async function listTalukCorrections({ page = 1, size = 50, district = "", search
   const total = unmatched.length;
   const start = (page - 1) * size;
   return { rows: unmatched.slice(start, start + size), page, size, total };
+}
+
+async function exportTalukCorrections(user, filters = {}) {
+  if (user.role !== "admin" && user.role !== "district") return [];
+  const district = user.role === "district" ? canonicalDistrict(user.district) : (filters.district || "");
+  const result = await listTalukCorrections({
+    page: 1,
+    size: Number.MAX_SAFE_INTEGER,
+    district,
+    search: filters.search || ""
+  });
+  return result.rows;
 }
 
 async function correctMemberTaluk(id, district, taluk) {
@@ -565,9 +588,11 @@ module.exports = {
   getDashboard,
   listMembers,
   getMember,
+  exportMembers,
   createMember,
   updateMember,
   listTalukCorrections,
+  exportTalukCorrections,
   correctMemberTaluk,
   deleteMember,
   listUsers,

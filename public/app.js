@@ -64,6 +64,11 @@ function taluksForDistrict(lists, district) {
   return lists.taluks || [];
 }
 
+function exportUrl(path, params = {}) {
+  const query = new URLSearchParams(params);
+  return `${path}?${query.toString()}`;
+}
+
 async function boot() {
   try {
     const data = await request("/api/me");
@@ -226,6 +231,10 @@ function renderDashboard() {
     <div class="split">
       <section class="box section">
         <h2>Top districts</h2>
+        <div class="actions">
+          <a class="secondary" href="/api/exports/members">Export district-wise CSV</a>
+          ${["admin", "district"].includes(state.user.role) ? `<a class="secondary" href="/api/exports/corrections">Export pending corrections</a>` : ""}
+        </div>
         <div class="list">${summary.topDistricts.map(([name, count]) => row(name, count)).join("")}</div>
       </section>
       <section class="box section">
@@ -249,7 +258,10 @@ function renderMembers() {
         <label>Search <input id="searchInput" value="${escapeHtml(state.filters.search)}" placeholder="Name, LS number, phone"></label>
         <label>District <select id="districtFilter"><option value="">All districts</option>${optionList(lists.districts, state.filters.district)}</select></label>
         <label>Taluk <select id="talukFilter"><option value="">${state.filters.district ? "All taluks in district" : "All taluks"}</option>${optionList(talukOptions, state.filters.taluk)}</select></label>
-        <button class="secondary" id="applyFilters">Apply</button>
+        <span class="actions">
+          <button class="secondary" id="applyFilters">Apply</button>
+          <a class="secondary" id="memberExportLink" href="${exportUrl("/api/exports/members", state.filters)}">Export CSV</a>
+        </span>
       </div>
       <div class="table-wrap">
         <table>
@@ -530,7 +542,10 @@ function renderCorrections() {
         <label>Search <input id="correctionSearch" value="${escapeHtml(state.correctionFilters.search)}" placeholder="Name, LS number, raw taluk"></label>
         <label>District <select id="correctionDistrict"><option value="">All districts</option>${optionList(lists.districts, state.correctionFilters.district)}</select></label>
         <span></span>
-        <button class="secondary" id="applyCorrectionFilters">Apply</button>
+        <span class="actions">
+          <button class="secondary" id="applyCorrectionFilters">Apply</button>
+          <a class="secondary" href="${exportUrl("/api/exports/corrections", state.correctionFilters)}">Export CSV</a>
+        </span>
       </div>
       <div class="table-wrap">
         <table>

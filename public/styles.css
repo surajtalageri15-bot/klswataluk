@@ -35,6 +35,11 @@ button {
   cursor: pointer;
 }
 
+a.secondary,
+a.primary {
+  text-decoration: none;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;

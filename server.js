@@ -24,6 +24,23 @@ function json(res, status, body, headers = {}) {
   send(res, status, body, { "Content-Type": "application/json; charset=utf-8", ...headers });
 }
 
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function csvDownload(res, filename, headers, rows) {
+  const csv = [
+    headers.map(csvCell).join(","),
+    ...rows.map((row) => headers.map((header) => csvCell(row[header])).join(","))
+  ].join("\r\n");
+  res.writeHead(200, {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${filename}"`
+  });
+  res.end(csv);
+}
+
 async function parseBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -135,6 +152,32 @@ async function api(req, res, pathname) {
       page: Math.max(1, Number(url.searchParams.get("page") || 1)),
       size: Math.min(100, Math.max(10, Number(url.searchParams.get("size") || 25)))
     }));
+  }
+
+  if (pathname === "/api/exports/members" && req.method === "GET") {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const rows = await store.exportMembers(user, {
+      search: (url.searchParams.get("search") || "").trim(),
+      district: url.searchParams.get("district") || "",
+      taluk: url.searchParams.get("taluk") || ""
+    });
+    return csvDownload(res, "surveyor-members.csv", [
+      "name", "lsNumber", "loginId", "district", "taluk", "gender",
+      "dateOfBirth", "age", "phoneNumber", "qualification", "batchYear", "status", "remarks"
+    ], rows);
+  }
+
+  if (pathname === "/api/exports/corrections" && req.method === "GET") {
+    if (!["admin", "district"].includes(user.role)) return json(res, 403, { error: "Export access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const rows = await store.exportTalukCorrections(user, {
+      search: (url.searchParams.get("search") || "").trim(),
+      district: url.searchParams.get("district") || ""
+    });
+    return csvDownload(res, "pending-taluk-corrections.csv", [
+      "name", "lsNumber", "loginId", "rawDistrict", "rawTaluk",
+      "suggestedDistrict", "suggestedTaluk", "phoneNumber", "qualification"
+    ], rows);
   }
 
   if (pathname === "/api/members" && req.method === "POST") {
