@@ -7,7 +7,8 @@ const state = {
   pending: { rows: [], page: 1, size: 25, total: 0 },
   members: { rows: [], page: 1, size: 25, total: 0 },
   filters: { search: "", district: "", taluk: "" },
-  correctionFilters: { search: "", district: "" }
+  correctionFilters: { search: "", district: "" },
+  userFilters: { search: "", role: "", district: "" }
 };
 
 const app = document.querySelector("#app");
@@ -613,7 +614,15 @@ function selectField(name, label, items, value = "", disabled = false, labels = 
 function renderUsers() {
   const lists = state.dashboard.lists;
   const canManageUsers = state.user.role === "admin";
+  const filteredUsers = filterUsersForView(state.users);
+  const counts = userCounts(state.users);
   document.querySelector("#view").innerHTML = `
+    <div class="stats">
+      <div class="box stat"><span class="muted">Total logins</span><strong>${state.users.length}</strong></div>
+      <div class="box stat"><span class="muted">District Presidents</span><strong>${counts.district}</strong></div>
+      <div class="box stat"><span class="muted">Taluk Teams</span><strong>${counts.taluk}</strong></div>
+      <div class="box stat"><span class="muted">Active</span><strong>${counts.active}</strong></div>
+    </div>
     <div class="split">
       <section class="box section ${canManageUsers ? "" : "hidden"}">
         <h2>Create taluk login</h2>
@@ -635,24 +644,30 @@ function renderUsers() {
         </form>
       </section>
       <section class="box section">
-        <h2>${canManageUsers ? "Existing logins" : "Taluk technical team"}</h2>
-        <div class="list">
-          ${state.users.map((user) => `
-            <div class="list-row">
-              <span><strong>${escapeHtml(user.username)}</strong><br><span class="muted">${escapeHtml(roleLabels[user.role] || user.role)} ${user.district ? `- ${escapeHtml(user.district)}` : ""}${user.taluk ? ` / ${escapeHtml(user.taluk)}` : ""}</span></span>
-              <span class="actions">
-                <span class="badge">${user.active ? "Active" : "Inactive"}</span>
-                ${canManageUsers && user.username !== "admin" ? `<button class="secondary" data-reset-user="${user.id}">Password</button>` : ""}
-                ${canManageUsers && user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
-              </span>
-            </div>
-          `).join("")}
+        <div class="section-head">
+          <h2>${canManageUsers ? "Existing logins" : "Taluk technical team"}</h2>
+        </div>
+        <div class="user-toolbar">
+          <label>Search <input id="userSearch" value="${escapeHtml(state.userFilters.search)}" placeholder="Username, name, district"></label>
+          <label>Role <select id="userRole"><option value="">All roles</option>${optionList(["admin", "district", "taluk"], state.userFilters.role, roleLabels)}</select></label>
+          <label>District <select id="userDistrict"><option value="">All districts</option>${optionList(lists.districts, state.userFilters.district)}</select></label>
+          <button class="secondary" id="applyUserFilters">Apply</button>
+        </div>
+        <div class="account-grid">
+          ${filteredUsers.map((user) => accountCard(user, canManageUsers)).join("")}
         </div>
       </section>
     </div>
   `;
 
   if (!canManageUsers) return;
+
+  document.querySelector("#applyUserFilters").addEventListener("click", () => {
+    state.userFilters.search = document.querySelector("#userSearch").value;
+    state.userFilters.role = document.querySelector("#userRole").value;
+    state.userFilters.district = document.querySelector("#userDistrict").value;
+    renderApp();
+  });
 
   const districtSelect = document.querySelector('#userForm select[name="district"]');
   const talukSelect = document.querySelector('#userForm select[name="taluk"]');
@@ -697,6 +712,46 @@ function renderUsers() {
       openPasswordModal(target);
     });
   });
+}
+
+function userCounts(users) {
+  return {
+    active: users.filter((user) => user.active).length,
+    admin: users.filter((user) => user.role === "admin").length,
+    district: users.filter((user) => user.role === "district").length,
+    taluk: users.filter((user) => user.role === "taluk").length
+  };
+}
+
+function filterUsersForView(users) {
+  const search = state.userFilters.search.trim().toLowerCase();
+  return users.filter((user) => {
+    if (state.userFilters.role && user.role !== state.userFilters.role) return false;
+    if (state.userFilters.district && user.district !== state.userFilters.district) return false;
+    if (!search) return true;
+    return [user.username, user.name, user.role, user.district, user.taluk]
+      .some((value) => String(value || "").toLowerCase().includes(search));
+  });
+}
+
+function accountCard(user, canManageUsers) {
+  return `
+    <article class="account-card">
+      <div>
+        <strong>${escapeHtml(user.name || user.username)}</strong>
+        <span class="muted">${escapeHtml(user.username)}</span>
+      </div>
+      <div class="account-meta">
+        <span class="badge">${escapeHtml(roleLabels[user.role] || user.role)}</span>
+        <span class="badge">${user.active ? "Active" : "Inactive"}</span>
+      </div>
+      <p class="muted">${user.district ? escapeHtml(user.district) : "All districts"}${user.taluk ? ` / ${escapeHtml(user.taluk)}` : ""}</p>
+      <div class="actions">
+        ${canManageUsers && user.username !== "admin" ? `<button class="secondary" data-reset-user="${user.id}">Password</button>` : ""}
+        ${canManageUsers && user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
+      </div>
+    </article>
+  `;
 }
 
 function openPasswordModal(user) {
