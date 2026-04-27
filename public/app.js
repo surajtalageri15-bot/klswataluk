@@ -49,6 +49,13 @@ function optionList(items, selected = "") {
   return items.map((item) => `<option value="${escapeHtml(item)}" ${item === selected ? "selected" : ""}>${escapeHtml(item)}</option>`).join("");
 }
 
+function taluksForDistrict(lists, district) {
+  if (district && lists.taluksByDistrict && lists.taluksByDistrict[district]) {
+    return lists.taluksByDistrict[district];
+  }
+  return lists.taluks || [];
+}
+
 async function boot() {
   try {
     const data = await request("/api/me");
@@ -198,12 +205,13 @@ function row(name, count) {
 
 function renderMembers() {
   const lists = state.dashboard.lists;
+  const talukOptions = taluksForDistrict(lists, state.filters.district);
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="toolbar">
         <label>Search <input id="searchInput" value="${escapeHtml(state.filters.search)}" placeholder="Name, LS number, phone"></label>
         <label>District <select id="districtFilter"><option value="">All districts</option>${optionList(lists.districts, state.filters.district)}</select></label>
-        <label>Taluk <select id="talukFilter"><option value="">All taluks</option>${optionList(lists.taluks, state.filters.taluk)}</select></label>
+        <label>Taluk <select id="talukFilter"><option value="">${state.filters.district ? "All taluks in district" : "All taluks"}</option>${optionList(talukOptions, state.filters.taluk)}</select></label>
         <button class="secondary" id="applyFilters">Apply</button>
       </div>
       <div class="table-wrap">
@@ -233,6 +241,11 @@ function renderMembers() {
   `;
 
   document.querySelector("#addMemberBtn")?.addEventListener("click", () => openMemberModal());
+  document.querySelector("#districtFilter").addEventListener("change", () => {
+    const district = document.querySelector("#districtFilter").value;
+    const talukSelect = document.querySelector("#talukFilter");
+    talukSelect.innerHTML = `<option value="">${district ? "All taluks in district" : "All taluks"}</option>${optionList(taluksForDistrict(lists, district))}`;
+  });
   document.querySelector("#applyFilters").addEventListener("click", async () => {
     state.filters.search = document.querySelector("#searchInput").value;
     state.filters.district = document.querySelector("#districtFilter").value;
@@ -265,6 +278,9 @@ function renderMembers() {
 function openMemberModal(member = {}) {
   const lists = state.dashboard.lists;
   const isEdit = Boolean(member.id);
+  const selectedDistrict = member.district || state.user.district || "";
+  const selectedTaluk = member.taluk || state.user.taluk || "";
+  const talukOptions = taluksForDistrict(lists, selectedDistrict);
   document.body.insertAdjacentHTML("beforeend", `
     <div class="modal-backdrop">
       <form class="box modal" id="memberForm">
@@ -278,8 +294,8 @@ function openMemberModal(member = {}) {
           ${field("loginId", "Login ID", member.loginId)}
         </div>
         <div class="three">
-          ${selectField("district", "District", lists.districts, member.district || state.user.district, state.user.role !== "admin")}
-          ${selectField("taluk", "Taluk", lists.taluks, member.taluk || state.user.taluk, state.user.role !== "admin")}
+          ${selectField("district", "District", lists.districts, selectedDistrict, state.user.role !== "admin")}
+          ${selectField("taluk", "Taluk", talukOptions, selectedTaluk, state.user.role !== "admin")}
           ${selectField("gender", "Gender", ["Male", "Female", "Other"], member.gender)}
         </div>
         <div class="three">
@@ -304,6 +320,13 @@ function openMemberModal(member = {}) {
     </div>
   `);
   const backdrop = document.querySelector(".modal-backdrop");
+  const districtSelect = backdrop.querySelector('select[name="district"]');
+  const talukSelect = backdrop.querySelector('select[name="taluk"]');
+  if (districtSelect && talukSelect && state.user.role === "admin") {
+    districtSelect.addEventListener("change", () => {
+      talukSelect.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, districtSelect.value))}`;
+    });
+  }
   backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
   backdrop.querySelector("#memberForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -348,7 +371,7 @@ function renderUsers() {
           </div>
           <div class="two">
             ${selectField("district", "District", lists.districts)}
-            ${selectField("taluk", "Assigned Taluk", lists.taluks)}
+            ${selectField("taluk", "Assigned Taluk", [])}
           </div>
           <button class="primary" type="submit">Create login</button>
           <div class="message" id="userMessage"></div>
@@ -367,6 +390,12 @@ function renderUsers() {
       </section>
     </div>
   `;
+
+  const districtSelect = document.querySelector('#userForm select[name="district"]');
+  const talukSelect = document.querySelector('#userForm select[name="taluk"]');
+  districtSelect.addEventListener("change", () => {
+    talukSelect.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, districtSelect.value))}`;
+  });
 
   document.querySelector("#userForm").addEventListener("submit", async (event) => {
     event.preventDefault();

@@ -388,7 +388,21 @@ async function updateUser(id, user) {
 function listsFromMembers(members) {
   const districts = [...new Set(members.map((member) => member.district).filter(Boolean))].sort();
   const taluks = [...new Set(members.map((member) => member.taluk).filter(Boolean))].sort();
-  return { districts, taluks };
+  const taluksByDistrict = {};
+
+  for (const member of members) {
+    if (!member.district || !member.taluk) continue;
+    if (!taluksByDistrict[member.district]) taluksByDistrict[member.district] = new Set();
+    taluksByDistrict[member.district].add(member.taluk);
+  }
+
+  return {
+    districts,
+    taluks,
+    taluksByDistrict: Object.fromEntries(
+      Object.entries(taluksByDistrict).map(([district, districtTaluks]) => [district, [...districtTaluks].sort()])
+    )
+  };
 }
 
 async function touchMeta() {
