@@ -232,6 +232,14 @@ async function api(req, res, pathname) {
     return json(res, 200, { user: publicUser(await store.updateUser(target.id, next)) });
   }
 
+  if (userMatch && req.method === "DELETE") {
+    requireAdmin(user);
+    if (userMatch[1] === user.id) return json(res, 400, { error: "You cannot delete your current login" });
+    const deleted = await store.deleteUser(userMatch[1]);
+    if (!deleted) return json(res, 404, { error: "User not found" });
+    return json(res, 200, { ok: true });
+  }
+
   return json(res, 404, { error: "Not found" });
 }
 

@@ -449,6 +449,30 @@ async function updateUser(id, user) {
   return target;
 }
 
+async function deleteUser(id) {
+  const target = hasPostgres
+    ? toCamel((await pool.query("select * from users where id = $1", [id])).rows[0])
+    : (await readJsonDb()).users.find((item) => item.id === id);
+
+  if (!target) return false;
+  if (target.username === "admin") {
+    const error = new Error("Main admin login cannot be deleted");
+    error.status = 400;
+    throw error;
+  }
+
+  if (hasPostgres) {
+    const result = await pool.query("delete from users where id = $1", [id]);
+    return result.rowCount > 0;
+  }
+
+  const db = await readJsonDb();
+  const before = db.users.length;
+  db.users = db.users.filter((item) => item.id !== id);
+  await writeJsonDb(db);
+  return db.users.length < before;
+}
+
 function listsFromMembers(members) {
   return masterLists();
 }
@@ -483,5 +507,6 @@ module.exports = {
   usernameExists,
   createUser,
   updateUser,
+  deleteUser,
   memberVisibleTo
 };

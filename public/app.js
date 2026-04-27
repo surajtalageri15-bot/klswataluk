@@ -408,7 +408,10 @@ function renderUsers() {
           ${state.users.map((user) => `
             <div class="list-row">
               <span><strong>${escapeHtml(user.username)}</strong><br><span class="muted">${escapeHtml(user.role)} ${user.taluk ? `- ${escapeHtml(user.taluk)}` : ""}</span></span>
-              <span class="badge">${user.active ? "Active" : "Inactive"}</span>
+              <span class="actions">
+                <span class="badge">${user.active ? "Active" : "Inactive"}</span>
+                ${user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
+              </span>
             </div>
           `).join("")}
         </div>
@@ -439,6 +442,14 @@ function renderUsers() {
       message.textContent = error.message;
       message.classList.remove("success");
     }
+  });
+  document.querySelectorAll("[data-delete-user]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      if (!confirm("Delete this login?")) return;
+      await request(`/api/users/${button.dataset.deleteUser}`, { method: "DELETE" });
+      await loadUsers();
+      renderApp();
+    });
   });
 }
 
