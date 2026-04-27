@@ -1,0 +1,5 @@
+*.log
+dashboard-smoke.png
+data/*.json
+.env
+node_modules/

@@ -1,0 +1,17 @@
+{
+  "name": "karnataka-surveyor-taluk-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Taluk-level login system for Karnataka licensed surveyor register maintenance.",
+  "scripts": {
+    "start": "node server.js",
+    "import": "python scripts/import_excel.py",
+    "import:pg": "node scripts/import_postgres.js"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

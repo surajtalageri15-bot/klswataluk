@@ -1,0 +1,423 @@
+const fs = require("fs/promises");
+const path = require("path");
+const crypto = require("crypto");
+
+const ROOT = __dirname;
+const DATA_DIR = path.join(ROOT, "data");
+const JSON_DB_PATH = path.join(DATA_DIR, "db.json");
+const hasPostgres = Boolean(process.env.DATABASE_URL);
+
+let pool = null;
+
+if (hasPostgres) {
+  const { Pool } = require("pg");
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false }
+  });
+}
+
+function toCamel(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    username: row.username,
+    password: row.password,
+    name: row.name,
+    role: row.role,
+    district: row.district || "",
+    taluk: row.taluk || "",
+    active: row.active,
+    sourceRow: row.source_row,
+    lsNumber: row.ls_number,
+    loginId: row.login_id,
+    gender: row.gender || "",
+    dateOfBirth: row.date_of_birth
+      ? (row.date_of_birth instanceof Date ? row.date_of_birth.toISOString().slice(0, 10) : String(row.date_of_birth).slice(0, 10))
+      : "",
+    age: row.age ?? "",
+    phoneNumber: row.phone_number || "",
+    qualification: row.qualification || "",
+    batchYear: row.batch_year ?? "",
+    status: row.status || "Active",
+    remarks: row.remarks || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toMember(row) {
+  const item = toCamel(row);
+  delete item.username;
+  delete item.password;
+  delete item.role;
+  delete item.active;
+  return item;
+}
+
+async function readJsonDb() {
+  const raw = await fs.readFile(JSON_DB_PATH, "utf8");
+  return JSON.parse(raw);
+}
+
+async function writeJsonDb(db) {
+  db.meta.updatedAt = new Date().toISOString();
+  await fs.writeFile(JSON_DB_PATH, JSON.stringify(db, null, 2));
+}
+
+async function initDb() {
+  if (!hasPostgres) return;
+
+  await pool.query(`
+    create table if not exists app_meta (
+      key text primary key,
+      value text not null
+    );
+
+    create table if not exists users (
+      id text primary key,
+      username text unique not null,
+      password text not null,
+      name text not null,
+      role text not null check (role in ('admin', 'taluk')),
+      district text,
+      taluk text,
+      active boolean not null default true,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists members (
+      id text primary key,
+      source_row integer,
+      district text not null,
+      name text not null,
+      ls_number text not null,
+      login_id text,
+      taluk text not null,
+      gender text,
+      date_of_birth date,
+      age integer,
+      phone_number text,
+      qualification text,
+      batch_year integer,
+      status text not null default 'Active',
+      remarks text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_members_district on members (district);
+    create index if not exists idx_members_taluk on members (taluk);
+    create index if not exists idx_members_ls_number on members (ls_number);
+    create index if not exists idx_users_taluk on users (taluk);
+  `);
+
+  await pool.query(`
+    insert into users (id, username, password, name, role, active)
+    values ('admin', 'admin', 'admin', 'State Admin', 'admin', true)
+    on conflict (username) do nothing
+  `);
+}
+
+function visibleWhere(user, startIndex = 1) {
+  if (user.role === "admin") return { clause: "true", values: [], next: startIndex };
+  const values = [user.taluk];
+  let clause = `taluk = $${startIndex}`;
+  let next = startIndex + 1;
+  if (user.district) {
+    values.push(user.district);
+    clause += ` and district = $${next}`;
+    next += 1;
+  }
+  return { clause, values, next };
+}
+
+function memberVisibleTo(user, member) {
+  if (user.role === "admin") return true;
+  return member.taluk === user.taluk && (!user.district || member.district === user.district);
+}
+
+function summarize(members) {
+  const districts = new Set();
+  const taluks = new Set();
+  const gender = {};
+  const districtCounts = {};
+  const talukCounts = {};
+
+  for (const member of members) {
+    if (member.district) districts.add(member.district);
+    if (member.taluk) taluks.add(member.taluk);
+    gender[member.gender || "Not specified"] = (gender[member.gender || "Not specified"] || 0) + 1;
+    districtCounts[member.district] = (districtCounts[member.district] || 0) + 1;
+    talukCounts[member.taluk] = (talukCounts[member.taluk] || 0) + 1;
+  }
+
+  return {
+    total: members.length,
+    districts: districts.size,
+    taluks: taluks.size,
+    gender,
+    topDistricts: Object.entries(districtCounts).sort((a, b) => b[1] - a[1]).slice(0, 8),
+    topTaluks: Object.entries(talukCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
+  };
+}
+
+async function getUserById(id) {
+  if (hasPostgres) {
+    const result = await pool.query("select * from users where id = $1 and active = true", [id]);
+    return toCamel(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  return db.users.find((item) => item.id === id && item.active) || null;
+}
+
+async function findUserByLogin(username, password) {
+  if (hasPostgres) {
+    const result = await pool.query(
+      "select * from users where username = $1 and password = $2 and active = true",
+      [username, password]
+    );
+    return toCamel(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  return db.users.find((item) => item.username === username && item.password === password && item.active) || null;
+}
+
+async function getDashboard(user) {
+  if (hasPostgres) {
+    const visible = visibleWhere(user);
+    const members = (await pool.query(`select * from members where ${visible.clause}`, visible.values)).rows.map(toMember);
+    const metaRows = (await pool.query("select key, value from app_meta")).rows;
+    const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
+    return { summary: summarize(members), meta, lists: listsFromMembers(members) };
+  }
+  const db = await readJsonDb();
+  const members = db.members.filter((member) => memberVisibleTo(user, member));
+  return { summary: summarize(members), meta: db.meta, lists: listsFromMembers(members) };
+}
+
+async function listMembers(user, filters) {
+  if (hasPostgres) {
+    const visible = visibleWhere(user);
+    const values = [...visible.values];
+    const where = [visible.clause];
+
+    if (filters.district) {
+      values.push(filters.district);
+      where.push(`district = $${values.length}`);
+    }
+    if (filters.taluk) {
+      values.push(filters.taluk);
+      where.push(`taluk = $${values.length}`);
+    }
+    if (filters.search) {
+      values.push(`%${filters.search.toLowerCase()}%`);
+      where.push(`(
+        lower(name) like $${values.length}
+        or lower(ls_number) like $${values.length}
+        or lower(coalesce(login_id, '')) like $${values.length}
+        or lower(coalesce(phone_number, '')) like $${values.length}
+        or lower(coalesce(qualification, '')) like $${values.length}
+      )`);
+    }
+
+    const count = await pool.query(`select count(*)::int as total from members where ${where.join(" and ")}`, values);
+    values.push(filters.size);
+    values.push((filters.page - 1) * filters.size);
+    const rows = await pool.query(
+      `select * from members where ${where.join(" and ")} order by district, taluk, name limit $${values.length - 1} offset $${values.length}`,
+      values
+    );
+    return { rows: rows.rows.map(toMember), page: filters.page, size: filters.size, total: count.rows[0].total };
+  }
+
+  const db = await readJsonDb();
+  let rows = db.members.filter((member) => memberVisibleTo(user, member));
+  if (filters.district) rows = rows.filter((member) => member.district === filters.district);
+  if (filters.taluk) rows = rows.filter((member) => member.taluk === filters.taluk);
+  if (filters.search) {
+    const search = filters.search.toLowerCase();
+    rows = rows.filter((member) => [member.name, member.lsNumber, member.loginId, member.phoneNumber, member.qualification]
+      .some((value) => String(value || "").toLowerCase().includes(search)));
+  }
+  const total = rows.length;
+  const start = (filters.page - 1) * filters.size;
+  return { rows: rows.slice(start, start + filters.size), page: filters.page, size: filters.size, total };
+}
+
+async function getMember(id) {
+  if (hasPostgres) {
+    const result = await pool.query("select * from members where id = $1", [id]);
+    return toMember(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  return db.members.find((item) => item.id === id) || null;
+}
+
+async function createMember(member) {
+  member.id = crypto.randomUUID();
+  member.createdAt = new Date().toISOString();
+  member.updatedAt = member.createdAt;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into members (
+        id, source_row, district, name, ls_number, login_id, taluk, gender,
+        date_of_birth, age, phone_number, qualification, batch_year, status, remarks,
+        created_at, updated_at
+      ) values (
+        $1, $2, $3, $4, $5, $6, $7, $8, nullif($9, '')::date, nullif($10, '')::integer,
+        $11, $12, nullif($13, '')::integer, $14, $15, $16, $17
+      ) returning *`,
+      [
+        member.id, member.sourceRow || null, member.district, member.name, member.lsNumber, member.loginId,
+        member.taluk, member.gender, member.dateOfBirth || "", member.age === "" ? "" : member.age,
+        member.phoneNumber, member.qualification, member.batchYear === "" ? "" : member.batchYear,
+        member.status, member.remarks, member.createdAt, member.updatedAt
+      ]
+    );
+    await touchMeta();
+    return toMember(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.members.unshift(member);
+  await writeJsonDb(db);
+  return member;
+}
+
+async function updateMember(id, member) {
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update members set
+        district = $2, name = $3, ls_number = $4, login_id = $5, taluk = $6,
+        gender = $7, date_of_birth = nullif($8, '')::date, age = nullif($9, '')::integer,
+        phone_number = $10, qualification = $11, batch_year = nullif($12, '')::integer,
+        status = $13, remarks = $14, updated_at = now()
+      where id = $1 returning *`,
+      [
+        id, member.district, member.name, member.lsNumber, member.loginId, member.taluk,
+        member.gender, member.dateOfBirth || "", member.age === "" ? "" : member.age,
+        member.phoneNumber, member.qualification, member.batchYear === "" ? "" : member.batchYear,
+        member.status, member.remarks
+      ]
+    );
+    await touchMeta();
+    return toMember(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  const existing = db.members.find((item) => item.id === id);
+  Object.assign(existing, member, { updatedAt: new Date().toISOString() });
+  await writeJsonDb(db);
+  return existing;
+}
+
+async function deleteMember(id) {
+  if (hasPostgres) {
+    const result = await pool.query("delete from members where id = $1", [id]);
+    await touchMeta();
+    return result.rowCount > 0;
+  }
+  const db = await readJsonDb();
+  const before = db.members.length;
+  db.members = db.members.filter((item) => item.id !== id);
+  await writeJsonDb(db);
+  return db.members.length < before;
+}
+
+async function listUsers() {
+  if (hasPostgres) {
+    const result = await pool.query("select * from users order by role, username");
+    return result.rows.map(toCamel);
+  }
+  const db = await readJsonDb();
+  return db.users;
+}
+
+async function usernameExists(username) {
+  if (hasPostgres) {
+    const result = await pool.query("select 1 from users where username = $1", [username]);
+    return result.rowCount > 0;
+  }
+  const db = await readJsonDb();
+  return db.users.some((item) => item.username === username);
+}
+
+async function createUser(user) {
+  user.id = crypto.randomUUID();
+  user.createdAt = new Date().toISOString();
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into users (id, username, password, name, role, district, taluk, active, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9) returning *`,
+      [user.id, user.username, user.password, user.name, user.role, user.district, user.taluk, user.active, user.createdAt]
+    );
+    return toCamel(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.users.push(user);
+  await writeJsonDb(db);
+  return user;
+}
+
+async function updateUser(id, user) {
+  if (hasPostgres) {
+    const current = await getUserById(id);
+    if (!current) return null;
+    const password = user.password || current.password;
+    const result = await pool.query(
+      `update users set name = $2, password = $3, role = $4, district = $5, taluk = $6,
+       active = $7, updated_at = now() where id = $1 returning *`,
+      [id, user.name, password, user.role, user.district, user.taluk, user.active]
+    );
+    return toCamel(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  const target = db.users.find((item) => item.id === id);
+  if (!target) return null;
+  Object.assign(target, user);
+  await writeJsonDb(db);
+  return target;
+}
+
+function listsFromMembers(members) {
+  const districts = [...new Set(members.map((member) => member.district).filter(Boolean))].sort();
+  const taluks = [...new Set(members.map((member) => member.taluk).filter(Boolean))].sort();
+  return { districts, taluks };
+}
+
+async function touchMeta() {
+  if (!hasPostgres) return;
+  await pool.query(`
+    insert into app_meta (key, value) values ('updatedAt', $1)
+    on conflict (key) do update set value = excluded.value
+  `, [new Date().toISOString()]);
+}
+
+async function closeDb() {
+  if (pool) await pool.end();
+}
+
+module.exports = {
+  hasPostgres,
+  initDb,
+  closeDb,
+  findUserByLogin,
+  getUserById,
+  getDashboard,
+  listMembers,
+  getMember,
+  createMember,
+  updateMember,
+  deleteMember,
+  listUsers,
+  usernameExists,
+  createUser,
+  updateUser,
+  memberVisibleTo
+};

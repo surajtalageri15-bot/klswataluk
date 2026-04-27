@@ -1,0 +1,16 @@
+[Unit]
+Description=Karnataka Surveyor Taluk Admin
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/surveyor-app
+EnvironmentFile=/opt/surveyor-app/.env
+ExecStart=/usr/bin/node /opt/surveyor-app/server.js
+Restart=always
+RestartSec=5
+User=surveyor
+Group=surveyor
+
+[Install]
+WantedBy=multi-user.target
