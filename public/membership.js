@@ -2,6 +2,7 @@ let lists = { districts: [], taluksByDistrict: {} };
 
 const form = document.querySelector("#publicMembershipForm");
 const districtSelect = document.querySelector("#district");
+const talukSelect = document.querySelector("#taluk");
 const batchYearSelect = document.querySelector("#batchYear");
 const dateOfBirthInput = document.querySelector("#dateOfBirth");
 const ageInput = document.querySelector("#age");
@@ -54,6 +55,11 @@ dateOfBirthInput.addEventListener("change", () => {
   ageInput.value = Number.isFinite(age) && age > 0 ? age : "";
 });
 
+districtSelect.addEventListener("change", () => {
+  const taluks = lists.taluksByDistrict[districtSelect.value] || [];
+  talukSelect.innerHTML = `<option value="">— ತಾಲ್ಲೂಕು ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(taluks)}`;
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   message.textContent = "";
@@ -64,7 +70,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify(Object.fromEntries(new FormData(form)))
     });
     form.reset();
-    talukSelect.innerHTML = `<option value="">Select district first</option>`;
+    talukSelect.innerHTML = `<option value="">— ಮೊದಲು ಜಿಲ್ಲೆ ಆಯ್ಕೆ ಮಾಡಿ —</option>`;
     message.textContent = "Membership submitted for verification.";
     message.classList.add("success");
   } catch (error) {
