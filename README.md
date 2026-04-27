@@ -10,11 +10,6 @@ npm start
 
 Open `http://localhost:3000`.
 
-## Default Logins
-
-- Admin: `admin` / `admin`
-- Sample taluk team: `hunagunda_team` / `taluk123`
-
 ## Workflow
 
 1. Admin signs in.

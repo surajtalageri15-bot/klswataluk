@@ -82,10 +82,10 @@ function renderLogin(message = "") {
       <div class="login-panel">
         <form class="box login-card" id="loginForm">
           <h2>Sign in</h2>
-          <p class="muted">Default admin login is username <strong>admin</strong> and password <strong>admin</strong>.</p>
+          <p class="muted">Use the username and password assigned by the administrator.</p>
           <div class="form-grid">
-            <label>Username <input name="username" value="admin" autocomplete="username"></label>
-            <label>Password <input name="password" value="admin" type="password" autocomplete="current-password"></label>
+            <label>Username <input name="username" autocomplete="username"></label>
+            <label>Password <input name="password" type="password" autocomplete="current-password"></label>
             <button class="primary" type="submit">Sign in</button>
             <div class="message">${escapeHtml(message)}</div>
           </div>
