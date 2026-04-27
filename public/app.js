@@ -221,12 +221,31 @@ function userScopeLabel() {
 
 function renderDashboard() {
   const summary = state.dashboard.summary;
+  const charts = state.dashboard.charts || {};
   document.querySelector("#view").innerHTML = `
     <div class="stats">
       <div class="box stat"><span class="muted">Surveyors</span><strong>${summary.total}</strong></div>
       <div class="box stat"><span class="muted">Districts</span><strong>${summary.districts}</strong></div>
       <div class="box stat"><span class="muted">Taluks</span><strong>${summary.taluks}</strong></div>
       <div class="box stat"><span class="muted">Female</span><strong>${summary.gender.Female || 0}</strong></div>
+    </div>
+    <div class="chart-grid">
+      <section class="box section">
+        <h2>Male / Female</h2>
+        ${chartBars(charts.gender)}
+      </section>
+      <section class="box section">
+        <h2>Age groups</h2>
+        ${chartBars(charts.ageGroups)}
+      </section>
+      <section class="box section">
+        <h2>Pending corrections</h2>
+        ${chartBars(charts.pendingCorrections)}
+      </section>
+      <section class="box section">
+        <h2>Member count by taluk</h2>
+        ${chartBars(charts.memberCountByTaluk, { compact: true })}
+      </section>
     </div>
     <div class="split">
       <section class="box section">
@@ -247,6 +266,26 @@ function renderDashboard() {
 
 function row(name, count) {
   return `<div class="list-row"><span>${escapeHtml(name)}</span><span class="badge">${count}</span></div>`;
+}
+
+function chartBars(items = [], options = {}) {
+  const max = Math.max(1, ...items.map((item) => Number(item.value) || 0));
+  if (!items.length) return `<p class="muted">No data available</p>`;
+  return `
+    <div class="chart-bars ${options.compact ? "compact-bars" : ""}">
+      ${items.map((item) => {
+        const value = Number(item.value) || 0;
+        const width = Math.max(3, Math.round((value / max) * 100));
+        return `
+          <div class="bar-row">
+            <span class="bar-label" title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</span>
+            <span class="bar-track"><span class="bar-fill" style="width:${width}%"></span></span>
+            <strong>${value}</strong>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 function renderMembers() {

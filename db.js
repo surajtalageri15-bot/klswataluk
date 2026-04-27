@@ -183,6 +183,39 @@ function summarize(members) {
   };
 }
 
+function dashboardCharts(members, user) {
+  const gender = {};
+  const ageGroups = {
+    "Below 40": 0,
+    "40-45": 0,
+    "45-50": 0,
+    "Above 50": 0,
+    "Not specified": 0
+  };
+  const talukCounts = {};
+
+  for (const raw of members) {
+    const member = normalizeMemberLocation(raw);
+    gender[member.gender || "Not specified"] = (gender[member.gender || "Not specified"] || 0) + 1;
+    const age = Number(member.age);
+    if (!Number.isFinite(age) || age <= 0) ageGroups["Not specified"] += 1;
+    else if (age < 40) ageGroups["Below 40"] += 1;
+    else if (age <= 45) ageGroups["40-45"] += 1;
+    else if (age <= 50) ageGroups["45-50"] += 1;
+    else ageGroups["Above 50"] += 1;
+    talukCounts[member.taluk || "Not specified"] = (talukCounts[member.taluk || "Not specified"] || 0) + 1;
+  }
+
+  return {
+    gender: Object.entries(gender).map(([label, value]) => ({ label, value })),
+    ageGroups: Object.entries(ageGroups).map(([label, value]) => ({ label, value })),
+    memberCountByTaluk: Object.entries(talukCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, user.role === "admin" ? 20 : 15)
+      .map(([label, value]) => ({ label, value }))
+  };
+}
+
 async function getUserById(id) {
   if (hasPostgres) {
     const result = await pool.query("select * from users where id = $1 and active = true", [id]);
@@ -214,13 +247,31 @@ async function getDashboard(user) {
     const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
     const summary = summarize(members);
     summary.taluks = masterTalukCount(user);
-    return { summary, meta, lists: masterLists(user) };
+    const charts = dashboardCharts(members, user);
+    charts.pendingCorrections = await pendingCorrectionChart(user);
+    return { summary, charts, meta, lists: masterLists(user) };
   }
   const db = await readJsonDb();
   const members = db.members.filter((member) => memberVisibleTo(user, member));
   const summary = summarize(members);
   summary.taluks = masterTalukCount(user);
-  return { summary, meta: db.meta, lists: masterLists(user) };
+  const charts = dashboardCharts(members, user);
+  charts.pendingCorrections = await pendingCorrectionChart(user, db.members);
+  return { summary, charts, meta: db.meta, lists: masterLists(user) };
+}
+
+async function pendingCorrectionChart(user, jsonMembers = null) {
+  if (!["admin", "district"].includes(user.role)) return [];
+  const rows = await exportTalukCorrections(user, {});
+  const counts = {};
+  for (const row of rows) {
+    const district = canonicalDistrict(row.suggestedDistrict || row.rawDistrict);
+    counts[district] = (counts[district] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, user.role === "admin" ? 20 : 10)
+    .map(([label, value]) => ({ label, value }));
 }
 
 async function listMembers(user, filters) {
