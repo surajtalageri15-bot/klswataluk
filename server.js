@@ -214,7 +214,7 @@ async function api(req, res, pathname) {
       name: String(body.name || username).trim(),
       role: ["admin", "district", "taluk"].includes(body.role) ? body.role : "taluk",
       district: String(body.district || "").trim(),
-      taluk: String(body.taluk || "").trim(),
+      taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
       active: body.active !== false
     };
     if (newUser.role === "taluk" && !newUser.taluk) return json(res, 400, { error: "Taluk user must be assigned a taluk" });
@@ -232,7 +232,7 @@ async function api(req, res, pathname) {
       name: String(body.name || target.name).trim(),
       role: ["admin", "district", "taluk"].includes(body.role) ? body.role : "taluk",
       district: String(body.district || "").trim(),
-      taluk: String(body.taluk || "").trim(),
+      taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
       active: body.active !== false
     };
     if (body.password) next.password = String(body.password);

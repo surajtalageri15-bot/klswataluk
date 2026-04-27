@@ -27,6 +27,12 @@ const columns = [
   ["remarks", "Remarks"]
 ];
 
+const roleLabels = {
+  admin: "Admin",
+  district: "District President",
+  taluk: "Taluk Technical Team"
+};
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -47,8 +53,8 @@ function escapeHtml(value) {
   }[char]));
 }
 
-function optionList(items, selected = "") {
-  return items.map((item) => `<option value="${escapeHtml(item)}" ${item === selected ? "selected" : ""}>${escapeHtml(item)}</option>`).join("");
+function optionList(items, selected = "", labels = {}) {
+  return items.map((item) => `<option value="${escapeHtml(item)}" ${item === selected ? "selected" : ""}>${escapeHtml(labels[item] || item)}</option>`).join("");
 }
 
 function taluksForDistrict(lists, district) {
@@ -381,8 +387,8 @@ function field(name, label, value = "", type = "text") {
   return `<label>${label}<input name="${name}" type="${type}" value="${escapeHtml(value)}"></label>`;
 }
 
-function selectField(name, label, items, value = "", disabled = false) {
-  return `<label>${label}<select name="${name}" ${disabled ? "disabled" : ""}><option value="">Select</option>${optionList(items, value)}</select>${disabled ? `<input type="hidden" name="${name}" value="${escapeHtml(value)}">` : ""}</label>`;
+function selectField(name, label, items, value = "", disabled = false, labels = {}) {
+  return `<label>${label}<select name="${name}" ${disabled ? "disabled" : ""}><option value="">Select</option>${optionList(items, value, labels)}</select>${disabled ? `<input type="hidden" name="${name}" value="${escapeHtml(value)}">` : ""}</label>`;
 }
 
 function renderUsers() {
@@ -399,7 +405,7 @@ function renderUsers() {
           </div>
           <div class="two">
             ${field("password", "Password", "", "password")}
-            ${selectField("role", "Role", ["taluk", "district", "admin"], "taluk")}
+            ${selectField("role", "Role", ["taluk", "district", "admin"], "taluk", false, roleLabels)}
           </div>
           <div class="two">
             ${selectField("district", "District", lists.districts)}
@@ -414,9 +420,10 @@ function renderUsers() {
         <div class="list">
           ${state.users.map((user) => `
             <div class="list-row">
-              <span><strong>${escapeHtml(user.username)}</strong><br><span class="muted">${escapeHtml(user.role)} ${user.taluk ? `- ${escapeHtml(user.taluk)}` : ""}</span></span>
+              <span><strong>${escapeHtml(user.username)}</strong><br><span class="muted">${escapeHtml(roleLabels[user.role] || user.role)} ${user.district ? `- ${escapeHtml(user.district)}` : ""}${user.taluk ? ` / ${escapeHtml(user.taluk)}` : ""}</span></span>
               <span class="actions">
                 <span class="badge">${user.active ? "Active" : "Inactive"}</span>
+                ${canManageUsers && user.username !== "admin" ? `<button class="secondary" data-reset-user="${user.id}">Password</button>` : ""}
                 ${canManageUsers && user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
               </span>
             </div>
@@ -430,6 +437,12 @@ function renderUsers() {
 
   const districtSelect = document.querySelector('#userForm select[name="district"]');
   const talukSelect = document.querySelector('#userForm select[name="taluk"]');
+  const roleSelect = document.querySelector('#userForm select[name="role"]');
+  roleSelect.addEventListener("change", () => {
+    const needsTaluk = roleSelect.value === "taluk";
+    talukSelect.disabled = !needsTaluk;
+    if (!needsTaluk) talukSelect.value = "";
+  });
   districtSelect.addEventListener("change", () => {
     talukSelect.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, districtSelect.value))}`;
   });
@@ -459,6 +472,53 @@ function renderUsers() {
       await loadUsers();
       renderApp();
     });
+  });
+  document.querySelectorAll("[data-reset-user]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = state.users.find((user) => user.id === button.dataset.resetUser);
+      openPasswordModal(target);
+    });
+  });
+}
+
+function openPasswordModal(user) {
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <form class="box modal" id="passwordForm">
+        <div class="modal-head">
+          <h2>Reset password</h2>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <p class="muted">${escapeHtml(user.username)} - ${escapeHtml(roleLabels[user.role] || user.role)}</p>
+        ${field("password", "New Password", "", "password")}
+        <div class="message" id="passwordMessage"></div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Cancel</button>
+          <button class="primary" type="submit">Save password</button>
+        </div>
+      </form>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
+  backdrop.querySelector("#passwordForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = new FormData(event.currentTarget).get("password");
+    if (!password) {
+      backdrop.querySelector("#passwordMessage").textContent = "Password is required";
+      return;
+    }
+    try {
+      await request(`/api/users/${user.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...user, password })
+      });
+      backdrop.remove();
+      await loadUsers();
+      renderApp();
+    } catch (error) {
+      backdrop.querySelector("#passwordMessage").textContent = error.message;
+    }
   });
 }
 
