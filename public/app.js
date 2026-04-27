@@ -167,6 +167,7 @@ function renderApp() {
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
+          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
           ${["admin", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
         </nav>
@@ -187,6 +188,7 @@ function renderApp() {
       state.tab = button.dataset.tab;
       if (state.tab === "dashboard") await loadDashboard();
       if (state.tab === "members") await loadMembers();
+      if (state.tab === "membership") await loadDashboard();
       if (state.tab === "users") await loadUsers();
       if (state.tab === "corrections") await loadCorrections();
       renderApp();
@@ -201,6 +203,7 @@ function renderApp() {
 
   if (state.tab === "dashboard") renderDashboard();
   if (state.tab === "members") renderMembers();
+  if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "users") renderUsers();
   if (state.tab === "corrections") renderCorrections();
 }
@@ -208,6 +211,7 @@ function renderApp() {
 function pageTitle() {
   if (state.tab === "dashboard") return "Dashboard";
   if (state.tab === "members") return "Member Data";
+  if (state.tab === "membership") return "Membership Form";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "corrections") return "Taluk Correction";
   return "Dashboard";
@@ -434,6 +438,79 @@ function openMemberModal(member = {}) {
   });
 }
 
+function renderMembershipForm() {
+  const lists = state.dashboard.lists;
+  const selectedDistrict = state.user.role === "taluk" ? state.user.district : "";
+  const selectedTaluk = state.user.role === "taluk" ? state.user.taluk : "";
+  const talukOptions = taluksForDistrict(lists, selectedDistrict);
+
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <h2>New membership entry</h2>
+      <form class="form-grid" id="membershipForm">
+        <div class="three">
+          ${field("name", "Name")}
+          ${field("lsNumber", "LS Number")}
+          ${field("loginId", "Login ID")}
+        </div>
+        <div class="three">
+          ${selectField("district", "District", lists.districts, selectedDistrict, state.user.role !== "admin")}
+          ${selectField("taluk", "Taluk", talukOptions, selectedTaluk, state.user.role !== "admin")}
+          ${selectField("gender", "Gender", ["Male", "Female", "Other"])}
+        </div>
+        <div class="three">
+          ${field("dateOfBirth", "Date of Birth", "", "date")}
+          ${field("age", "Age", "", "number")}
+          ${field("phoneNumber", "Phone Number")}
+        </div>
+        <div class="two">
+          ${field("qualification", "Qualification")}
+          ${field("batchYear", "Batch Year", "", "number")}
+        </div>
+        <div class="two">
+          ${selectField("status", "Status", ["Active", "Inactive", "Pending verification"], "Active")}
+          <label>Remarks <textarea name="remarks" rows="2"></textarea></label>
+        </div>
+        <div class="message" id="membershipMessage"></div>
+        <div class="actions">
+          <button class="primary" type="submit">Create membership</button>
+          <button class="secondary" type="reset">Clear</button>
+        </div>
+      </form>
+    </section>
+  `;
+
+  const form = document.querySelector("#membershipForm");
+  const districtSelect = form.querySelector('select[name="district"]');
+  const talukSelect = form.querySelector('select[name="taluk"]');
+  if (state.user.role === "admin") {
+    districtSelect.addEventListener("change", () => {
+      talukSelect.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, districtSelect.value))}`;
+    });
+  }
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#membershipMessage");
+    try {
+      await request("/api/members", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(form)))
+      });
+      form.reset();
+      if (state.user.role === "taluk") {
+        form.querySelector('select[name="district"]').value = selectedDistrict;
+        form.querySelector('select[name="taluk"]').value = selectedTaluk;
+      }
+      message.textContent = "Membership created";
+      message.classList.add("success");
+      await loadDashboard();
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.remove("success");
+    }
+  });
+}
+
 function field(name, label, value = "", type = "text") {
   return `<label>${label}<input name="${name}" type="${type}" value="${escapeHtml(value)}"></label>`;
 }
@@ -508,7 +585,6 @@ function renderUsers() {
       });
       message.textContent = "Login created";
       message.classList.add("success");
-      event.currentTarget.reset();
       await loadUsers();
       renderApp();
     } catch (error) {
