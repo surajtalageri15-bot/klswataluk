@@ -153,7 +153,17 @@ function isMasterTaluk(district, taluk) {
 }
 
 function masterLists(user) {
-  if (user && user.role !== "admin") {
+  if (user && user.role === "district") {
+    const district = canonicalDistrict(user.district);
+    const taluks = MASTER_TALUKS[district] || [];
+    return {
+      districts: district ? [district] : [],
+      taluks,
+      taluksByDistrict: district ? { [district]: taluks } : {}
+    };
+  }
+
+  if (user && user.role === "taluk") {
     const district = canonicalDistrict(user.district);
     const taluk = normalizedTaluk(district, user.taluk);
     return {
@@ -171,7 +181,10 @@ function masterLists(user) {
 }
 
 function masterTalukCount(user) {
-  if (user && user.role !== "admin") return 1;
+  if (user && user.role === "district") {
+    return (MASTER_TALUKS[canonicalDistrict(user.district)] || []).length;
+  }
+  if (user && user.role === "taluk") return 1;
   return Object.values(MASTER_TALUKS).reduce((total, taluks) => total + taluks.length, 0);
 }
 

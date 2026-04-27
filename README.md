@@ -16,7 +16,8 @@ Open `http://localhost:3000`.
 2. Admin opens **Taluk Team** and creates a login for a taluk data team.
 3. Admin assigns district and taluk to that team.
 4. Taluk user signs in and can add or update only records for the assigned taluk.
-5. Admin can view, add, edit, and delete records across all districts and taluks.
+5. District President signs in and can view all member data and taluk team logins for the assigned district.
+6. Admin can view, add, edit, and delete records across all districts and taluks.
 
 ## Data
 
@@ -73,3 +74,20 @@ npm run normalize:taluks
 ```
 
 Rows that cannot be confidently matched are left unchanged for manual correction.
+
+## District President Logins
+
+Create or update one District President login for each of the 31 districts:
+
+```powershell
+$env:DISTRICT_PRESIDENT_PASSWORD="set-a-strong-password"
+npm run seed:district-presidents
+```
+
+On Linux/VPS:
+
+```bash
+DISTRICT_PRESIDENT_PASSWORD='set-a-strong-password' npm run seed:district-presidents
+```
+
+Username format is `president_<district_name>`, for example `president_tumakuru`. District President accounts are view-only and can see their district member data plus taluk technical team logins for that district.

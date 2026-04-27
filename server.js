@@ -61,6 +61,14 @@ function requireAdmin(user) {
   }
 }
 
+function canViewUsers(user) {
+  return user && (user.role === "admin" || user.role === "district");
+}
+
+function canEditMembers(user) {
+  return user && (user.role === "admin" || user.role === "taluk");
+}
+
 function normalizeMember(input, existing = {}) {
   return {
     ...existing,
@@ -130,6 +138,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/members" && req.method === "POST") {
+    if (!canEditMembers(user)) return json(res, 403, { error: "District President access is view-only" });
     const body = await parseBody(req);
     const member = normalizeMember(body);
     if (user.role !== "admin") {
@@ -143,6 +152,7 @@ async function api(req, res, pathname) {
 
   const memberMatch = pathname.match(/^\/api\/members\/([^/]+)$/);
   if (memberMatch && req.method === "PUT") {
+    if (!canEditMembers(user)) return json(res, 403, { error: "District President access is view-only" });
     const member = await store.getMember(memberMatch[1]);
     if (!member) return json(res, 404, { error: "Member not found" });
     if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your taluk" });
@@ -165,9 +175,9 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/users" && req.method === "GET") {
-    requireAdmin(user);
+    if (!canViewUsers(user)) return json(res, 403, { error: "User list access required" });
     const dashboard = await store.getDashboard(user);
-    const users = await store.listUsers();
+    const users = await store.listUsers(user);
     return json(res, 200, { users: users.map(publicUser), lists: dashboard.lists });
   }
 
@@ -202,12 +212,13 @@ async function api(req, res, pathname) {
       username,
       password,
       name: String(body.name || username).trim(),
-      role: body.role === "admin" ? "admin" : "taluk",
+      role: ["admin", "district", "taluk"].includes(body.role) ? body.role : "taluk",
       district: String(body.district || "").trim(),
       taluk: String(body.taluk || "").trim(),
       active: body.active !== false
     };
     if (newUser.role === "taluk" && !newUser.taluk) return json(res, 400, { error: "Taluk user must be assigned a taluk" });
+    if (newUser.role === "district" && !newUser.district) return json(res, 400, { error: "District President must be assigned a district" });
     return json(res, 201, { user: publicUser(await store.createUser(newUser)) });
   }
 
@@ -219,7 +230,7 @@ async function api(req, res, pathname) {
     const body = await parseBody(req);
     const next = {
       name: String(body.name || target.name).trim(),
-      role: body.role === "admin" ? "admin" : "taluk",
+      role: ["admin", "district", "taluk"].includes(body.role) ? body.role : "taluk",
       district: String(body.district || "").trim(),
       taluk: String(body.taluk || "").trim(),
       active: body.active !== false

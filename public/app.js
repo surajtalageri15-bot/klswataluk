@@ -127,7 +127,7 @@ async function loadMembers(page = 1) {
 }
 
 async function loadUsers() {
-  if (state.user.role !== "admin") return;
+  if (!["admin", "district"].includes(state.user.role)) return;
   const data = await request("/api/users");
   state.users = data.users;
 }
@@ -151,12 +151,12 @@ function renderApp() {
         <div class="brand">Surveyor Register</div>
         <div class="user-pill">
           <strong>${escapeHtml(state.user.name)}</strong><br>
-          <span>${state.user.role === "admin" ? "Admin" : `${escapeHtml(state.user.taluk)} Taluk`}</span>
+          <span>${userScopeLabel()}</span>
         </div>
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
-          ${state.user.role === "admin" ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
+          ${["admin", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
         </nav>
         <button class="secondary" id="logoutBtn">Logout</button>
@@ -164,7 +164,7 @@ function renderApp() {
       <section class="content">
         <div class="topbar">
           <h1>${pageTitle()}</h1>
-          ${state.tab === "members" ? `<button class="primary" id="addMemberBtn">+ Add member</button>` : ""}
+          ${state.tab === "members" && ["admin", "taluk"].includes(state.user.role) ? `<button class="primary" id="addMemberBtn">+ Add member</button>` : ""}
         </div>
         <div id="view"></div>
       </section>
@@ -200,6 +200,12 @@ function pageTitle() {
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "corrections") return "Taluk Correction";
   return "Dashboard";
+}
+
+function userScopeLabel() {
+  if (state.user.role === "admin") return "Admin";
+  if (state.user.role === "district") return `${escapeHtml(state.user.district)} District President`;
+  return `${escapeHtml(state.user.taluk)} Taluk`;
 }
 
 function renderDashboard() {
@@ -381,9 +387,10 @@ function selectField(name, label, items, value = "", disabled = false) {
 
 function renderUsers() {
   const lists = state.dashboard.lists;
+  const canManageUsers = state.user.role === "admin";
   document.querySelector("#view").innerHTML = `
     <div class="split">
-      <section class="box section">
+      <section class="box section ${canManageUsers ? "" : "hidden"}">
         <h2>Create taluk login</h2>
         <form id="userForm" class="form-grid">
           <div class="two">
@@ -392,7 +399,7 @@ function renderUsers() {
           </div>
           <div class="two">
             ${field("password", "Password", "", "password")}
-            ${selectField("role", "Role", ["taluk", "admin"], "taluk")}
+            ${selectField("role", "Role", ["taluk", "district", "admin"], "taluk")}
           </div>
           <div class="two">
             ${selectField("district", "District", lists.districts)}
@@ -403,14 +410,14 @@ function renderUsers() {
         </form>
       </section>
       <section class="box section">
-        <h2>Existing logins</h2>
+        <h2>${canManageUsers ? "Existing logins" : "Taluk technical team"}</h2>
         <div class="list">
           ${state.users.map((user) => `
             <div class="list-row">
               <span><strong>${escapeHtml(user.username)}</strong><br><span class="muted">${escapeHtml(user.role)} ${user.taluk ? `- ${escapeHtml(user.taluk)}` : ""}</span></span>
               <span class="actions">
                 <span class="badge">${user.active ? "Active" : "Inactive"}</span>
-                ${user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
+                ${canManageUsers && user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
               </span>
             </div>
           `).join("")}
@@ -418,6 +425,8 @@ function renderUsers() {
       </section>
     </div>
   `;
+
+  if (!canManageUsers) return;
 
   const districtSelect = document.querySelector('#userForm select[name="district"]');
   const talukSelect = document.querySelector('#userForm select[name="taluk"]');

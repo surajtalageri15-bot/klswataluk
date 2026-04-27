@@ -1,7 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
-const { canonicalDistrict, isMasterTaluk, masterLists, masterTalukCount, normalizedTaluk } = require("./taluks");
+const { MASTER_TALUKS, canonicalDistrict, isMasterTaluk, masterLists, masterTalukCount, normalizedTaluk } = require("./taluks");
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
@@ -89,7 +89,7 @@ async function initDb() {
       username text unique not null,
       password text not null,
       name text not null,
-      role text not null check (role in ('admin', 'taluk')),
+      role text not null check (role in ('admin', 'district', 'taluk')),
       district text,
       taluk text,
       active boolean not null default true,
@@ -124,6 +124,11 @@ async function initDb() {
   `);
 
   await pool.query(`
+    alter table users drop constraint if exists users_role_check;
+    alter table users add constraint users_role_check check (role in ('admin', 'district', 'taluk'));
+  `);
+
+  await pool.query(`
     insert into users (id, username, password, name, role, active)
     values ('admin', 'admin', 'admin', 'State Admin', 'admin', true)
     on conflict (username) do nothing
@@ -147,6 +152,7 @@ function memberVisibleTo(user, member) {
   if (user.role === "admin") return true;
   const memberLocation = normalizeMemberLocation(member);
   const userDistrict = canonicalDistrict(user.district);
+  if (user.role === "district") return Boolean(userDistrict) && memberLocation.district === userDistrict;
   const userTaluk = normalizedTaluk(userDistrict, user.taluk);
   return memberLocation.taluk === userTaluk && (!userDistrict || memberLocation.district === userDistrict);
 }
@@ -391,12 +397,23 @@ async function deleteMember(id) {
   return db.members.length < before;
 }
 
-async function listUsers() {
+async function listUsers(viewer = null) {
   if (hasPostgres) {
+    if (viewer?.role === "district") {
+      const result = await pool.query(
+        "select * from users where role = 'taluk' and district = $1 order by taluk, username",
+        [canonicalDistrict(viewer.district)]
+      );
+      return result.rows.map(toCamel);
+    }
     const result = await pool.query("select * from users order by role, username");
     return result.rows.map(toCamel);
   }
   const db = await readJsonDb();
+  if (viewer?.role === "district") {
+    const district = canonicalDistrict(viewer.district);
+    return db.users.filter((item) => item.role === "taluk" && canonicalDistrict(item.district) === district);
+  }
   return db.users;
 }
 
@@ -426,6 +443,56 @@ async function createUser(user) {
   db.users.push(user);
   await writeJsonDb(db);
   return user;
+}
+
+async function upsertDistrictPresidentUsers(password) {
+  const users = [];
+  for (const district of Object.keys(MASTER_TALUKS)) {
+    const username = `president_${district.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+    const user = {
+      id: crypto.randomUUID(),
+      username,
+      password,
+      name: `${district} District President`,
+      role: "district",
+      district,
+      taluk: "",
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+
+    if (hasPostgres) {
+      const result = await pool.query(
+        `insert into users (id, username, password, name, role, district, taluk, active, created_at, updated_at)
+         values ($1, $2, $3, $4, 'district', $5, '', true, $6, $6)
+         on conflict (username) do update set
+          password = excluded.password,
+          name = excluded.name,
+          role = 'district',
+          district = excluded.district,
+          taluk = '',
+          active = true,
+          updated_at = now()
+         returning *`,
+        [user.id, user.username, user.password, user.name, user.district, user.createdAt]
+      );
+      users.push(toCamel(result.rows[0]));
+    } else {
+      users.push(user);
+    }
+  }
+
+  if (!hasPostgres) {
+    const db = await readJsonDb();
+    for (const user of users) {
+      const existing = db.users.find((item) => item.username === user.username);
+      if (existing) Object.assign(existing, user, { id: existing.id });
+      else db.users.push(user);
+    }
+    await writeJsonDb(db);
+  }
+
+  return users;
 }
 
 async function updateUser(id, user) {
@@ -506,6 +573,7 @@ module.exports = {
   listUsers,
   usernameExists,
   createUser,
+  upsertDistrictPresidentUsers,
   updateUser,
   deleteUser,
   memberVisibleTo
