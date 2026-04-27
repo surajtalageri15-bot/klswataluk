@@ -36,9 +36,8 @@ async function boot() {
   const data = await request("/api/public-config");
   lists = data.lists;
   districtSelect.innerHTML = `<option value="">Select</option>${options(lists.districts)}`;
-  const currentYear = new Date().getFullYear();
   const years = [];
-  for (let year = currentYear; year >= 1998; year -= 1) years.push(String(year));
+  for (let year = 2026; year >= 1998; year -= 1) years.push(String(year));
   batchYearSelect.innerHTML = `<option value="">— ಬ್ಯಾಚ್ ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(years)}`;
 }
 
