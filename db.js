@@ -358,6 +358,45 @@ async function getMember(id) {
   return db.members.find((item) => item.id === id) || null;
 }
 
+async function findDuplicateMember({ lsNumber = "", loginId = "", phoneNumber = "" }) {
+  const normalizedLs = String(lsNumber || "").trim().toLowerCase();
+  const normalizedLogin = String(loginId || "").trim().toLowerCase();
+  const normalizedPhone = String(phoneNumber || "").trim();
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select * from members
+       where ($1 <> '' and lower(ls_number) = $1)
+          or ($2 <> '' and lower(coalesce(login_id, '')) = $2)
+          or ($3 <> '' and coalesce(phone_number, '') = $3)
+       limit 1`,
+      [normalizedLs, normalizedLogin, normalizedPhone]
+    );
+    return toMember(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  return db.members.find((member) => {
+    return (normalizedLs && String(member.lsNumber || "").trim().toLowerCase() === normalizedLs)
+      || (normalizedLogin && String(member.loginId || "").trim().toLowerCase() === normalizedLogin)
+      || (normalizedPhone && String(member.phoneNumber || "").trim() === normalizedPhone);
+  }) || null;
+}
+
+function duplicateReason(existing, incoming) {
+  if (!existing) return "";
+  if (String(existing.lsNumber || "").trim().toLowerCase() === String(incoming.lsNumber || "").trim().toLowerCase()) {
+    return "License number already exists";
+  }
+  if (String(existing.loginId || "").trim().toLowerCase() === String(incoming.loginId || "").trim().toLowerCase()) {
+    return "Login ID already exists";
+  }
+  if (String(existing.phoneNumber || "").trim() === String(incoming.phoneNumber || "").trim()) {
+    return "Mobile number already exists";
+  }
+  return "Member already exists";
+}
+
 async function createMember(member) {
   member.id = crypto.randomUUID();
   member.createdAt = new Date().toISOString();
@@ -678,6 +717,8 @@ module.exports = {
   getDashboard,
   listMembers,
   getMember,
+  findDuplicateMember,
+  duplicateReason,
   exportMembers,
   createMember,
   updateMember,

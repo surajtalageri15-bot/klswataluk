@@ -170,6 +170,8 @@ async function api(req, res, pathname) {
     }
     if (!/^\d{10}$/.test(member.phoneNumber)) return json(res, 400, { error: "Enter a valid 10-digit mobile number" });
     if (!member.declarationAccepted) return json(res, 400, { error: "Declaration must be accepted" });
+    const duplicate = await store.findDuplicateMember(member);
+    if (duplicate) return json(res, 409, { error: store.duplicateReason(duplicate, member) });
     return json(res, 201, { ok: true, member: await store.createMember(member) });
   }
 

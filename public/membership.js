@@ -63,6 +63,9 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   message.textContent = "";
   message.classList.remove("success");
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  submitButton.textContent = "Submitting...";
   try {
     await request("/api/public-membership", {
       method: "POST",
@@ -74,6 +77,9 @@ form.addEventListener("submit", async (event) => {
     message.classList.add("success");
   } catch (error) {
     message.textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "ಮಾಹಿತಿ ಸಲ್ಲಿಸಿ - Submit details";
   }
 });
 
