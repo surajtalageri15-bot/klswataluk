@@ -447,6 +447,7 @@ function renderMembershipForm() {
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <h2>New membership entry</h2>
+      <p class="muted">Share public form: <a href="/membership.html" target="_blank">/membership.html</a></p>
       <form class="form-grid" id="membershipForm">
         <div class="three">
           ${field("name", "Name")}

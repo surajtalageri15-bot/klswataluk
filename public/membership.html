@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KLSWA Membership Form</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="public-form-shell">
+      <section class="public-form-intro">
+        <h1>KLSWA Membership Form</h1>
+        <p>Submit licensed surveyor membership details for verification.</p>
+      </section>
+      <section class="box public-form-card">
+        <form id="publicMembershipForm" class="form-grid">
+          <div class="three">
+            <label>Name <input name="name" required></label>
+            <label>LS Number <input name="lsNumber" required></label>
+            <label>Login ID <input name="loginId"></label>
+          </div>
+          <div class="three">
+            <label>District <select name="district" id="district" required><option value="">Select</option></select></label>
+            <label>Taluk <select name="taluk" id="taluk" required><option value="">Select district first</option></select></label>
+            <label>Gender
+              <select name="gender">
+                <option value="">Select</option>
+                <option>Male</option>
+                <option>Female</option>
+                <option>Other</option>
+              </select>
+            </label>
+          </div>
+          <div class="three">
+            <label>Date of Birth <input name="dateOfBirth" type="date"></label>
+            <label>Age <input name="age" type="number" min="18" max="100"></label>
+            <label>Phone Number <input name="phoneNumber" inputmode="tel"></label>
+          </div>
+          <div class="two">
+            <label>Qualification <input name="qualification"></label>
+            <label>Batch Year <input name="batchYear" type="number" min="1900" max="2100"></label>
+          </div>
+          <label>Remarks <textarea name="remarks" rows="3"></textarea></label>
+          <div class="message" id="formMessage"></div>
+          <div class="actions">
+            <button class="primary" type="submit">Submit membership</button>
+            <button class="secondary" type="reset">Clear</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script src="/membership.js"></script>
+  </body>
+</html>

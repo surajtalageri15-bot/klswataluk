@@ -46,6 +46,32 @@ a.primary {
   grid-template-columns: 1.15fr 0.85fr;
 }
 
+.public-form-shell {
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.public-form-intro {
+  max-width: 980px;
+  margin: 0 auto 18px;
+}
+
+.public-form-intro h1 {
+  margin: 0 0 6px;
+  font-size: clamp(30px, 4vw, 48px);
+}
+
+.public-form-intro p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.public-form-card {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 22px;
+}
+
 .login-visual {
   padding: 56px;
   background:
@@ -460,6 +486,10 @@ tr:last-child td {
   .login-visual {
     min-height: 42vh;
     padding: 32px;
+  }
+
+  .public-form-shell {
+    padding: 16px;
   }
 
   .sidebar {

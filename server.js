@@ -4,6 +4,7 @@ const fssync = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const store = require("./db");
+const { masterLists } = require("./taluks");
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
@@ -116,6 +117,10 @@ function assertMember(member) {
 async function api(req, res, pathname) {
   const user = await currentUser(req);
 
+  if (pathname === "/api/public-config" && req.method === "GET") {
+    return json(res, 200, { lists: masterLists() });
+  }
+
   if (pathname === "/api/login" && req.method === "POST") {
     const body = await parseBody(req);
     const found = await store.findUserByLogin(body.username, body.password);
@@ -125,6 +130,18 @@ async function api(req, res, pathname) {
     return json(res, 200, { user: publicUser(found) }, {
       "Set-Cookie": `session=${token}; HttpOnly; SameSite=Lax; Path=/`
     });
+  }
+
+  if (pathname === "/api/public-membership" && req.method === "POST") {
+    const body = await parseBody(req);
+    const member = normalizeMember({
+      ...body,
+      status: "Pending verification",
+      remarks: `Public form submission${body.remarks ? ` - ${body.remarks}` : ""}`
+    });
+    const validation = assertMember(member);
+    if (validation) return json(res, 400, { error: validation });
+    return json(res, 201, { ok: true, member: await store.createMember(member) });
   }
 
   if (pathname === "/api/logout" && req.method === "POST") {
