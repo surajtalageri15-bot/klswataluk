@@ -284,6 +284,10 @@ td {
   font-size: 14px;
 }
 
+td select {
+  min-width: 170px;
+}
+
 th {
   position: sticky;
   top: 0;

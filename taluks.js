@@ -147,6 +147,11 @@ function normalizedTaluk(district, taluk) {
   return String(taluk || "").trim();
 }
 
+function isMasterTaluk(district, taluk) {
+  const canonical = canonicalDistrict(district);
+  return (MASTER_TALUKS[canonical] || []).includes(taluk);
+}
+
 function masterLists(user) {
   if (user && user.role !== "admin") {
     const district = canonicalDistrict(user.district);
@@ -173,6 +178,7 @@ function masterTalukCount(user) {
 module.exports = {
   MASTER_TALUKS,
   canonicalDistrict,
+  isMasterTaluk,
   masterLists,
   masterTalukCount,
   normalizedTaluk,

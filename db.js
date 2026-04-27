@@ -1,7 +1,7 @@
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
-const { canonicalDistrict, masterLists, masterTalukCount, normalizedTaluk } = require("./taluks");
+const { canonicalDistrict, isMasterTaluk, masterLists, masterTalukCount, normalizedTaluk } = require("./taluks");
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
@@ -319,6 +319,65 @@ async function updateMember(id, member) {
   return existing;
 }
 
+async function listTalukCorrections({ page = 1, size = 50, district = "", search = "" } = {}) {
+  const rows = hasPostgres
+    ? (await pool.query("select * from members order by district, taluk, name")).rows.map(toMember)
+    : (await readJsonDb()).members;
+
+  let unmatched = rows
+    .map((member) => {
+      const canonical = canonicalDistrict(member.district);
+      const suggestion = normalizedTaluk(canonical, member.taluk);
+      return {
+        ...member,
+        rawDistrict: member.district,
+        rawTaluk: member.taluk,
+        suggestedDistrict: canonical,
+        suggestedTaluk: isMasterTaluk(canonical, suggestion) ? suggestion : ""
+      };
+    })
+    .filter((member) => !isMasterTaluk(member.suggestedDistrict, member.rawTaluk));
+
+  if (district) unmatched = unmatched.filter((member) => member.suggestedDistrict === district);
+  if (search) {
+    const needle = search.toLowerCase();
+    unmatched = unmatched.filter((member) => [
+      member.name, member.lsNumber, member.loginId, member.phoneNumber, member.rawDistrict, member.rawTaluk, member.qualification
+    ].some((value) => String(value || "").toLowerCase().includes(needle)));
+  }
+
+  const total = unmatched.length;
+  const start = (page - 1) * size;
+  return { rows: unmatched.slice(start, start + size), page, size, total };
+}
+
+async function correctMemberTaluk(id, district, taluk) {
+  const canonical = canonicalDistrict(district);
+  if (!isMasterTaluk(canonical, taluk)) {
+    const error = new Error("Select a valid taluk from the 239 taluk master list");
+    error.status = 400;
+    throw error;
+  }
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      "update members set district = $2, taluk = $3, updated_at = now() where id = $1 returning *",
+      [id, canonical, taluk]
+    );
+    await touchMeta();
+    return toMember(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  const member = db.members.find((item) => item.id === id);
+  if (!member) return null;
+  member.district = canonical;
+  member.taluk = taluk;
+  member.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return member;
+}
+
 async function deleteMember(id) {
   if (hasPostgres) {
     const result = await pool.query("delete from members where id = $1", [id]);
@@ -417,6 +476,8 @@ module.exports = {
   getMember,
   createMember,
   updateMember,
+  listTalukCorrections,
+  correctMemberTaluk,
   deleteMember,
   listUsers,
   usernameExists,

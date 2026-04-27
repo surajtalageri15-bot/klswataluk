@@ -3,8 +3,10 @@ const state = {
   tab: "dashboard",
   dashboard: null,
   users: [],
+  corrections: { rows: [], page: 1, size: 50, total: 0 },
   members: { rows: [], page: 1, size: 25, total: 0 },
-  filters: { search: "", district: "", taluk: "" }
+  filters: { search: "", district: "", taluk: "" },
+  correctionFilters: { search: "", district: "" }
 };
 
 const app = document.querySelector("#app");
@@ -130,6 +132,18 @@ async function loadUsers() {
   state.users = data.users;
 }
 
+async function loadCorrections(page = 1) {
+  if (state.user.role !== "admin") return;
+  state.corrections.page = page;
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(state.corrections.size),
+    search: state.correctionFilters.search,
+    district: state.correctionFilters.district
+  });
+  state.corrections = await request(`/api/taluk-corrections?${params.toString()}`);
+}
+
 function renderApp() {
   app.innerHTML = `
     <section class="app-shell">
@@ -143,12 +157,13 @@ function renderApp() {
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
           ${state.user.role === "admin" ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
+          ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
         </nav>
         <button class="secondary" id="logoutBtn">Logout</button>
       </aside>
       <section class="content">
         <div class="topbar">
-          <h1>${state.tab === "dashboard" ? "Dashboard" : state.tab === "members" ? "Member Data" : "Taluk Team Assignment"}</h1>
+          <h1>${pageTitle()}</h1>
           ${state.tab === "members" ? `<button class="primary" id="addMemberBtn">+ Add member</button>` : ""}
         </div>
         <div id="view"></div>
@@ -162,6 +177,7 @@ function renderApp() {
       if (state.tab === "dashboard") await loadDashboard();
       if (state.tab === "members") await loadMembers();
       if (state.tab === "users") await loadUsers();
+      if (state.tab === "corrections") await loadCorrections();
       renderApp();
     });
   });
@@ -175,6 +191,15 @@ function renderApp() {
   if (state.tab === "dashboard") renderDashboard();
   if (state.tab === "members") renderMembers();
   if (state.tab === "users") renderUsers();
+  if (state.tab === "corrections") renderCorrections();
+}
+
+function pageTitle() {
+  if (state.tab === "dashboard") return "Dashboard";
+  if (state.tab === "members") return "Member Data";
+  if (state.tab === "users") return "Taluk Team Assignment";
+  if (state.tab === "corrections") return "Taluk Correction";
+  return "Dashboard";
 }
 
 function renderDashboard() {
@@ -415,6 +440,104 @@ function renderUsers() {
       message.classList.remove("success");
     }
   });
+}
+
+function renderCorrections() {
+  const lists = state.dashboard.lists;
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="toolbar">
+        <label>Search <input id="correctionSearch" value="${escapeHtml(state.correctionFilters.search)}" placeholder="Name, LS number, raw taluk"></label>
+        <label>District <select id="correctionDistrict"><option value="">All districts</option>${optionList(lists.districts, state.correctionFilters.district)}</select></label>
+        <span></span>
+        <button class="secondary" id="applyCorrectionFilters">Apply</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>LS Number</th>
+              <th>Raw District</th>
+              <th>Raw Taluk</th>
+              <th>Correct District</th>
+              <th>Correct Taluk</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.corrections.rows.map((member) => correctionRow(member, lists)).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="muted">Unmatched records: ${state.corrections.total}. Showing ${state.corrections.rows.length}.</span>
+        <div class="actions">
+          <button class="secondary" id="prevCorrectionPage" ${state.corrections.page <= 1 ? "disabled" : ""}>Previous</button>
+          <button class="secondary" id="nextCorrectionPage" ${state.corrections.page * state.corrections.size >= state.corrections.total ? "disabled" : ""}>Next</button>
+        </div>
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyCorrectionFilters").addEventListener("click", async () => {
+    state.correctionFilters.search = document.querySelector("#correctionSearch").value;
+    state.correctionFilters.district = document.querySelector("#correctionDistrict").value;
+    await loadCorrections(1);
+    renderApp();
+  });
+  document.querySelector("#prevCorrectionPage").addEventListener("click", async () => {
+    await loadCorrections(state.corrections.page - 1);
+    renderApp();
+  });
+  document.querySelector("#nextCorrectionPage").addEventListener("click", async () => {
+    await loadCorrections(state.corrections.page + 1);
+    renderApp();
+  });
+  document.querySelectorAll("[data-correction-district]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const id = select.dataset.correctionDistrict;
+      const talukSelect = document.querySelector(`[data-correction-taluk="${id}"]`);
+      talukSelect.innerHTML = optionList(taluksForDistrict(lists, select.value));
+    });
+  });
+  document.querySelectorAll("[data-save-correction]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.saveCorrection;
+      const district = document.querySelector(`[data-correction-district="${id}"]`).value;
+      const taluk = document.querySelector(`[data-correction-taluk="${id}"]`).value;
+      if (!district || !taluk) {
+        alert("Select district and taluk");
+        return;
+      }
+      await request(`/api/taluk-corrections/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ district, taluk })
+      });
+      await loadDashboard();
+      await loadCorrections(state.corrections.page);
+      renderApp();
+    });
+  });
+}
+
+function correctionRow(member, lists) {
+  const district = member.suggestedDistrict && lists.districts.includes(member.suggestedDistrict)
+    ? member.suggestedDistrict
+    : "";
+  const taluks = taluksForDistrict(lists, district);
+  const taluk = member.suggestedTaluk && taluks.includes(member.suggestedTaluk) ? member.suggestedTaluk : "";
+  return `
+    <tr>
+      <td>${escapeHtml(member.name)}</td>
+      <td>${escapeHtml(member.lsNumber)}</td>
+      <td>${escapeHtml(member.rawDistrict)}</td>
+      <td>${escapeHtml(member.rawTaluk)}</td>
+      <td><select data-correction-district="${member.id}"><option value="">Select</option>${optionList(lists.districts, district)}</select></td>
+      <td><select data-correction-taluk="${member.id}"><option value="">Select</option>${optionList(taluks, taluk)}</select></td>
+      <td><button class="primary" data-save-correction="${member.id}">Save</button></td>
+    </tr>
+  `;
 }
 
 boot();

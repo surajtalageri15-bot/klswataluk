@@ -171,6 +171,26 @@ async function api(req, res, pathname) {
     return json(res, 200, { users: users.map(publicUser), lists: dashboard.lists });
   }
 
+  if (pathname === "/api/taluk-corrections" && req.method === "GET") {
+    requireAdmin(user);
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, await store.listTalukCorrections({
+      search: (url.searchParams.get("search") || "").trim(),
+      district: url.searchParams.get("district") || "",
+      page: Math.max(1, Number(url.searchParams.get("page") || 1)),
+      size: Math.min(100, Math.max(10, Number(url.searchParams.get("size") || 50)))
+    }));
+  }
+
+  const correctionMatch = pathname.match(/^\/api\/taluk-corrections\/([^/]+)$/);
+  if (correctionMatch && req.method === "PUT") {
+    requireAdmin(user);
+    const body = await parseBody(req);
+    const member = await store.correctMemberTaluk(correctionMatch[1], body.district, body.taluk);
+    if (!member) return json(res, 404, { error: "Member not found" });
+    return json(res, 200, { member });
+  }
+
   if (pathname === "/api/users" && req.method === "POST") {
     requireAdmin(user);
     const body = await parseBody(req);
