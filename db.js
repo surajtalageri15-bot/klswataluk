@@ -65,6 +65,25 @@ function toMember(row) {
   return item;
 }
 
+function toTeamRequest(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    name: row.name,
+    phoneNumber: row.phone_number || "",
+    district: row.district || "",
+    taluk: row.taluk || "",
+    requestedUsername: row.requested_username || "",
+    requestedPassword: row.requested_password || "",
+    status: row.status || "Pending",
+    remarks: row.remarks || "",
+    userId: row.user_id || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 function normalizeMemberLocation(member) {
   const district = canonicalDistrict(member.district);
   return {
@@ -135,10 +154,26 @@ async function initDb() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists taluk_team_requests (
+      id text primary key,
+      name text not null,
+      phone_number text not null,
+      district text not null,
+      taluk text not null,
+      requested_username text not null,
+      requested_password text not null,
+      status text not null default 'Pending',
+      remarks text,
+      user_id text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
     create index if not exists idx_users_taluk on users (taluk);
+    create index if not exists idx_taluk_team_requests_status on taluk_team_requests (status);
   `);
 
   await pool.query(`
@@ -606,6 +641,107 @@ async function usernameExists(username) {
   return db.users.some((item) => item.username === username);
 }
 
+async function findTeamRequestDuplicate({ phoneNumber = "", requestedUsername = "" }) {
+  const phone = String(phoneNumber || "").trim();
+  const username = String(requestedUsername || "").trim().toLowerCase();
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select * from taluk_team_requests
+       where status = 'Pending'
+         and (($1 <> '' and phone_number = $1) or ($2 <> '' and lower(requested_username) = $2))
+       limit 1`,
+      [phone, username]
+    );
+    return toTeamRequest(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  db.talukTeamRequests ||= [];
+  return db.talukTeamRequests.find((item) => item.status === "Pending"
+    && ((phone && item.phoneNumber === phone) || (username && String(item.requestedUsername || "").toLowerCase() === username))) || null;
+}
+
+async function createTeamRequest(request) {
+  const item = {
+    id: crypto.randomUUID(),
+    name: String(request.name || "").trim(),
+    phoneNumber: String(request.phoneNumber || "").trim(),
+    district: canonicalDistrict(request.district || ""),
+    taluk: String(request.taluk || "").trim(),
+    requestedUsername: String(request.requestedUsername || "").trim(),
+    requestedPassword: String(request.requestedPassword || "").trim(),
+    status: "Pending",
+    remarks: "",
+    userId: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into taluk_team_requests (
+        id, name, phone_number, district, taluk, requested_username, requested_password,
+        status, remarks, user_id, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, 'Pending', '', '', $8, $8) returning *`,
+      [item.id, item.name, item.phoneNumber, item.district, item.taluk, item.requestedUsername, item.requestedPassword, item.createdAt]
+    );
+    return toTeamRequest(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.talukTeamRequests ||= [];
+  db.talukTeamRequests.unshift(item);
+  await writeJsonDb(db);
+  return item;
+}
+
+async function listTeamRequests() {
+  if (hasPostgres) {
+    const result = await pool.query("select * from taluk_team_requests order by case status when 'Pending' then 0 else 1 end, created_at desc");
+    return result.rows.map(toTeamRequest);
+  }
+  const db = await readJsonDb();
+  db.talukTeamRequests ||= [];
+  return [...db.talukTeamRequests].sort((a, b) => {
+    if (a.status === "Pending" && b.status !== "Pending") return -1;
+    if (a.status !== "Pending" && b.status === "Pending") return 1;
+    return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+  });
+}
+
+async function getTeamRequest(id) {
+  if (hasPostgres) {
+    const result = await pool.query("select * from taluk_team_requests where id = $1", [id]);
+    return toTeamRequest(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  db.talukTeamRequests ||= [];
+  return db.talukTeamRequests.find((item) => item.id === id) || null;
+}
+
+async function updateTeamRequest(id, changes) {
+  if (hasPostgres) {
+    const current = await getTeamRequest(id);
+    if (!current) return null;
+    const next = { ...current, ...changes, updatedAt: new Date().toISOString() };
+    const result = await pool.query(
+      `update taluk_team_requests set status = $2, remarks = $3, user_id = $4, updated_at = now()
+       where id = $1 returning *`,
+      [id, next.status, next.remarks || "", next.userId || ""]
+    );
+    return toTeamRequest(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  db.talukTeamRequests ||= [];
+  const target = db.talukTeamRequests.find((item) => item.id === id);
+  if (!target) return null;
+  Object.assign(target, changes, { updatedAt: new Date().toISOString() });
+  await writeJsonDb(db);
+  return target;
+}
+
 async function createUser(user) {
   user.id = crypto.randomUUID();
   user.createdAt = new Date().toISOString();
@@ -761,5 +897,10 @@ module.exports = {
   upsertDistrictPresidentUsers,
   updateUser,
   deleteUser,
-  memberVisibleTo
+  memberVisibleTo,
+  findTeamRequestDuplicate,
+  createTeamRequest,
+  listTeamRequests,
+  getTeamRequest,
+  updateTeamRequest
 };

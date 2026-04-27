@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Taluk Team Join Request</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="public-form-shell">
+    <section class="public-form-intro">
+      <div>
+        <p class="eyebrow">AKSPBS / KLSWA</p>
+        <h1>Taluk Technical Team Join Request</h1>
+        <p>ತಾಲ್ಲೂಕು ತಾಂತ್ರಿಕ ತಂಡಕ್ಕೆ ಸೇರಲು ನಿಮ್ಮ ಮೂಲಭೂತ ಮಾಹಿತಿಯನ್ನು ಸಲ್ಲಿಸಿ. Admin approve ಮಾಡಿದ ನಂತರ ನಿಮ್ಮ login active ಆಗುತ್ತದೆ.</p>
+      </div>
+    </section>
+
+    <section class="box public-form-card">
+      <form id="talukTeamJoinForm" class="form-grid">
+        <section>
+          <h2>Basic Info</h2>
+          <div class="two">
+            <label>
+              Full Name *
+              <input name="name" required placeholder="Enter full name">
+            </label>
+            <label>
+              Phone Number *
+              <input name="phoneNumber" required inputmode="numeric" pattern="[0-9]{10}" maxlength="10" placeholder="10-digit mobile number">
+            </label>
+          </div>
+          <div class="two">
+            <label>
+              District *
+              <select id="district" name="district" required>
+                <option value="">Select district</option>
+              </select>
+            </label>
+            <label>
+              Taluk *
+              <select id="taluk" name="taluk" required>
+                <option value="">Select district first</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <h2>Choose Login Details</h2>
+          <div class="two">
+            <label>
+              User ID *
+              <input name="requestedUsername" required minlength="4" placeholder="Example: tumakuru_team_01">
+            </label>
+            <label>
+              Password *
+              <input name="requestedPassword" required minlength="6" type="password" placeholder="Minimum 6 characters">
+            </label>
+          </div>
+        </section>
+
+        <div class="message" id="joinMessage"></div>
+        <button class="primary" type="submit">Submit request</button>
+      </form>
+    </section>
+  </main>
+  <script src="/taluk-join.js"></script>
+</body>
+</html>

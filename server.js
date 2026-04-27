@@ -134,6 +134,29 @@ function joinScopeFromParams(params) {
   };
 }
 
+function normalizeTeamRequest(input) {
+  return {
+    name: String(input.name || "").trim(),
+    phoneNumber: String(input.phoneNumber || "").trim(),
+    district: canonicalDistrict(input.district || ""),
+    taluk: String(input.taluk || "").trim(),
+    requestedUsername: String(input.requestedUsername || "").trim(),
+    requestedPassword: String(input.requestedPassword || "").trim()
+  };
+}
+
+function assertTeamRequest(request) {
+  if (!request.name) return "Name is required";
+  if (!/^\d{10}$/.test(request.phoneNumber)) return "Enter a valid 10-digit phone number";
+  if (!request.district) return "District is required";
+  if (!request.taluk || !isMasterTaluk(request.district, request.taluk)) return "Select a valid taluk";
+  if (!request.requestedUsername) return "User ID is required";
+  if (request.requestedUsername.length < 4) return "User ID must be at least 4 characters";
+  if (!/^[a-zA-Z0-9_.-]+$/.test(request.requestedUsername)) return "User ID can use letters, numbers, dot, underscore or hyphen";
+  if (!request.requestedPassword || request.requestedPassword.length < 6) return "Password must be at least 6 characters";
+  return null;
+}
+
 async function api(req, res, pathname) {
   const user = await currentUser(req);
 
@@ -186,6 +209,16 @@ async function api(req, res, pathname) {
     const duplicate = await store.findDuplicateMember(member);
     if (duplicate) return json(res, 409, { error: store.duplicateReason(duplicate, member) });
     return json(res, 201, { ok: true, member: await store.createMember(member) });
+  }
+
+  if (pathname === "/api/public-taluk-team-request" && req.method === "POST") {
+    const requestBody = normalizeTeamRequest(await parseBody(req));
+    const validation = assertTeamRequest(requestBody);
+    if (validation) return json(res, 400, { error: validation });
+    if (await store.usernameExists(requestBody.requestedUsername)) return json(res, 409, { error: "This User ID is already used" });
+    const duplicate = await store.findTeamRequestDuplicate(requestBody);
+    if (duplicate) return json(res, 409, { error: "A pending request already exists for this phone number or User ID" });
+    return json(res, 201, { ok: true, request: await store.createTeamRequest(requestBody) });
   }
 
   if (pathname === "/api/logout" && req.method === "POST") {
@@ -306,9 +339,51 @@ async function api(req, res, pathname) {
     if (!isMasterTaluk(district, taluk)) return json(res, 400, { error: "Select a valid taluk for this district" });
     const params = new URLSearchParams({ district, taluk });
     return json(res, 201, {
-      link: `/membership.html?${params.toString()}`,
-      scope: { district, taluk, title: `${taluk} Membership Form` }
+      link: `/taluk-join.html?${params.toString()}`,
+      scope: { district, taluk, title: `${taluk} Taluk Team Join Form` }
     });
+  }
+
+  if (pathname === "/api/taluk-team-requests" && req.method === "GET") {
+    requireAdmin(user);
+    return json(res, 200, { requests: await store.listTeamRequests() });
+  }
+
+  const teamRequestMatch = pathname.match(/^\/api\/taluk-team-requests\/([^/]+)$/);
+  if (teamRequestMatch && req.method === "PUT") {
+    requireAdmin(user);
+    const target = await store.getTeamRequest(teamRequestMatch[1]);
+    if (!target) return json(res, 404, { error: "Request not found" });
+    const body = await parseBody(req);
+    const status = String(body.status || "").trim();
+    const remarks = String(body.remarks || "").trim();
+    if (status === "Approved") {
+      if (await store.usernameExists(target.requestedUsername)) return json(res, 409, { error: "This User ID is already used" });
+      const newUser = await store.createUser({
+        username: target.requestedUsername,
+        password: target.requestedPassword,
+        name: target.name,
+        role: "taluk",
+        district: target.district,
+        taluk: target.taluk,
+        active: true
+      });
+      const request = await store.updateTeamRequest(target.id, {
+        status: "Approved",
+        remarks: remarks || "Login activated by admin",
+        userId: newUser.id
+      });
+      return json(res, 200, { request, user: publicUser(newUser) });
+    }
+    if (status === "Rejected") {
+      return json(res, 200, {
+        request: await store.updateTeamRequest(target.id, {
+          status: "Rejected",
+          remarks: remarks || "Rejected by admin"
+        })
+      });
+    }
+    return json(res, 400, { error: "Use Approved or Rejected" });
   }
 
   if (pathname === "/api/taluk-corrections" && req.method === "GET") {

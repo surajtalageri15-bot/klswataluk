@@ -6,6 +6,7 @@ const state = {
   corrections: { rows: [], page: 1, size: 50, total: 0 },
   pending: { rows: [], page: 1, size: 25, total: 0 },
   members: { rows: [], page: 1, size: 25, total: 0 },
+  teamRequests: [],
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" },
   userFilters: { search: "", role: "", district: "" }
@@ -159,6 +160,10 @@ async function loadUsers() {
   if (!["admin", "district"].includes(state.user.role)) return;
   const data = await request("/api/users");
   state.users = data.users;
+  if (state.user.role === "admin") {
+    const requests = await request("/api/taluk-team-requests");
+    state.teamRequests = requests.requests;
+  }
 }
 
 async function loadCorrections(page = 1) {
@@ -645,7 +650,8 @@ function renderUsers() {
           <div class="message" id="userMessage"></div>
         </form>
         <div class="join-link-panel">
-          <h2>Create member join link</h2>
+          <h2>Create taluk team join link</h2>
+          <p class="muted">Share this basic form with interested members. They choose their User ID and password; admin approval activates the login.</p>
           <div class="two">
             ${selectField("joinDistrict", "District", lists.districts)}
             ${selectField("joinTaluk", "Taluk", [])}
@@ -669,6 +675,7 @@ function renderUsers() {
         </div>
       </section>
     </div>
+    ${canManageUsers ? renderTeamRequests() : ""}
   `;
 
   if (!canManageUsers) return;
@@ -740,6 +747,68 @@ function renderUsers() {
       openPasswordModal(target);
     });
   });
+  document.querySelectorAll("[data-team-request]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const status = button.dataset.status;
+      const item = state.teamRequests.find((request) => request.id === button.dataset.teamRequest);
+      let remarks = "";
+      if (status === "Rejected") {
+        const note = prompt("Reason for rejection:", item.remarks || "");
+        if (note === null) return;
+        remarks = note;
+      }
+      await request(`/api/taluk-team-requests/${item.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ status, remarks })
+      });
+      await loadUsers();
+      renderApp();
+    });
+  });
+}
+
+function renderTeamRequests() {
+  return `
+    <section class="box section">
+      <div class="section-head">
+        <h2>Taluk team join requests</h2>
+        <span class="badge">${state.teamRequests.filter((item) => item.status === "Pending").length} Pending</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>District</th>
+              <th>Taluk</th>
+              <th>User ID</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.teamRequests.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.name)}</td>
+                <td>${escapeHtml(item.phoneNumber)}</td>
+                <td>${escapeHtml(item.district)}</td>
+                <td>${escapeHtml(item.taluk)}</td>
+                <td>${escapeHtml(item.requestedUsername)}</td>
+                <td><span class="badge">${escapeHtml(item.status)}</span></td>
+                <td class="actions">
+                  ${item.status === "Pending" ? `
+                    <button class="primary" data-team-request="${item.id}" data-status="Approved">Approve login</button>
+                    <button class="danger" data-team-request="${item.id}" data-status="Rejected">Reject</button>
+                  ` : escapeHtml(item.remarks || item.userId || "-")}
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
 }
 
 function userCounts(users) {
