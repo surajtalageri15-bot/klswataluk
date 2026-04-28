@@ -9,11 +9,13 @@ const state = {
   teamRequests: [],
   auditLogs: [],
   duplicates: { summary: { totalGroups: 0, phoneNumber: 0, lsNumber: 0, loginId: 0, name: 0 }, groups: [] },
+  dataCorrectionRequests: [],
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" },
   userFilters: { search: "", role: "", district: "" },
   auditFilters: { search: "" },
-  duplicateFilters: { search: "", type: "" }
+  duplicateFilters: { search: "", type: "" },
+  dataCorrectionFilters: { search: "" }
 };
 
 let latestJoinLink = "";
@@ -201,6 +203,13 @@ async function loadDuplicates() {
   state.duplicates = await request(`/api/duplicates?${params.toString()}`);
 }
 
+async function loadDataCorrectionRequests() {
+  if (!["admin", "taluk"].includes(state.user.role)) return;
+  const params = new URLSearchParams({ search: state.dataCorrectionFilters.search });
+  const data = await request(`/api/data-correction-requests?${params.toString()}`);
+  state.dataCorrectionRequests = data.requests;
+}
+
 function renderApp() {
   app.innerHTML = `
     <section class="app-shell">
@@ -215,6 +224,7 @@ function renderApp() {
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
+          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
           ${["admin", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
@@ -239,6 +249,7 @@ function renderApp() {
       if (state.tab === "members") await loadMembers();
       if (state.tab === "pending") await loadPending();
       if (state.tab === "membership") await loadDashboard();
+      if (state.tab === "dataCorrections") await loadDataCorrectionRequests();
       if (state.tab === "users") await loadUsers();
       if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
@@ -257,6 +268,7 @@ function renderApp() {
   if (state.tab === "members") renderMembers();
   if (state.tab === "pending") renderPendingQueue();
   if (state.tab === "membership") renderMembershipForm();
+  if (state.tab === "dataCorrections") renderDataCorrectionRequests();
   if (state.tab === "users") renderUsers();
   if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
@@ -268,6 +280,7 @@ function pageTitle() {
   if (state.tab === "members") return "Member Data";
   if (state.tab === "pending") return "Pending Verification Queue";
   if (state.tab === "membership") return "Membership Form";
+  if (state.tab === "dataCorrections") return "Correction Requests";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
@@ -372,7 +385,8 @@ function renderMembers() {
               <tr>
                 ${columns.slice(0, 10).map(([key]) => `<td>${escapeHtml(member[key])}</td>`).join("")}
                 <td class="actions">
-                  <button class="icon-btn" title="Edit" data-edit="${member.id}">E</button>
+                  ${state.user.role === "admin" ? `<button class="icon-btn" title="Edit" data-edit="${member.id}">E</button>` : ""}
+                  ${state.user.role === "taluk" ? `<button class="secondary" data-request-correction="${member.id}">Request</button>` : ""}
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Delete" data-delete="${member.id}">D</button>` : ""}
                 </td>
               </tr>
@@ -413,6 +427,9 @@ function renderMembers() {
   });
   document.querySelectorAll("[data-edit]").forEach((button) => {
     button.addEventListener("click", () => openMemberModal(state.members.rows.find((member) => member.id === button.dataset.edit)));
+  });
+  document.querySelectorAll("[data-request-correction]").forEach((button) => {
+    button.addEventListener("click", () => openCorrectionRequestModal(state.members.rows.find((member) => member.id === button.dataset.requestCorrection)));
   });
   document.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -563,6 +580,60 @@ function openMemberModal(member = {}) {
       renderApp();
     } catch (error) {
       backdrop.querySelector("#memberMessage").textContent = error.message;
+    }
+  });
+}
+
+function openCorrectionRequestModal(member) {
+  if (!member) return;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <form class="box modal" id="correctionRequestForm">
+        <div class="modal-head">
+          <h2>Request correction</h2>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <p class="muted">${escapeHtml(member.name)} - ${escapeHtml(member.lsNumber)} - ${escapeHtml(member.taluk)}</p>
+        <div class="two">
+          ${field("name", "Name", member.name)}
+          ${field("phoneNumber", "Phone Number", member.phoneNumber)}
+        </div>
+        <div class="two">
+          ${field("lsNumber", "LS Number", member.lsNumber)}
+          ${field("loginId", "Login ID", member.loginId)}
+        </div>
+        <div class="two">
+          ${field("qualification", "Qualification", member.qualification)}
+          ${field("batchYear", "Batch Year", member.batchYear, "number")}
+        </div>
+        <label>Reason <textarea name="reason" rows="3" required placeholder="Explain why this correction is needed"></textarea></label>
+        <div class="message" id="correctionRequestMessage"></div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Cancel</button>
+          <button class="primary" type="submit">Send to admin</button>
+        </div>
+      </form>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
+  backdrop.querySelector("#correctionRequestForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const reason = String(form.get("reason") || "").trim();
+    const changes = {};
+    ["name", "phoneNumber", "lsNumber", "loginId", "qualification", "batchYear"].forEach((fieldName) => {
+      changes[fieldName] = form.get(fieldName);
+    });
+    try {
+      await request("/api/data-correction-requests", {
+        method: "POST",
+        body: JSON.stringify({ memberId: member.id, reason, changes })
+      });
+      backdrop.remove();
+      alert("Correction request sent to admin.");
+    } catch (error) {
+      backdrop.querySelector("#correctionRequestMessage").textContent = error.message;
     }
   });
 }
@@ -1092,6 +1163,81 @@ function renderDuplicates() {
     await loadDuplicates();
     renderApp();
   });
+}
+
+function renderDataCorrectionRequests() {
+  const pendingCount = state.dataCorrectionRequests.filter((item) => item.status === "Pending").length;
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <h2>${state.user.role === "admin" ? "Pending data corrections" : "My correction requests"}</h2>
+        <span class="badge">${pendingCount} Pending</span>
+      </div>
+      <div class="toolbar">
+        <label>Search <input id="dataCorrectionSearch" value="${escapeHtml(state.dataCorrectionFilters.search)}" placeholder="Member, reason, requested by"></label>
+        <span></span>
+        <span></span>
+        <button class="secondary" id="applyDataCorrectionSearch">Apply</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>Requested Changes</th>
+              <th>Reason</th>
+              <th>Requested By</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.dataCorrectionRequests.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.memberName)}</td>
+                <td>${correctionChangesList(item.requestedChanges)}</td>
+                <td>${escapeHtml(item.reason)}</td>
+                <td>${escapeHtml(item.requestedByName || "-")}</td>
+                <td><span class="badge">${escapeHtml(item.status)}</span></td>
+                <td class="actions">
+                  ${state.user.role === "admin" && item.status === "Pending" ? `
+                    <button class="primary" data-review-correction="${item.id}" data-status="Approved">Approve</button>
+                    <button class="danger" data-review-correction="${item.id}" data-status="Rejected">Reject</button>
+                  ` : escapeHtml(item.adminRemarks || "-")}
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyDataCorrectionSearch").addEventListener("click", async () => {
+    state.dataCorrectionFilters.search = document.querySelector("#dataCorrectionSearch").value;
+    await loadDataCorrectionRequests();
+    renderApp();
+  });
+  document.querySelectorAll("[data-review-correction]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const status = button.dataset.status;
+      const adminRemarks = status === "Rejected" ? prompt("Reason for rejection:", "") : "";
+      if (adminRemarks === null) return;
+      await request(`/api/data-correction-requests/${button.dataset.reviewCorrection}`, {
+        method: "PUT",
+        body: JSON.stringify({ status, adminRemarks })
+      });
+      await loadDashboard();
+      await loadDataCorrectionRequests();
+      renderApp();
+    });
+  });
+}
+
+function correctionChangesList(changes = {}) {
+  const entries = Object.entries(changes);
+  if (!entries.length) return "-";
+  return `<div class="mini-list">${entries.map(([key, value]) => `<span><strong>${escapeHtml(key)}</strong>: ${escapeHtml(value)}</span>`).join("")}</div>`;
 }
 
 function duplicateGroup(group) {

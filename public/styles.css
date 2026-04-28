@@ -419,6 +419,11 @@ textarea {
   background: #fff;
 }
 
+.mini-list {
+  display: grid;
+  gap: 4px;
+}
+
 .account-meta {
   display: flex;
   gap: 6px;

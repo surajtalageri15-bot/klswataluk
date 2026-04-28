@@ -102,6 +102,27 @@ function toAuditLog(row) {
   };
 }
 
+function toDataCorrectionRequest(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    memberId: row.member_id || "",
+    memberName: row.member_name || "",
+    requestedChanges: row.requested_changes || {},
+    reason: row.reason || "",
+    status: row.status || "Pending",
+    adminRemarks: row.admin_remarks || "",
+    requestedById: row.requested_by_id || "",
+    requestedByName: row.requested_by_name || "",
+    requestedByRole: row.requested_by_role || "",
+    reviewedById: row.reviewed_by_id || "",
+    reviewedByName: row.reviewed_by_name || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 function normalizeMemberLocation(member) {
   const district = canonicalDistrict(member.district);
   return {
@@ -201,6 +222,23 @@ async function initDb() {
       created_at timestamptz not null default now()
     );
 
+    create table if not exists data_correction_requests (
+      id text primary key,
+      member_id text not null,
+      member_name text not null,
+      requested_changes jsonb not null,
+      reason text,
+      status text not null default 'Pending',
+      admin_remarks text,
+      requested_by_id text,
+      requested_by_name text,
+      requested_by_role text,
+      reviewed_by_id text,
+      reviewed_by_name text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
@@ -208,6 +246,8 @@ async function initDb() {
     create index if not exists idx_taluk_team_requests_status on taluk_team_requests (status);
     create index if not exists idx_member_audit_logs_member on member_audit_logs (member_id);
     create index if not exists idx_member_audit_logs_created on member_audit_logs (created_at desc);
+    create index if not exists idx_data_correction_requests_status on data_correction_requests (status);
+    create index if not exists idx_data_correction_requests_member on data_correction_requests (member_id);
   `);
 
   await pool.query(`
@@ -804,6 +844,106 @@ async function listAuditLogs(user, filters = {}) {
   return rows.slice(0, limit);
 }
 
+async function createDataCorrectionRequest(request) {
+  const item = {
+    id: crypto.randomUUID(),
+    memberId: String(request.memberId || ""),
+    memberName: String(request.memberName || ""),
+    requestedChanges: request.requestedChanges || {},
+    reason: String(request.reason || ""),
+    status: "Pending",
+    adminRemarks: "",
+    requestedById: String(request.requestedById || ""),
+    requestedByName: String(request.requestedByName || ""),
+    requestedByRole: String(request.requestedByRole || ""),
+    reviewedById: "",
+    reviewedByName: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into data_correction_requests (
+        id, member_id, member_name, requested_changes, reason, status, admin_remarks,
+        requested_by_id, requested_by_name, requested_by_role, reviewed_by_id, reviewed_by_name,
+        created_at, updated_at
+      ) values ($1, $2, $3, $4::jsonb, $5, 'Pending', '', $6, $7, $8, '', '', $9, $9) returning *`,
+      [
+        item.id, item.memberId, item.memberName, JSON.stringify(item.requestedChanges), item.reason,
+        item.requestedById, item.requestedByName, item.requestedByRole, item.createdAt
+      ]
+    );
+    return toDataCorrectionRequest(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.dataCorrectionRequests ||= [];
+  db.dataCorrectionRequests.unshift(item);
+  await writeJsonDb(db);
+  return item;
+}
+
+async function listDataCorrectionRequests(user, filters = {}) {
+  const search = String(filters.search || "").trim().toLowerCase();
+  let rows;
+
+  if (hasPostgres) {
+    rows = (await pool.query("select * from data_correction_requests order by case status when 'Pending' then 0 else 1 end, created_at desc")).rows
+      .map(toDataCorrectionRequest);
+  } else {
+    const db = await readJsonDb();
+    db.dataCorrectionRequests ||= [];
+    rows = [...db.dataCorrectionRequests].sort((a, b) => {
+      if (a.status === "Pending" && b.status !== "Pending") return -1;
+      if (a.status !== "Pending" && b.status === "Pending") return 1;
+      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+    });
+  }
+
+  if (user.role === "taluk") rows = rows.filter((row) => row.requestedById === user.id);
+  if (search) {
+    rows = rows.filter((row) => [
+      row.memberName, row.reason, row.status, row.requestedByName, row.adminRemarks,
+      ...Object.values(row.requestedChanges || {})
+    ].some((value) => String(value || "").toLowerCase().includes(search)));
+  }
+  return rows;
+}
+
+async function getDataCorrectionRequest(id) {
+  if (hasPostgres) {
+    const result = await pool.query("select * from data_correction_requests where id = $1", [id]);
+    return toDataCorrectionRequest(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  db.dataCorrectionRequests ||= [];
+  return db.dataCorrectionRequests.find((item) => item.id === id) || null;
+}
+
+async function updateDataCorrectionRequest(id, changes) {
+  if (hasPostgres) {
+    const current = await getDataCorrectionRequest(id);
+    if (!current) return null;
+    const next = { ...current, ...changes };
+    const result = await pool.query(
+      `update data_correction_requests set status = $2, admin_remarks = $3,
+        reviewed_by_id = $4, reviewed_by_name = $5, updated_at = now()
+       where id = $1 returning *`,
+      [id, next.status, next.adminRemarks || "", next.reviewedById || "", next.reviewedByName || ""]
+    );
+    return toDataCorrectionRequest(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  db.dataCorrectionRequests ||= [];
+  const target = db.dataCorrectionRequests.find((item) => item.id === id);
+  if (!target) return null;
+  Object.assign(target, changes, { updatedAt: new Date().toISOString() });
+  await writeJsonDb(db);
+  return target;
+}
+
 async function listUsers(viewer = null) {
   if (hasPostgres) {
     if (viewer?.role === "district") {
@@ -1093,6 +1233,10 @@ module.exports = {
   createAuditLogs,
   listAuditLogs,
   listDuplicateGroups,
+  createDataCorrectionRequest,
+  listDataCorrectionRequests,
+  getDataCorrectionRequest,
+  updateDataCorrectionRequest,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,

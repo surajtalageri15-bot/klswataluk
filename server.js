@@ -163,6 +163,12 @@ const auditFields = [
   "kalyanaKarnataka", "category", "caste", "religion", "disability", "otherTaluks", "address"
 ];
 
+const correctionRequestFields = [
+  "name", "lsNumber", "loginId", "gender", "dateOfBirth", "age", "phoneNumber",
+  "qualification", "batchYear", "status", "remarks", "maritalStatus", "kalyanaKarnataka",
+  "category", "caste", "religion", "disability", "otherTaluks", "address"
+];
+
 function auditActor(user) {
   return {
     actorId: user?.id || "public",
@@ -192,6 +198,16 @@ function auditDiffs({ action, before = {}, after = {}, actor }) {
       ...auditActor(actor)
     }];
   });
+}
+
+function sanitizeCorrectionChanges(body, member) {
+  const changes = {};
+  for (const field of correctionRequestFields) {
+    if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+    const next = String(body[field] ?? "").trim();
+    if (next !== valueForAudit(member[field]).trim()) changes[field] = next;
+  }
+  return changes;
 }
 
 async function api(req, res, pathname) {
@@ -331,7 +347,7 @@ async function api(req, res, pathname) {
 
   const memberMatch = pathname.match(/^\/api\/members\/([^/]+)$/);
   if (memberMatch && req.method === "PUT") {
-    if (!canEditMembers(user)) return json(res, 403, { error: "District President access is view-only" });
+    requireAdmin(user);
     const member = await store.getMember(memberMatch[1]);
     if (!member) return json(res, 404, { error: "Member not found" });
     if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your taluk" });
@@ -394,6 +410,79 @@ async function api(req, res, pathname) {
       search: (url.searchParams.get("search") || "").trim(),
       limit: Number(url.searchParams.get("limit") || 200)
     }));
+  }
+
+  if (pathname === "/api/data-correction-requests" && req.method === "GET") {
+    if (!["admin", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, {
+      requests: await store.listDataCorrectionRequests(user, {
+        search: (url.searchParams.get("search") || "").trim()
+      })
+    });
+  }
+
+  if (pathname === "/api/data-correction-requests" && req.method === "POST") {
+    if (user.role !== "taluk") return json(res, 403, { error: "Taluk team can submit correction requests" });
+    const body = await parseBody(req);
+    const member = await store.getMember(String(body.memberId || ""));
+    if (!member) return json(res, 404, { error: "Member not found" });
+    if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your taluk" });
+    const requestedChanges = sanitizeCorrectionChanges(body.changes || {}, member);
+    if (!Object.keys(requestedChanges).length) return json(res, 400, { error: "Enter at least one changed value" });
+    const reason = String(body.reason || "").trim();
+    if (!reason) return json(res, 400, { error: "Reason is required" });
+    return json(res, 201, {
+      request: await store.createDataCorrectionRequest({
+        memberId: member.id,
+        memberName: member.name,
+        requestedChanges,
+        reason,
+        requestedById: user.id,
+        requestedByName: user.name,
+        requestedByRole: user.role
+      })
+    });
+  }
+
+  const dataCorrectionMatch = pathname.match(/^\/api\/data-correction-requests\/([^/]+)$/);
+  if (dataCorrectionMatch && req.method === "PUT") {
+    requireAdmin(user);
+    const target = await store.getDataCorrectionRequest(dataCorrectionMatch[1]);
+    if (!target) return json(res, 404, { error: "Request not found" });
+    if (target.status !== "Pending") return json(res, 400, { error: "Request is already reviewed" });
+    const body = await parseBody(req);
+    const status = String(body.status || "").trim();
+    const adminRemarks = String(body.adminRemarks || "").trim();
+    if (status === "Approved") {
+      const member = await store.getMember(target.memberId);
+      if (!member) return json(res, 404, { error: "Member not found" });
+      const next = normalizeMember({ ...member, ...target.requestedChanges }, member);
+      const validation = assertMember(next);
+      if (validation) return json(res, 400, { error: validation });
+      const updated = await store.updateMember(member.id, next);
+      await store.createAuditLogs(auditDiffs({ action: "Correction approved", before: member, after: updated, actor: user }));
+      return json(res, 200, {
+        request: await store.updateDataCorrectionRequest(target.id, {
+          status: "Approved",
+          adminRemarks: adminRemarks || "Approved by admin",
+          reviewedById: user.id,
+          reviewedByName: user.name
+        }),
+        member: updated
+      });
+    }
+    if (status === "Rejected") {
+      return json(res, 200, {
+        request: await store.updateDataCorrectionRequest(target.id, {
+          status: "Rejected",
+          adminRemarks: adminRemarks || "Rejected by admin",
+          reviewedById: user.id,
+          reviewedByName: user.name
+        })
+      });
+    }
+    return json(res, 400, { error: "Use Approved or Rejected" });
   }
 
   if (pathname === "/api/users" && req.method === "GET") {
