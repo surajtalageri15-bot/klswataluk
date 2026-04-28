@@ -780,6 +780,17 @@ function renderUsers() {
       renderApp();
     });
   });
+  document.querySelectorAll("[data-copy-login-message]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const item = state.teamRequests.find((request) => request.id === button.dataset.copyLoginMessage);
+      if (!item) return;
+      await copyText(loginApprovalMessage(item));
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = "Copy message";
+      }, 1400);
+    });
+  });
 }
 
 function renderTeamRequests() {
@@ -815,7 +826,7 @@ function renderTeamRequests() {
                   ${item.status === "Pending" ? `
                     <button class="primary" data-team-request="${item.id}" data-status="Approved">Approve login</button>
                     <button class="danger" data-team-request="${item.id}" data-status="Rejected">Reject</button>
-                  ` : escapeHtml(item.remarks || item.userId || "-")}
+                  ` : teamRequestFollowup(item)}
                 </td>
               </tr>
             `).join("")}
@@ -824,6 +835,46 @@ function renderTeamRequests() {
       </div>
     </section>
   `;
+}
+
+function teamRequestFollowup(item) {
+  if (item.status !== "Approved") return escapeHtml(item.remarks || "-");
+  const whatsapp = `https://wa.me/91${encodeURIComponent(item.phoneNumber)}?text=${encodeURIComponent(loginApprovalMessage(item))}`;
+  return `
+    <button class="secondary" data-copy-login-message="${item.id}">Copy message</button>
+    <a class="secondary" href="${whatsapp}" target="_blank">WhatsApp</a>
+  `;
+}
+
+function loginApprovalMessage(item) {
+  return [
+    `Dear ${item.name},`,
+    "",
+    "Your KLSWA Taluk Technical Team login has been approved.",
+    `District: ${item.district}`,
+    `Taluk: ${item.taluk}`,
+    `User ID: ${item.requestedUsername}`,
+    `Password: ${item.requestedPassword}`,
+    "",
+    "Login: https://klswa.in/",
+    "",
+    "Please keep your login details confidential."
+  ].join("\n");
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 function userCounts(users) {
