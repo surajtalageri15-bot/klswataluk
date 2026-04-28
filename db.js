@@ -84,6 +84,24 @@ function toTeamRequest(row) {
   };
 }
 
+function toAuditLog(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    memberId: row.member_id || "",
+    memberName: row.member_name || "",
+    action: row.action || "",
+    field: row.field || "",
+    oldValue: row.old_value || "",
+    newValue: row.new_value || "",
+    actorId: row.actor_id || "",
+    actorName: row.actor_name || "",
+    actorRole: row.actor_role || "",
+    createdAt: row.created_at
+  };
+}
+
 function normalizeMemberLocation(member) {
   const district = canonicalDistrict(member.district);
   return {
@@ -169,11 +187,27 @@ async function initDb() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists member_audit_logs (
+      id text primary key,
+      member_id text,
+      member_name text,
+      action text not null,
+      field text not null,
+      old_value text,
+      new_value text,
+      actor_id text,
+      actor_name text,
+      actor_role text,
+      created_at timestamptz not null default now()
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
     create index if not exists idx_users_taluk on users (taluk);
     create index if not exists idx_taluk_team_requests_status on taluk_team_requests (status);
+    create index if not exists idx_member_audit_logs_member on member_audit_logs (member_id);
+    create index if not exists idx_member_audit_logs_created on member_audit_logs (created_at desc);
   `);
 
   await pool.query(`
@@ -612,6 +646,76 @@ async function deleteMember(id) {
   return db.members.length < before;
 }
 
+async function createAuditLogs(logs) {
+  const entries = logs
+    .filter((log) => log && log.field)
+    .map((log) => ({
+      id: crypto.randomUUID(),
+      memberId: String(log.memberId || ""),
+      memberName: String(log.memberName || ""),
+      action: String(log.action || "Updated"),
+      field: String(log.field || ""),
+      oldValue: String(log.oldValue ?? ""),
+      newValue: String(log.newValue ?? ""),
+      actorId: String(log.actorId || ""),
+      actorName: String(log.actorName || ""),
+      actorRole: String(log.actorRole || ""),
+      createdAt: new Date().toISOString()
+    }));
+  if (!entries.length) return [];
+
+  if (hasPostgres) {
+    const values = [];
+    const placeholders = entries.map((entry, index) => {
+      const offset = index * 10;
+      values.push(
+        entry.id, entry.memberId || null, entry.memberName, entry.action, entry.field,
+        entry.oldValue, entry.newValue, entry.actorId || null, entry.actorName, entry.actorRole
+      );
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`;
+    }).join(", ");
+    const result = await pool.query(
+      `insert into member_audit_logs (
+        id, member_id, member_name, action, field, old_value, new_value,
+        actor_id, actor_name, actor_role
+      ) values ${placeholders} returning *`,
+      values
+    );
+    return result.rows.map(toAuditLog);
+  }
+
+  const db = await readJsonDb();
+  db.auditLogs ||= [];
+  db.auditLogs.unshift(...entries);
+  await writeJsonDb(db);
+  return entries;
+}
+
+async function listAuditLogs(user, filters = {}) {
+  const search = String(filters.search || "").trim().toLowerCase();
+  const limit = Math.min(300, Math.max(25, Number(filters.limit || 100)));
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select * from member_audit_logs
+       where ($1 = '' or lower(member_name) like $2 or lower(field) like $2 or lower(actor_name) like $2 or lower(old_value) like $2 or lower(new_value) like $2)
+       order by created_at desc
+       limit $3`,
+      [search, `%${search}%`, limit]
+    );
+    return result.rows.map(toAuditLog);
+  }
+
+  const db = await readJsonDb();
+  db.auditLogs ||= [];
+  let rows = db.auditLogs;
+  if (search) {
+    rows = rows.filter((row) => [row.memberName, row.field, row.actorName, row.oldValue, row.newValue]
+      .some((value) => String(value || "").toLowerCase().includes(search)));
+  }
+  return rows.slice(0, limit);
+}
+
 async function listUsers(viewer = null) {
   if (hasPostgres) {
     if (viewer?.role === "district") {
@@ -898,6 +1002,8 @@ module.exports = {
   updateUser,
   deleteUser,
   memberVisibleTo,
+  createAuditLogs,
+  listAuditLogs,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,

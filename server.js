@@ -157,6 +157,43 @@ function assertTeamRequest(request) {
   return null;
 }
 
+const auditFields = [
+  "name", "lsNumber", "loginId", "district", "taluk", "gender", "dateOfBirth", "age",
+  "phoneNumber", "qualification", "batchYear", "status", "remarks", "maritalStatus",
+  "kalyanaKarnataka", "category", "caste", "religion", "disability", "otherTaluks", "address"
+];
+
+function auditActor(user) {
+  return {
+    actorId: user?.id || "public",
+    actorName: user?.name || "Public form",
+    actorRole: user?.role || "public"
+  };
+}
+
+function valueForAudit(value) {
+  if (value == null) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+}
+
+function auditDiffs({ action, before = {}, after = {}, actor }) {
+  return auditFields.flatMap((field) => {
+    const oldValue = valueForAudit(before[field]);
+    const newValue = valueForAudit(after[field]);
+    if (action === "Updated" && oldValue === newValue) return [];
+    return [{
+      memberId: after.id || before.id || "",
+      memberName: after.name || before.name || "",
+      action,
+      field,
+      oldValue,
+      newValue,
+      ...auditActor(actor)
+    }];
+  });
+}
+
 async function api(req, res, pathname) {
   const user = await currentUser(req);
 
@@ -208,7 +245,9 @@ async function api(req, res, pathname) {
     if (!member.declarationAccepted) return json(res, 400, { error: "Declaration must be accepted" });
     const duplicate = await store.findDuplicateMember(member);
     if (duplicate) return json(res, 409, { error: store.duplicateReason(duplicate, member) });
-    return json(res, 201, { ok: true, member: await store.createMember(member) });
+    const created = await store.createMember(member);
+    await store.createAuditLogs(auditDiffs({ action: "Created", after: created, actor: null }));
+    return json(res, 201, { ok: true, member: created });
   }
 
   if (pathname === "/api/public-taluk-team-request" && req.method === "POST") {
@@ -285,7 +324,9 @@ async function api(req, res, pathname) {
     }
     const validation = assertMember(member);
     if (validation) return json(res, 400, { error: validation });
-    return json(res, 201, { member: await store.createMember(member) });
+    const created = await store.createMember(member);
+    await store.createAuditLogs(auditDiffs({ action: "Created", after: created, actor: user }));
+    return json(res, 201, { member: created });
   }
 
   const memberMatch = pathname.match(/^\/api\/members\/([^/]+)$/);
@@ -302,13 +343,25 @@ async function api(req, res, pathname) {
     }
     const validation = assertMember(next);
     if (validation) return json(res, 400, { error: validation });
-    return json(res, 200, { member: await store.updateMember(member.id, next) });
+    const updated = await store.updateMember(member.id, next);
+    await store.createAuditLogs(auditDiffs({ action: "Updated", before: member, after: updated, actor: user }));
+    return json(res, 200, { member: updated });
   }
 
   if (memberMatch && req.method === "DELETE") {
     requireAdmin(user);
+    const member = await store.getMember(memberMatch[1]);
     const deleted = await store.deleteMember(memberMatch[1]);
     if (!deleted) return json(res, 404, { error: "Member not found" });
+    await store.createAuditLogs([{
+      memberId: member?.id || memberMatch[1],
+      memberName: member?.name || "",
+      action: "Deleted",
+      field: "record",
+      oldValue: member ? `${member.name} / ${member.lsNumber} / ${member.district} / ${member.taluk}` : "",
+      newValue: "",
+      ...auditActor(user)
+    }]);
     return json(res, 200, { ok: true });
   }
 
@@ -320,7 +373,17 @@ async function api(req, res, pathname) {
     if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your area" });
     const body = await parseBody(req);
     const updated = await store.updateMemberStatus(member.id, String(body.status || ""), String(body.remarks || ""));
+    await store.createAuditLogs(auditDiffs({ action: "Status changed", before: member, after: updated, actor: user }));
     return json(res, 200, { member: updated });
+  }
+
+  if (pathname === "/api/audit-logs" && req.method === "GET") {
+    requireAdmin(user);
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, await store.listAuditLogs(user, {
+      search: (url.searchParams.get("search") || "").trim(),
+      limit: Number(url.searchParams.get("limit") || 100)
+    }));
   }
 
   if (pathname === "/api/users" && req.method === "GET") {
@@ -401,8 +464,10 @@ async function api(req, res, pathname) {
   if (correctionMatch && req.method === "PUT") {
     requireAdmin(user);
     const body = await parseBody(req);
+    const before = await store.getMember(correctionMatch[1]);
     const member = await store.correctMemberTaluk(correctionMatch[1], body.district, body.taluk);
     if (!member) return json(res, 404, { error: "Member not found" });
+    await store.createAuditLogs(auditDiffs({ action: "Taluk corrected", before, after: member, actor: user }));
     return json(res, 200, { member });
   }
 

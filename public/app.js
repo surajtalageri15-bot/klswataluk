@@ -7,9 +7,11 @@ const state = {
   pending: { rows: [], page: 1, size: 25, total: 0 },
   members: { rows: [], page: 1, size: 25, total: 0 },
   teamRequests: [],
+  auditLogs: [],
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" },
-  userFilters: { search: "", role: "", district: "" }
+  userFilters: { search: "", role: "", district: "" },
+  auditFilters: { search: "" }
 };
 
 let latestJoinLink = "";
@@ -178,6 +180,15 @@ async function loadCorrections(page = 1) {
   state.corrections = await request(`/api/taluk-corrections?${params.toString()}`);
 }
 
+async function loadAuditLogs() {
+  if (state.user.role !== "admin") return;
+  const params = new URLSearchParams({
+    search: state.auditFilters.search,
+    limit: "150"
+  });
+  state.auditLogs = await request(`/api/audit-logs?${params.toString()}`);
+}
+
 function renderApp() {
   app.innerHTML = `
     <section class="app-shell">
@@ -194,6 +205,7 @@ function renderApp() {
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
           ${["admin", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
+          ${state.user.role === "admin" ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">Audit History</button>` : ""}
         </nav>
         <button class="secondary" id="logoutBtn">Logout</button>
       </aside>
@@ -216,6 +228,7 @@ function renderApp() {
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "users") await loadUsers();
       if (state.tab === "corrections") await loadCorrections();
+      if (state.tab === "audit") await loadAuditLogs();
       renderApp();
     });
   });
@@ -232,6 +245,7 @@ function renderApp() {
   if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "users") renderUsers();
   if (state.tab === "corrections") renderCorrections();
+  if (state.tab === "audit") renderAuditLogs();
 }
 
 function pageTitle() {
@@ -241,6 +255,7 @@ function pageTitle() {
   if (state.tab === "membership") return "Membership Form";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "corrections") return "Taluk Correction";
+  if (state.tab === "audit") return "Audit History";
   return "Dashboard";
 }
 
@@ -972,6 +987,63 @@ function renderCorrections() {
       renderApp();
     });
   });
+}
+
+function renderAuditLogs() {
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="toolbar">
+        <label>Search <input id="auditSearch" value="${escapeHtml(state.auditFilters.search)}" placeholder="Member, field, old/new value, editor"></label>
+        <span></span>
+        <span></span>
+        <button class="secondary" id="applyAuditSearch">Apply</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date / Time</th>
+              <th>Member</th>
+              <th>Action</th>
+              <th>Field</th>
+              <th>Old Value</th>
+              <th>New Value</th>
+              <th>Edited By</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.auditLogs.map((log) => `
+              <tr>
+                <td>${escapeHtml(formatDateTime(log.createdAt))}</td>
+                <td>${escapeHtml(log.memberName)}</td>
+                <td><span class="badge">${escapeHtml(log.action)}</span></td>
+                <td>${escapeHtml(log.field)}</td>
+                <td>${escapeHtml(log.oldValue)}</td>
+                <td>${escapeHtml(log.newValue)}</td>
+                <td>${escapeHtml(log.actorName)} <span class="muted">(${escapeHtml(log.actorRole)})</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <span class="muted">Showing latest ${state.auditLogs.length} audit entries</span>
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyAuditSearch").addEventListener("click", async () => {
+    state.auditFilters.search = document.querySelector("#auditSearch").value;
+    await loadAuditLogs();
+    renderApp();
+  });
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString();
 }
 
 function correctionRow(member, lists) {
