@@ -104,6 +104,35 @@ a.primary {
   border-top: 0;
 }
 
+.public-link-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.public-link-card {
+  display: grid;
+  gap: 12px;
+  min-height: 180px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  background: #fff;
+}
+
+.public-link-card strong {
+  font-size: 22px;
+  color: var(--green-dark);
+}
+
+.public-link-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .declaration {
   padding: 14px;
   border: 1px solid var(--line);
@@ -640,6 +669,10 @@ tr:last-child td {
 
   .public-form-shell {
     padding: 16px;
+  }
+
+  .public-link-grid {
+    grid-template-columns: 1fr;
   }
 
   .sidebar {
