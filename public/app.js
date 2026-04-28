@@ -41,6 +41,7 @@ const columns = [
 
 const roleLabels = {
   admin: "Admin",
+  state_president: "State President",
   division: "State Division Technical Team",
   district: "District President",
   taluk: "Taluk Technical Team"
@@ -165,7 +166,7 @@ async function loadPending(page = 1) {
 }
 
 async function loadUsers() {
-  if (!["admin", "division", "district"].includes(state.user.role)) return;
+  if (!["admin", "state_president", "division", "district"].includes(state.user.role)) return;
   const data = await request("/api/users");
   state.users = data.users;
   if (state.user.role === "admin") {
@@ -187,7 +188,7 @@ async function loadCorrections(page = 1) {
 }
 
 async function loadAuditLogs() {
-  if (!["admin", "taluk"].includes(state.user.role)) return;
+  if (!["admin", "state_president", "taluk"].includes(state.user.role)) return;
   const params = new URLSearchParams({
     search: state.auditFilters.search,
     editor: state.auditFilters.editor,
@@ -210,7 +211,7 @@ async function loadMissingData() {
 }
 
 async function loadDuplicates() {
-  if (state.user.role !== "admin") return;
+  if (!["admin", "state_president"].includes(state.user.role)) return;
   const params = new URLSearchParams({
     search: state.duplicateFilters.search,
     type: state.duplicateFilters.type,
@@ -220,7 +221,7 @@ async function loadDuplicates() {
 }
 
 async function loadDataCorrectionRequests() {
-  if (!["admin", "taluk"].includes(state.user.role)) return;
+  if (!["admin", "state_president", "taluk"].includes(state.user.role)) return;
   const params = new URLSearchParams({ search: state.dataCorrectionFilters.search });
   const data = await request(`/api/data-correction-requests?${params.toString()}`);
   state.dataCorrectionRequests = data.requests;
@@ -238,14 +239,14 @@ function renderApp() {
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
-          ${["admin", "division", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
+          ${["admin", "state_president", "division", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
-          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
+          ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
-          ${["admin", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
-          ${state.user.role === "admin" ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
+          ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
+          ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
-          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
+          ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
         </nav>
         <button class="secondary" id="logoutBtn">Logout</button>
       </aside>
@@ -310,6 +311,7 @@ function pageTitle() {
 
 function userScopeLabel() {
   if (state.user.role === "admin") return "Admin";
+  if (state.user.role === "state_president") return "State President";
   if (state.user.role === "division") return `${escapeHtml(state.user.district)} Division`;
   if (state.user.role === "district") return `${escapeHtml(state.user.district)} District President`;
   return `${escapeHtml(state.user.taluk)} Taluk`;
@@ -355,7 +357,7 @@ function renderDashboard() {
         <h2>Top districts</h2>
         <div class="actions">
           <a class="secondary" href="/api/exports/members">Export district-wise CSV</a>
-          ${["admin", "division", "district"].includes(state.user.role) ? `<a class="secondary" href="/api/exports/corrections">Export pending corrections</a>` : ""}
+          ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<a class="secondary" href="/api/exports/corrections">Export pending corrections</a>` : ""}
         </div>
         <div class="list">${summary.topDistricts.map(([name, count]) => row(name, count)).join("")}</div>
       </section>
@@ -364,7 +366,7 @@ function renderDashboard() {
         <div class="list">${summary.topTaluks.map(([name, count]) => row(name, count)).join("")}</div>
       </section>
     </div>
-    ${["admin", "division"].includes(state.user.role) ? renderDistrictPerformance(performance) : ""}
+    ${["admin", "state_president", "division"].includes(state.user.role) ? renderDistrictPerformance(performance) : ""}
   `;
 }
 
@@ -1072,12 +1074,13 @@ function selectField(name, label, items, value = "", disabled = false, labels = 
 function renderUsers() {
   const lists = state.dashboard.lists;
   const canManageUsers = state.user.role === "admin";
-  const roleOptions = ["admin", "division", "district", "taluk"];
+  const roleOptions = ["admin", "state_president", "division", "district", "taluk"];
   const filteredUsers = filterUsersForView(state.users);
   const counts = userCounts(state.users);
   document.querySelector("#view").innerHTML = `
     <div class="stats">
       <div class="box stat"><span class="muted">Total logins</span><strong>${state.users.length}</strong></div>
+      <div class="box stat"><span class="muted">State President</span><strong>${counts.state_president}</strong></div>
       <div class="box stat"><span class="muted">Division Teams</span><strong>${counts.division}</strong></div>
       <div class="box stat"><span class="muted">District Presidents</span><strong>${counts.district}</strong></div>
       <div class="box stat"><span class="muted">Taluk Teams</span><strong>${counts.taluk}</strong></div>
@@ -1092,7 +1095,7 @@ function renderUsers() {
           </div>
           <div class="two">
             ${field("password", "Password", "", "password")}
-            ${selectField("role", "Role", ["taluk", "district", "division", "admin"], "taluk", false, roleLabels)}
+            ${selectField("role", "Role", ["taluk", "district", "division", "state_president", "admin"], "taluk", false, roleLabels)}
           </div>
           <div class="two">
             ${selectField("district", "District / Division", lists.districts)}
@@ -1147,8 +1150,11 @@ function renderUsers() {
   roleSelect.addEventListener("change", () => {
     const needsTaluk = roleSelect.value === "taluk";
     const needsDivision = roleSelect.value === "division";
+    const needsState = ["admin", "state_president"].includes(roleSelect.value);
     districtSelect.innerHTML = `<option value="">Select</option>${optionList(needsDivision ? (lists.divisions || []) : lists.districts)}`;
+    districtSelect.disabled = needsState;
     talukSelect.disabled = !needsTaluk;
+    if (needsState) districtSelect.value = "";
     if (!needsTaluk) talukSelect.value = "";
   });
   districtSelect.addEventListener("change", () => {
@@ -1320,6 +1326,7 @@ function userCounts(users) {
   return {
     active: users.filter((user) => user.active).length,
     admin: users.filter((user) => user.role === "admin").length,
+    state_president: users.filter((user) => user.role === "state_president").length,
     division: users.filter((user) => user.role === "division").length,
     district: users.filter((user) => user.role === "district").length,
     taluk: users.filter((user) => user.role === "taluk").length
@@ -1595,7 +1602,7 @@ function renderDataCorrectionRequests() {
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
-        <h2>${state.user.role === "admin" ? "Pending data corrections" : "My correction requests"}</h2>
+        <h2>${["admin", "state_president"].includes(state.user.role) ? "Pending data corrections" : "My correction requests"}</h2>
         <span class="badge">${pendingCount} Pending</span>
       </div>
       <div class="toolbar">

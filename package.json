@@ -8,6 +8,7 @@
     "import": "python scripts/import_excel.py",
     "import:pg": "node scripts/import_postgres.js",
     "normalize:taluks": "node scripts/normalize_taluks.js",
+    "seed:state-president": "node scripts/seed_state_president.js",
     "seed:district-presidents": "node scripts/seed_district_presidents.js",
     "seed:division-teams": "node scripts/seed_division_teams.js"
   },

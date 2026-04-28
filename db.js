@@ -170,7 +170,7 @@ async function initDb() {
       username text unique not null,
       password text not null,
       name text not null,
-      role text not null check (role in ('admin', 'division', 'district', 'taluk')),
+      role text not null check (role in ('admin', 'state_president', 'division', 'district', 'taluk')),
       district text,
       taluk text,
       active boolean not null default true,
@@ -268,7 +268,7 @@ async function initDb() {
 
   await pool.query(`
     alter table users drop constraint if exists users_role_check;
-    alter table users add constraint users_role_check check (role in ('admin', 'division', 'district', 'taluk'));
+    alter table users add constraint users_role_check check (role in ('admin', 'state_president', 'division', 'district', 'taluk'));
   `);
 
   await pool.query(`
@@ -293,7 +293,7 @@ async function initDb() {
 }
 
 function visibleWhere(user, startIndex = 1) {
-  if (user.role === "admin") return { clause: "true", values: [], next: startIndex };
+  if (["admin", "state_president"].includes(user.role)) return { clause: "true", values: [], next: startIndex };
   if (user.role === "division") {
     const values = divisionDistricts(user.district);
     if (!values.length) return { clause: "false", values: [], next: startIndex };
@@ -312,7 +312,7 @@ function visibleWhere(user, startIndex = 1) {
 }
 
 function memberVisibleTo(user, member) {
-  if (user.role === "admin") return true;
+  if (["admin", "state_president"].includes(user.role)) return true;
   const memberLocation = normalizeMemberLocation(member);
   if (user.role === "division") return divisionDistricts(user.district).includes(memberLocation.district);
   const userDistrict = canonicalDistrict(user.district);
@@ -378,7 +378,7 @@ function dashboardCharts(members, user) {
     ageGroups: Object.entries(ageGroups).map(([label, value]) => ({ label, value })),
     memberCountByTaluk: Object.entries(talukCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, user.role === "admin" ? 20 : 15)
+      .slice(0, ["admin", "state_president"].includes(user.role) ? 20 : 15)
       .map(([label, value]) => ({ label, value }))
   };
 }
@@ -386,7 +386,7 @@ function dashboardCharts(members, user) {
 async function visibleUsersForPerformance(user) {
   if (hasPostgres) return listUsers(user);
   const db = await readJsonDb();
-  if (user.role === "admin") return db.users;
+  if (["admin", "state_president"].includes(user.role)) return db.users;
   if (user.role === "division") {
     const districts = divisionDistricts(user.district);
     return db.users.filter((item) => ["district", "taluk"].includes(item.role) && districts.includes(canonicalDistrict(item.district)));
@@ -399,7 +399,7 @@ async function visibleUsersForPerformance(user) {
 }
 
 async function districtPerformance(user, members) {
-  if (!["admin", "division"].includes(user.role)) return { districts: [], missingTalukLogins: [] };
+  if (!["admin", "state_president", "division"].includes(user.role)) return { districts: [], missingTalukLogins: [] };
   const lists = masterLists(user);
   const users = await visibleUsersForPerformance(user);
   const activeTalukUsers = new Set(users
@@ -522,7 +522,7 @@ async function getPublicSummary() {
 }
 
 async function pendingCorrectionChart(user, jsonMembers = null) {
-  if (!["admin", "division", "district"].includes(user.role)) return [];
+  if (!["admin", "state_president", "division", "district"].includes(user.role)) return [];
   const rows = await exportTalukCorrections(user, {});
   const counts = {};
   for (const row of rows) {
@@ -531,7 +531,7 @@ async function pendingCorrectionChart(user, jsonMembers = null) {
   }
   return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, user.role === "admin" ? 20 : 10)
+    .slice(0, ["admin", "state_president"].includes(user.role) ? 20 : 10)
     .map(([label, value]) => ({ label, value }));
 }
 
@@ -1102,7 +1102,7 @@ async function listTalukCorrections({ page = 1, size = 50, district = "", search
 }
 
 async function exportTalukCorrections(user, filters = {}) {
-  if (!["admin", "division", "district"].includes(user.role)) return [];
+  if (!["admin", "state_president", "division", "district"].includes(user.role)) return [];
   const district = user.role === "district" ? canonicalDistrict(user.district) : (filters.district || "");
   const result = await listTalukCorrections({
     page: 1,
@@ -1210,7 +1210,7 @@ async function listAuditLogs(user, filters = {}) {
   const toDate = String(filters.to || "").trim();
   const memberId = String(filters.memberId || "").trim();
   const limit = Math.min(5000, Math.max(25, Number(filters.limit || 100)));
-  const memberIds = user.role === "admin" ? null : new Set((await exportMembers(user, {})).map((member) => member.id));
+  const memberIds = ["admin", "state_president"].includes(user.role) ? null : new Set((await exportMembers(user, {})).map((member) => member.id));
 
   if (hasPostgres) {
     const values = [];
@@ -1403,6 +1403,45 @@ async function listUsers(viewer = null) {
     return db.users.filter((item) => item.role === "taluk" && canonicalDistrict(item.district) === district);
   }
   return db.users;
+}
+
+async function upsertStatePresidentUser(password) {
+  const user = {
+    id: crypto.randomUUID(),
+    username: "state_president",
+    password,
+    name: "State President",
+    role: "state_president",
+    district: "",
+    taluk: "",
+    active: true,
+    createdAt: new Date().toISOString()
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into users (id, username, password, name, role, district, taluk, active, created_at, updated_at)
+       values ($1, 'state_president', $2, 'State President', 'state_president', '', '', true, $3, $3)
+       on conflict (username) do update set
+        password = excluded.password,
+        name = excluded.name,
+        role = 'state_president',
+        district = '',
+        taluk = '',
+        active = true,
+        updated_at = now()
+       returning *`,
+      [user.id, user.password, user.createdAt]
+    );
+    return toCamel(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  const existing = db.users.find((item) => item.username === "state_president");
+  if (existing) Object.assign(existing, user, { id: existing.id });
+  else db.users.push(user);
+  await writeJsonDb(db);
+  return existing || user;
 }
 
 async function usernameExists(username) {
@@ -1726,6 +1765,7 @@ module.exports = {
   listUsers,
   usernameExists,
   createUser,
+  upsertStatePresidentUser,
   upsertDistrictPresidentUsers,
   upsertDivisionTechnicalTeamUsers,
   updateUser,

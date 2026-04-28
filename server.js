@@ -92,7 +92,7 @@ function requireAdmin(user) {
 }
 
 function canViewUsers(user) {
-  return user && ["admin", "division", "district"].includes(user.role);
+  return user && ["admin", "state_president", "division", "district"].includes(user.role);
 }
 
 function canCreateMembers(user) {
@@ -100,7 +100,7 @@ function canCreateMembers(user) {
 }
 
 function canReviewMembers(user) {
-  return user && ["admin", "division", "taluk"].includes(user.role);
+  return user && ["admin", "state_president", "division", "taluk"].includes(user.role);
 }
 
 function normalizeMember(input, existing = {}) {
@@ -488,7 +488,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/exports/corrections" && req.method === "GET") {
-    if (!["admin", "division", "district"].includes(user.role)) return json(res, 403, { error: "Export access required" });
+    if (!["admin", "state_president", "division", "district"].includes(user.role)) return json(res, 403, { error: "Export access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     const rows = await store.exportTalukCorrections(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -602,7 +602,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/audit-logs" && req.method === "GET") {
-    if (!["admin", "taluk"].includes(user.role)) return json(res, 403, { error: "Activity log access required" });
+    if (!["admin", "state_president", "taluk"].includes(user.role)) return json(res, 403, { error: "Activity log access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, await store.listAuditLogs(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -616,7 +616,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/exports/audit-logs" && req.method === "GET") {
-    if (!["admin", "taluk"].includes(user.role)) return json(res, 403, { error: "Activity log export access required" });
+    if (!["admin", "state_president", "taluk"].includes(user.role)) return json(res, 403, { error: "Activity log export access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     const rows = await store.listAuditLogs(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -633,7 +633,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/duplicates" && req.method === "GET") {
-    requireAdmin(user);
+    if (!["admin", "state_president"].includes(user.role)) return json(res, 403, { error: "Duplicate dashboard access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, await store.listDuplicateGroups({
       type: (url.searchParams.get("type") || "").trim(),
@@ -643,7 +643,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/data-correction-requests" && req.method === "GET") {
-    if (!["admin", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
+    if (!["admin", "state_president", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, {
       requests: await store.listDataCorrectionRequests(user, {
@@ -811,7 +811,7 @@ async function api(req, res, pathname) {
       username,
       password,
       name: String(body.name || username).trim(),
-      role: ["admin", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
+      role: ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
       district: body.role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
       taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
       active: body.active !== false
@@ -830,7 +830,7 @@ async function api(req, res, pathname) {
     const body = await parseBody(req);
     const next = {
       name: String(body.name || target.name).trim(),
-      role: ["admin", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
+      role: ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
       district: body.role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
       taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
       active: body.active !== false
