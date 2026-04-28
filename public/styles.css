@@ -563,6 +563,67 @@ textarea {
   margin: 12px 0;
 }
 
+.audit-alerts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.audit-alerts div {
+  border: 1px solid #edd6a6;
+  border-radius: 8px;
+  background: #fff8e8;
+  padding: 12px;
+}
+
+.audit-alerts strong,
+.audit-alerts span,
+.timeline-item strong,
+.timeline-item span {
+  display: block;
+}
+
+.diff-old,
+.diff-new {
+  display: inline-block;
+  min-width: 44px;
+  max-width: 280px;
+  border-radius: 6px;
+  padding: 5px 8px;
+  overflow-wrap: anywhere;
+}
+
+.diff-old {
+  background: #f7e8e5;
+  color: #7e2f2a;
+}
+
+.diff-new {
+  background: #e7f4ed;
+  color: var(--green-dark);
+}
+
+.timeline {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.timeline-item {
+  border-left: 3px solid var(--green);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 12px;
+}
+
+.timeline-diff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .account-meta {
   display: flex;
   gap: 6px;

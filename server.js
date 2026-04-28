@@ -440,8 +440,30 @@ async function api(req, res, pathname) {
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, await store.listAuditLogs(user, {
       search: (url.searchParams.get("search") || "").trim(),
+      editor: (url.searchParams.get("editor") || "").trim(),
+      action: (url.searchParams.get("action") || "").trim(),
+      from: (url.searchParams.get("from") || "").trim(),
+      to: (url.searchParams.get("to") || "").trim(),
+      memberId: (url.searchParams.get("memberId") || "").trim(),
       limit: Number(url.searchParams.get("limit") || 100)
     }));
+  }
+
+  if (pathname === "/api/exports/audit-logs" && req.method === "GET") {
+    if (!["admin", "taluk"].includes(user.role)) return json(res, 403, { error: "Activity log export access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const rows = await store.listAuditLogs(user, {
+      search: (url.searchParams.get("search") || "").trim(),
+      editor: (url.searchParams.get("editor") || "").trim(),
+      action: (url.searchParams.get("action") || "").trim(),
+      from: (url.searchParams.get("from") || "").trim(),
+      to: (url.searchParams.get("to") || "").trim(),
+      memberId: (url.searchParams.get("memberId") || "").trim(),
+      limit: 5000
+    });
+    return csvDownload(res, "audit-history.csv", [
+      "createdAt", "memberName", "action", "field", "oldValue", "newValue", "actorName", "actorRole"
+    ], rows);
   }
 
   if (pathname === "/api/duplicates" && req.method === "GET") {

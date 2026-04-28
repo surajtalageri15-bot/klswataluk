@@ -1017,29 +1017,70 @@ async function createAuditLogs(logs) {
 
 async function listAuditLogs(user, filters = {}) {
   const search = String(filters.search || "").trim().toLowerCase();
-  const limit = Math.min(300, Math.max(25, Number(filters.limit || 100)));
+  const editor = String(filters.editor || "").trim().toLowerCase();
+  const action = String(filters.action || "").trim();
+  const fromDate = String(filters.from || "").trim();
+  const toDate = String(filters.to || "").trim();
+  const memberId = String(filters.memberId || "").trim();
+  const limit = Math.min(5000, Math.max(25, Number(filters.limit || 100)));
   const memberIds = user.role === "admin" ? null : new Set((await exportMembers(user, {})).map((member) => member.id));
 
   if (hasPostgres) {
+    const values = [];
+    const where = [];
+    const add = (value) => {
+      values.push(value);
+      return `$${values.length}`;
+    };
+
+    if (search) {
+      const term = add(`%${search}%`);
+      where.push(`(
+        lower(member_name) like ${term}
+        or lower(field) like ${term}
+        or lower(action) like ${term}
+        or lower(actor_name) like ${term}
+        or lower(actor_role) like ${term}
+        or lower(old_value) like ${term}
+        or lower(new_value) like ${term}
+      )`);
+    }
+    if (editor) {
+      const term = add(`%${editor}%`);
+      where.push(`(lower(actor_name) like ${term} or lower(actor_role) like ${term})`);
+    }
+    if (action) where.push(`action = ${add(action)}`);
+    if (memberId) where.push(`member_id = ${add(memberId)}`);
+    if (fromDate) where.push(`created_at >= ${add(`${fromDate}T00:00:00`)}::timestamptz`);
+    if (toDate) where.push(`created_at <= ${add(`${toDate}T23:59:59.999`)}::timestamptz`);
+    if (memberIds) {
+      const ids = [...memberIds];
+      where.push(ids.length ? `(member_id = any(${add(ids)}) or actor_id = ${add(user.id)})` : `actor_id = ${add(user.id)}`);
+    }
+    const limitParam = add(limit);
     const result = await pool.query(
       `select * from member_audit_logs
-       where ($1 = '' or lower(member_name) like $2 or lower(field) like $2 or lower(actor_name) like $2 or lower(old_value) like $2 or lower(new_value) like $2)
+       ${where.length ? `where ${where.join(" and ")}` : ""}
        order by created_at desc
-       limit $3`,
-      [search, `%${search}%`, limit]
+       limit ${limitParam}`,
+      values
     );
-    const rows = result.rows.map(toAuditLog);
-    return memberIds ? rows.filter((row) => memberIds.has(row.memberId) || row.actorId === user.id) : rows;
+    return result.rows.map(toAuditLog);
   }
 
   const db = await readJsonDb();
   db.auditLogs ||= [];
   let rows = db.auditLogs;
+  if (memberIds) rows = rows.filter((row) => memberIds.has(row.memberId) || row.actorId === user.id);
+  if (memberId) rows = rows.filter((row) => row.memberId === memberId);
   if (search) {
-    rows = rows.filter((row) => [row.memberName, row.field, row.actorName, row.oldValue, row.newValue]
+    rows = rows.filter((row) => [row.memberName, row.field, row.action, row.actorName, row.actorRole, row.oldValue, row.newValue]
       .some((value) => String(value || "").toLowerCase().includes(search)));
   }
-  if (memberIds) rows = rows.filter((row) => memberIds.has(row.memberId) || row.actorId === user.id);
+  if (editor) rows = rows.filter((row) => [row.actorName, row.actorRole].some((value) => String(value || "").toLowerCase().includes(editor)));
+  if (action) rows = rows.filter((row) => row.action === action);
+  if (fromDate) rows = rows.filter((row) => new Date(row.createdAt) >= new Date(`${fromDate}T00:00:00`));
+  if (toDate) rows = rows.filter((row) => new Date(row.createdAt) <= new Date(`${toDate}T23:59:59.999`));
   return rows.slice(0, limit);
 }
 

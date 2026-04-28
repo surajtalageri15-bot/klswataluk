@@ -14,7 +14,7 @@ const state = {
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" },
   userFilters: { search: "", role: "", district: "" },
-  auditFilters: { search: "" },
+  auditFilters: { search: "", editor: "", action: "", from: "", to: "", memberId: "" },
   duplicateFilters: { search: "", type: "" },
   dataCorrectionFilters: { search: "" }
 };
@@ -190,7 +190,12 @@ async function loadAuditLogs() {
   if (!["admin", "taluk"].includes(state.user.role)) return;
   const params = new URLSearchParams({
     search: state.auditFilters.search,
-    limit: "150"
+    editor: state.auditFilters.editor,
+    action: state.auditFilters.action,
+    from: state.auditFilters.from,
+    to: state.auditFilters.to,
+    memberId: state.auditFilters.memberId,
+    limit: "300"
   });
   state.auditLogs = await request(`/api/audit-logs?${params.toString()}`);
 }
@@ -1643,14 +1648,35 @@ function duplicateGroup(group) {
 }
 
 function renderAuditLogs() {
+  const actions = [...new Set(["Created", "Updated", "Status changed", "Deleted", "Correction approved", ...state.auditLogs.map((log) => log.action).filter(Boolean)])].sort();
+  const suspicious = suspiciousAuditItems(state.auditLogs);
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="toolbar">
-        <label>Search <input id="auditSearch" value="${escapeHtml(state.auditFilters.search)}" placeholder="Member, field, old/new value, editor"></label>
-        <span></span>
-        <span></span>
+        <label>Search <input id="auditSearch" value="${escapeHtml(state.auditFilters.search)}" placeholder="Member, LS number, phone, value"></label>
+        <label>Editor <input id="auditEditor" value="${escapeHtml(state.auditFilters.editor)}" placeholder="Admin, taluk user, role"></label>
+        <label>Action
+          <select id="auditAction">
+            <option value="">All actions</option>
+            ${optionList(actions, state.auditFilters.action)}
+          </select>
+        </label>
+        <label>From <input id="auditFrom" type="date" value="${escapeHtml(state.auditFilters.from)}"></label>
+        <label>To <input id="auditTo" type="date" value="${escapeHtml(state.auditFilters.to)}"></label>
         <button class="secondary" id="applyAuditSearch">Apply</button>
+        <button class="secondary" id="clearAuditSearch">Clear</button>
+        <a class="secondary" href="${exportUrl("/api/exports/audit-logs", state.auditFilters)}">Export CSV</a>
       </div>
+      ${suspicious.length ? `
+        <div class="audit-alerts">
+          ${suspicious.map((item) => `
+            <div>
+              <strong>${escapeHtml(item.title)}</strong>
+              <span>${escapeHtml(item.detail)}</span>
+            </div>
+          `).join("")}
+        </div>
+      ` : ""}
       <div class="table-wrap">
         <table>
           <thead>
@@ -1662,6 +1688,7 @@ function renderAuditLogs() {
               <th>Old Value</th>
               <th>New Value</th>
               <th>Edited By</th>
+              <th>Timeline</th>
             </tr>
           </thead>
           <tbody>
@@ -1671,9 +1698,10 @@ function renderAuditLogs() {
                 <td>${escapeHtml(log.memberName)}</td>
                 <td><span class="badge">${escapeHtml(log.action)}</span></td>
                 <td>${escapeHtml(log.field)}</td>
-                <td>${escapeHtml(log.oldValue)}</td>
-                <td>${escapeHtml(log.newValue)}</td>
+                <td><span class="diff-old">${escapeHtml(log.oldValue || "-")}</span></td>
+                <td><span class="diff-new">${escapeHtml(log.newValue || "-")}</span></td>
                 <td>${escapeHtml(log.actorName)} <span class="muted">(${escapeHtml(log.actorRole)})</span></td>
+                <td>${log.memberId ? `<button class="secondary" data-audit-member="${escapeHtml(log.memberId)}">View</button>` : "-"}</td>
               </tr>
             `).join("")}
           </tbody>
@@ -1687,9 +1715,89 @@ function renderAuditLogs() {
 
   document.querySelector("#applyAuditSearch").addEventListener("click", async () => {
     state.auditFilters.search = document.querySelector("#auditSearch").value;
+    state.auditFilters.editor = document.querySelector("#auditEditor").value;
+    state.auditFilters.action = document.querySelector("#auditAction").value;
+    state.auditFilters.from = document.querySelector("#auditFrom").value;
+    state.auditFilters.to = document.querySelector("#auditTo").value;
+    state.auditFilters.memberId = "";
     await loadAuditLogs();
     renderApp();
   });
+  document.querySelector("#clearAuditSearch").addEventListener("click", async () => {
+    state.auditFilters = { search: "", editor: "", action: "", from: "", to: "", memberId: "" };
+    await loadAuditLogs();
+    renderApp();
+  });
+  document.querySelectorAll("[data-audit-member]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await openAuditTimeline(button.dataset.auditMember);
+    });
+  });
+}
+
+function suspiciousAuditItems(logs) {
+  const byActor = {};
+  const byRejectActor = {};
+  const outsideHours = [];
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  logs.forEach((log) => {
+    const time = new Date(log.createdAt);
+    const actor = log.actorName || log.actorId || "Unknown";
+    if (now - time.getTime() <= dayMs) byActor[actor] = (byActor[actor] || 0) + 1;
+    if (log.action === "Status changed" && log.newValue === "Rejected") {
+      byRejectActor[actor] = (byRejectActor[actor] || 0) + 1;
+    }
+    const hour = time.getHours();
+    if (!Number.isNaN(hour) && (hour < 6 || hour > 22)) outsideHours.push(log);
+  });
+  const items = [];
+  Object.entries(byActor).filter(([, count]) => count >= 25).slice(0, 3).forEach(([actor, count]) => {
+    items.push({ title: "High edit volume", detail: `${actor} made ${count} audit changes in the latest 24 hours.` });
+  });
+  Object.entries(byRejectActor).filter(([, count]) => count >= 5).slice(0, 3).forEach(([actor, count]) => {
+    items.push({ title: "Repeated rejections", detail: `${actor} rejected ${count} records in the current filtered list.` });
+  });
+  if (outsideHours.length >= 5) {
+    items.push({ title: "Outside-hours edits", detail: `${outsideHours.length} changes happened before 6 AM or after 10 PM in the current filtered list.` });
+  }
+  return items.slice(0, 4);
+}
+
+async function openAuditTimeline(memberId) {
+  const params = new URLSearchParams({ memberId, limit: "500" });
+  const logs = await request(`/api/audit-logs?${params.toString()}`);
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <section class="box modal">
+        <div class="modal-head">
+          <div>
+            <h2>Member timeline</h2>
+            <p class="muted">${escapeHtml(logs[0]?.memberName || "Member audit history")}</p>
+          </div>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <div class="timeline">
+          ${logs.map((log) => `
+            <div class="timeline-item">
+              <span class="muted">${escapeHtml(formatDateTime(log.createdAt))} - ${escapeHtml(log.actorName)} (${escapeHtml(log.actorRole)})</span>
+              <strong>${escapeHtml(log.action)} / ${escapeHtml(log.field)}</strong>
+              <div class="timeline-diff">
+                <span class="diff-old">${escapeHtml(log.oldValue || "-")}</span>
+                <span class="diff-new">${escapeHtml(log.newValue || "-")}</span>
+              </div>
+            </div>
+          `).join("") || `<p class="muted">No audit history found.</p>`}
+        </div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Close</button>
+          <a class="secondary" href="${exportUrl("/api/exports/audit-logs", { memberId })}">Export member CSV</a>
+        </div>
+      </section>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
 }
 
 function formatDateTime(value) {
