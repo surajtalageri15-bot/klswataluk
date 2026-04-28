@@ -4,7 +4,7 @@ const fssync = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const store = require("./db");
-const { canonicalDistrict, isMasterTaluk, masterLists } = require("./taluks");
+const { canonicalDistrict, canonicalDivision, divisionDistricts, isMasterTaluk, masterLists } = require("./taluks");
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
@@ -84,11 +84,15 @@ function requireAdmin(user) {
 }
 
 function canViewUsers(user) {
-  return user && (user.role === "admin" || user.role === "district");
+  return user && ["admin", "division", "district"].includes(user.role);
 }
 
-function canEditMembers(user) {
+function canCreateMembers(user) {
   return user && (user.role === "admin" || user.role === "taluk");
+}
+
+function canReviewMembers(user) {
+  return user && ["admin", "division", "taluk"].includes(user.role);
 }
 
 function normalizeMember(input, existing = {}) {
@@ -340,7 +344,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/exports/corrections" && req.method === "GET") {
-    if (!["admin", "district"].includes(user.role)) return json(res, 403, { error: "Export access required" });
+    if (!["admin", "division", "district"].includes(user.role)) return json(res, 403, { error: "Export access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     const rows = await store.exportTalukCorrections(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -353,7 +357,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/members" && req.method === "POST") {
-    if (!canEditMembers(user)) return json(res, 403, { error: "District President access is view-only" });
+    if (!canCreateMembers(user)) return json(res, 403, { error: "This login can review records but cannot create members" });
     const body = await parseBody(req);
     const member = normalizeMember(body);
     if (user.role !== "admin") {
@@ -405,7 +409,7 @@ async function api(req, res, pathname) {
 
   const statusMatch = pathname.match(/^\/api\/members\/([^/]+)\/status$/);
   if (statusMatch && req.method === "PUT") {
-    if (!canEditMembers(user)) return json(res, 403, { error: "District President access is view-only" });
+    if (!canReviewMembers(user)) return json(res, 403, { error: "Status review access required" });
     const member = await store.getMember(statusMatch[1]);
     if (!member) return json(res, 404, { error: "Member not found" });
     if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your area" });
@@ -603,13 +607,14 @@ async function api(req, res, pathname) {
       username,
       password,
       name: String(body.name || username).trim(),
-      role: ["admin", "district", "taluk"].includes(body.role) ? body.role : "taluk",
-      district: String(body.district || "").trim(),
+      role: ["admin", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
+      district: body.role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
       taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
       active: body.active !== false
     };
     if (newUser.role === "taluk" && !newUser.taluk) return json(res, 400, { error: "Taluk user must be assigned a taluk" });
     if (newUser.role === "district" && !newUser.district) return json(res, 400, { error: "District President must be assigned a district" });
+    if (newUser.role === "division" && !divisionDistricts(newUser.district).length) return json(res, 400, { error: "Division team must be assigned a valid division" });
     return json(res, 201, { user: publicUser(await store.createUser(newUser)) });
   }
 
@@ -621,11 +626,12 @@ async function api(req, res, pathname) {
     const body = await parseBody(req);
     const next = {
       name: String(body.name || target.name).trim(),
-      role: ["admin", "district", "taluk"].includes(body.role) ? body.role : "taluk",
-      district: String(body.district || "").trim(),
+      role: ["admin", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
+      district: body.role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
       taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
       active: body.active !== false
     };
+    if (next.role === "division" && !divisionDistricts(next.district).length) return json(res, 400, { error: "Division team must be assigned a valid division" });
     if (body.password) next.password = String(body.password);
     if (target.username === "admin") {
       next.role = "admin";

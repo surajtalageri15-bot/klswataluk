@@ -1,7 +1,17 @@
 const fs = require("fs/promises");
 const path = require("path");
 const crypto = require("crypto");
-const { MASTER_TALUKS, canonicalDistrict, isMasterTaluk, masterLists, masterTalukCount, normalizedTaluk } = require("./taluks");
+const {
+  MASTER_TALUKS,
+  STATE_DIVISIONS,
+  canonicalDistrict,
+  canonicalDivision,
+  divisionDistricts,
+  isMasterTaluk,
+  masterLists,
+  masterTalukCount,
+  normalizedTaluk
+} = require("./taluks");
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
@@ -157,7 +167,7 @@ async function initDb() {
       username text unique not null,
       password text not null,
       name text not null,
-      role text not null check (role in ('admin', 'district', 'taluk')),
+      role text not null check (role in ('admin', 'division', 'district', 'taluk')),
       district text,
       taluk text,
       active boolean not null default true,
@@ -253,7 +263,7 @@ async function initDb() {
 
   await pool.query(`
     alter table users drop constraint if exists users_role_check;
-    alter table users add constraint users_role_check check (role in ('admin', 'district', 'taluk'));
+    alter table users add constraint users_role_check check (role in ('admin', 'division', 'district', 'taluk'));
   `);
 
   await pool.query(`
@@ -277,6 +287,12 @@ async function initDb() {
 
 function visibleWhere(user, startIndex = 1) {
   if (user.role === "admin") return { clause: "true", values: [], next: startIndex };
+  if (user.role === "division") {
+    const values = divisionDistricts(user.district);
+    if (!values.length) return { clause: "false", values: [], next: startIndex };
+    const placeholders = values.map((_, index) => `$${startIndex + index}`).join(", ");
+    return { clause: `district in (${placeholders})`, values, next: startIndex + values.length };
+  }
   const values = [];
   let clause = "true";
   let next = startIndex;
@@ -291,6 +307,7 @@ function visibleWhere(user, startIndex = 1) {
 function memberVisibleTo(user, member) {
   if (user.role === "admin") return true;
   const memberLocation = normalizeMemberLocation(member);
+  if (user.role === "division") return divisionDistricts(user.district).includes(memberLocation.district);
   const userDistrict = canonicalDistrict(user.district);
   if (user.role === "district") return Boolean(userDistrict) && memberLocation.district === userDistrict;
   const userTaluk = normalizedTaluk(userDistrict, user.taluk);
@@ -401,7 +418,7 @@ async function getDashboard(user) {
 }
 
 async function pendingCorrectionChart(user, jsonMembers = null) {
-  if (!["admin", "district"].includes(user.role)) return [];
+  if (!["admin", "division", "district"].includes(user.role)) return [];
   const rows = await exportTalukCorrections(user, {});
   const counts = {};
   for (const row of rows) {
@@ -763,7 +780,7 @@ async function listTalukCorrections({ page = 1, size = 50, district = "", search
 }
 
 async function exportTalukCorrections(user, filters = {}) {
-  if (user.role !== "admin" && user.role !== "district") return [];
+  if (!["admin", "division", "district"].includes(user.role)) return [];
   const district = user.role === "district" ? canonicalDistrict(user.district) : (filters.district || "");
   const result = await listTalukCorrections({
     page: 1,
@@ -771,6 +788,10 @@ async function exportTalukCorrections(user, filters = {}) {
     district,
     search: filters.search || ""
   });
+  if (user.role === "division") {
+    const districts = divisionDistricts(user.district);
+    return result.rows.filter((row) => districts.includes(canonicalDistrict(row.suggestedDistrict || row.rawDistrict)));
+  }
   return result.rows;
 }
 
@@ -986,6 +1007,16 @@ async function updateDataCorrectionRequest(id, changes) {
 
 async function listUsers(viewer = null) {
   if (hasPostgres) {
+    if (viewer?.role === "division") {
+      const districts = divisionDistricts(viewer.district);
+      if (!districts.length) return [];
+      const placeholders = districts.map((_, index) => `$${index + 1}`).join(", ");
+      const result = await pool.query(
+        `select * from users where role in ('district', 'taluk') and district in (${placeholders}) order by role, district, taluk, username`,
+        districts
+      );
+      return result.rows.map(toCamel);
+    }
     if (viewer?.role === "district") {
       const result = await pool.query(
         "select * from users where role = 'taluk' and district = $1 order by taluk, username",
@@ -997,6 +1028,10 @@ async function listUsers(viewer = null) {
     return result.rows.map(toCamel);
   }
   const db = await readJsonDb();
+  if (viewer?.role === "division") {
+    const districts = divisionDistricts(viewer.district);
+    return db.users.filter((item) => ["district", "taluk"].includes(item.role) && districts.includes(canonicalDistrict(item.district)));
+  }
   if (viewer?.role === "district") {
     const district = canonicalDistrict(viewer.district);
     return db.users.filter((item) => item.role === "taluk" && canonicalDistrict(item.district) === district);
@@ -1183,6 +1218,56 @@ async function upsertDistrictPresidentUsers(password) {
   return users;
 }
 
+async function upsertDivisionTechnicalTeamUsers(password) {
+  const users = [];
+  for (const division of Object.keys(STATE_DIVISIONS)) {
+    const username = `division_${division.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+    const user = {
+      id: crypto.randomUUID(),
+      username,
+      password,
+      name: `${division} Division Technical Team`,
+      role: "division",
+      district: canonicalDivision(division),
+      taluk: "",
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+
+    if (hasPostgres) {
+      const result = await pool.query(
+        `insert into users (id, username, password, name, role, district, taluk, active, created_at, updated_at)
+         values ($1, $2, $3, $4, 'division', $5, '', true, $6, $6)
+         on conflict (username) do update set
+          password = excluded.password,
+          name = excluded.name,
+          role = 'division',
+          district = excluded.district,
+          taluk = '',
+          active = true,
+          updated_at = now()
+         returning *`,
+        [user.id, user.username, user.password, user.name, user.district, user.createdAt]
+      );
+      users.push(toCamel(result.rows[0]));
+    } else {
+      users.push(user);
+    }
+  }
+
+  if (!hasPostgres) {
+    const db = await readJsonDb();
+    for (const user of users) {
+      const existing = db.users.find((item) => item.username === user.username);
+      if (existing) Object.assign(existing, user, { id: existing.id });
+      else db.users.push(user);
+    }
+    await writeJsonDb(db);
+  }
+
+  return users;
+}
+
 async function updateUser(id, user) {
   if (hasPostgres) {
     const current = await getUserById(id);
@@ -1268,6 +1353,7 @@ module.exports = {
   usernameExists,
   createUser,
   upsertDistrictPresidentUsers,
+  upsertDivisionTechnicalTeamUsers,
   updateUser,
   deleteUser,
   memberVisibleTo,

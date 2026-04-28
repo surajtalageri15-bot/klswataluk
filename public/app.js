@@ -40,6 +40,7 @@ const columns = [
 
 const roleLabels = {
   admin: "Admin",
+  division: "State Division Technical Team",
   district: "District President",
   taluk: "Taluk Technical Team"
 };
@@ -163,7 +164,7 @@ async function loadPending(page = 1) {
 }
 
 async function loadUsers() {
-  if (!["admin", "district"].includes(state.user.role)) return;
+  if (!["admin", "division", "district"].includes(state.user.role)) return;
   const data = await request("/api/users");
   state.users = data.users;
   if (state.user.role === "admin") {
@@ -222,10 +223,10 @@ function renderApp() {
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
-          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
+          ${["admin", "division", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
-          ${["admin", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
+          ${["admin", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">Audit History</button>` : ""}
@@ -290,6 +291,7 @@ function pageTitle() {
 
 function userScopeLabel() {
   if (state.user.role === "admin") return "Admin";
+  if (state.user.role === "division") return `${escapeHtml(state.user.district)} Division`;
   if (state.user.role === "district") return `${escapeHtml(state.user.district)} District President`;
   return `${escapeHtml(state.user.taluk)} Taluk`;
 }
@@ -327,7 +329,7 @@ function renderDashboard() {
         <h2>Top districts</h2>
         <div class="actions">
           <a class="secondary" href="/api/exports/members">Export district-wise CSV</a>
-          ${["admin", "district"].includes(state.user.role) ? `<a class="secondary" href="/api/exports/corrections">Export pending corrections</a>` : ""}
+          ${["admin", "division", "district"].includes(state.user.role) ? `<a class="secondary" href="/api/exports/corrections">Export pending corrections</a>` : ""}
         </div>
         <div class="list">${summary.topDistricts.map(([name, count]) => row(name, count)).join("")}</div>
       </section>
@@ -723,18 +725,19 @@ function selectField(name, label, items, value = "", disabled = false, labels = 
 function renderUsers() {
   const lists = state.dashboard.lists;
   const canManageUsers = state.user.role === "admin";
+  const roleOptions = ["admin", "division", "district", "taluk"];
   const filteredUsers = filterUsersForView(state.users);
   const counts = userCounts(state.users);
   document.querySelector("#view").innerHTML = `
     <div class="stats">
       <div class="box stat"><span class="muted">Total logins</span><strong>${state.users.length}</strong></div>
+      <div class="box stat"><span class="muted">Division Teams</span><strong>${counts.division}</strong></div>
       <div class="box stat"><span class="muted">District Presidents</span><strong>${counts.district}</strong></div>
       <div class="box stat"><span class="muted">Taluk Teams</span><strong>${counts.taluk}</strong></div>
-      <div class="box stat"><span class="muted">Active</span><strong>${counts.active}</strong></div>
     </div>
     <div class="split">
       <section class="box section ${canManageUsers ? "" : "hidden"}">
-        <h2>Create taluk login</h2>
+        <h2>Create login</h2>
         <form id="userForm" class="form-grid">
           <div class="two">
             ${field("name", "Team/User Name")}
@@ -742,10 +745,10 @@ function renderUsers() {
           </div>
           <div class="two">
             ${field("password", "Password", "", "password")}
-            ${selectField("role", "Role", ["taluk", "district", "admin"], "taluk", false, roleLabels)}
+            ${selectField("role", "Role", ["taluk", "district", "division", "admin"], "taluk", false, roleLabels)}
           </div>
           <div class="two">
-            ${selectField("district", "District", lists.districts)}
+            ${selectField("district", "District / Division", lists.districts)}
             ${selectField("taluk", "Assigned Taluk", [])}
           </div>
           <button class="primary" type="submit">Create login</button>
@@ -768,7 +771,7 @@ function renderUsers() {
         </div>
         <div class="user-toolbar">
           <label>Search <input id="userSearch" value="${escapeHtml(state.userFilters.search)}" placeholder="Username, name, district"></label>
-          <label>Role <select id="userRole"><option value="">All roles</option>${optionList(["admin", "district", "taluk"], state.userFilters.role, roleLabels)}</select></label>
+          <label>Role <select id="userRole"><option value="">All roles</option>${optionList(roleOptions, state.userFilters.role, roleLabels)}</select></label>
           <label>District <select id="userDistrict"><option value="">All districts</option>${optionList(lists.districts, state.userFilters.district)}</select></label>
           <button class="secondary" id="applyUserFilters">Apply</button>
         </div>
@@ -780,14 +783,14 @@ function renderUsers() {
     ${canManageUsers ? renderTeamRequests() : ""}
   `;
 
-  if (!canManageUsers) return;
-
   document.querySelector("#applyUserFilters").addEventListener("click", () => {
     state.userFilters.search = document.querySelector("#userSearch").value;
     state.userFilters.role = document.querySelector("#userRole").value;
     state.userFilters.district = document.querySelector("#userDistrict").value;
     renderApp();
   });
+
+  if (!canManageUsers) return;
 
   const districtSelect = document.querySelector('#userForm select[name="district"]');
   const talukSelect = document.querySelector('#userForm select[name="taluk"]');
@@ -796,6 +799,8 @@ function renderUsers() {
   const roleSelect = document.querySelector('#userForm select[name="role"]');
   roleSelect.addEventListener("change", () => {
     const needsTaluk = roleSelect.value === "taluk";
+    const needsDivision = roleSelect.value === "division";
+    districtSelect.innerHTML = `<option value="">Select</option>${optionList(needsDivision ? (lists.divisions || []) : lists.districts)}`;
     talukSelect.disabled = !needsTaluk;
     if (!needsTaluk) talukSelect.value = "";
   });
@@ -968,6 +973,7 @@ function userCounts(users) {
   return {
     active: users.filter((user) => user.active).length,
     admin: users.filter((user) => user.role === "admin").length,
+    division: users.filter((user) => user.role === "division").length,
     district: users.filter((user) => user.role === "district").length,
     taluk: users.filter((user) => user.role === "taluk").length
   };
@@ -985,6 +991,9 @@ function filterUsersForView(users) {
 }
 
 function accountCard(user, canManageUsers) {
+  const scope = user.role === "division"
+    ? `${user.district || "State"} Division`
+    : `${user.district ? escapeHtml(user.district) : "All districts"}${user.taluk ? ` / ${escapeHtml(user.taluk)}` : ""}`;
   return `
     <article class="account-card">
       <div>
@@ -995,7 +1004,7 @@ function accountCard(user, canManageUsers) {
         <span class="badge">${escapeHtml(roleLabels[user.role] || user.role)}</span>
         <span class="badge">${user.active ? "Active" : "Inactive"}</span>
       </div>
-      <p class="muted">${user.district ? escapeHtml(user.district) : "All districts"}${user.taluk ? ` / ${escapeHtml(user.taluk)}` : ""}</p>
+      <p class="muted">${scope}</p>
       <div class="actions">
         ${canManageUsers && user.username !== "admin" ? `<button class="secondary" data-reset-user="${user.id}">Password</button>` : ""}
         ${canManageUsers && user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}

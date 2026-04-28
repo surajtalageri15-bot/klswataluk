@@ -32,6 +32,48 @@ const MASTER_TALUKS = {
   "Vijayanagar": ["Hosapete", "Hagaribommanahalli", "Harapanahalli", "Hoovina Hadagali", "Kudligi", "Kotturu"]
 };
 
+const STATE_DIVISIONS = {
+  "Bengaluru": [
+    "Bengaluru Urban",
+    "Bengaluru Rural",
+    "Ramanagara",
+    "Chikkaballapura",
+    "Kolar",
+    "Tumakuru",
+    "Chitradurga",
+    "Davanagere",
+    "Shivamogga"
+  ],
+  "Mysuru": [
+    "Mysuru",
+    "Chamarajanagar",
+    "Mandya",
+    "Hassan",
+    "Kodagu",
+    "Dakshina Kannada",
+    "Udupi",
+    "Chikkamagaluru"
+  ],
+  "Belagavi": [
+    "Belagavi",
+    "Bagalkot",
+    "Vijayapura",
+    "Dharwad",
+    "Gadag",
+    "Haveri",
+    "Uttara Kannada"
+  ],
+  "Kalaburagi": [
+    "Kalaburagi",
+    "Bidar",
+    "Yadgir",
+    "Raichur",
+    "Koppal",
+    "Ballari",
+    "Vijayanagar"
+  ]
+};
+
 const DISTRICT_ALIASES = {
   bagalkote: "Bagalkot",
   chamarajanagara: "Chamarajanagar",
@@ -119,6 +161,16 @@ function canonicalDistrict(district) {
   return DISTRICT_ALIASES[key] || String(district || "").trim();
 }
 
+function canonicalDivision(division) {
+  const value = String(division || "").trim();
+  const match = Object.keys(STATE_DIVISIONS).find((item) => item.toLowerCase() === value.toLowerCase());
+  return match || value;
+}
+
+function divisionDistricts(division) {
+  return STATE_DIVISIONS[canonicalDivision(division)] || [];
+}
+
 function normalizeKey(value) {
   return String(value || "")
     .toLowerCase()
@@ -153,6 +205,17 @@ function isMasterTaluk(district, taluk) {
 }
 
 function masterLists(user) {
+  if (user && user.role === "division") {
+    const districts = divisionDistricts(user.district);
+    const taluksByDistrict = Object.fromEntries(districts.map((district) => [district, MASTER_TALUKS[district] || []]));
+    return {
+      districts,
+      taluks: Object.values(taluksByDistrict).flat(),
+      taluksByDistrict,
+      divisions: Object.keys(STATE_DIVISIONS)
+    };
+  }
+
   if (user && user.role === "district") {
     const district = canonicalDistrict(user.district);
     const taluks = MASTER_TALUKS[district] || [];
@@ -176,11 +239,15 @@ function masterLists(user) {
   return {
     districts: Object.keys(MASTER_TALUKS),
     taluks: Object.values(MASTER_TALUKS).flat(),
-    taluksByDistrict: MASTER_TALUKS
+    taluksByDistrict: MASTER_TALUKS,
+    divisions: Object.keys(STATE_DIVISIONS)
   };
 }
 
 function masterTalukCount(user) {
+  if (user && user.role === "division") {
+    return divisionDistricts(user.district).reduce((total, district) => total + (MASTER_TALUKS[district] || []).length, 0);
+  }
   if (user && user.role === "district") {
     return (MASTER_TALUKS[canonicalDistrict(user.district)] || []).length;
   }
@@ -190,7 +257,10 @@ function masterTalukCount(user) {
 
 module.exports = {
   MASTER_TALUKS,
+  STATE_DIVISIONS,
   canonicalDistrict,
+  canonicalDivision,
+  divisionDistricts,
   isMasterTaluk,
   masterLists,
   masterTalukCount,
