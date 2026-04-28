@@ -373,6 +373,74 @@ function dashboardCharts(members, user) {
   };
 }
 
+async function visibleUsersForPerformance(user) {
+  if (hasPostgres) return listUsers(user);
+  const db = await readJsonDb();
+  if (user.role === "admin") return db.users;
+  if (user.role === "division") {
+    const districts = divisionDistricts(user.district);
+    return db.users.filter((item) => ["district", "taluk"].includes(item.role) && districts.includes(canonicalDistrict(item.district)));
+  }
+  if (user.role === "district") {
+    const district = canonicalDistrict(user.district);
+    return db.users.filter((item) => item.role === "taluk" && canonicalDistrict(item.district) === district);
+  }
+  return [];
+}
+
+async function districtPerformance(user, members) {
+  if (!["admin", "division"].includes(user.role)) return { districts: [], missingTalukLogins: [] };
+  const lists = masterLists(user);
+  const users = await visibleUsersForPerformance(user);
+  const activeTalukUsers = new Set(users
+    .filter((item) => item.role === "taluk" && item.active)
+    .map((item) => `${canonicalDistrict(item.district)}::${normalizedTaluk(canonicalDistrict(item.district), item.taluk)}`));
+  const districtPresidentUsers = new Set(users
+    .filter((item) => item.role === "district" && item.active)
+    .map((item) => canonicalDistrict(item.district)));
+  const byDistrict = Object.fromEntries(lists.districts.map((district) => [district, {
+    district,
+    members: 0,
+    active: 0,
+    pending: 0,
+    rejected: 0,
+    needsCorrection: 0,
+    taluks: (lists.taluksByDistrict[district] || []).length,
+    talukLogins: 0,
+    missingTalukLogins: 0,
+    districtPresident: districtPresidentUsers.has(district)
+  }]));
+
+  for (const raw of members) {
+    const member = normalizeMemberLocation(raw);
+    const row = byDistrict[member.district];
+    if (!row) continue;
+    row.members += 1;
+    if (member.status === "Active") row.active += 1;
+    else if (member.status === "Pending verification") row.pending += 1;
+    else if (member.status === "Rejected") row.rejected += 1;
+    else if (member.status === "Needs correction") row.needsCorrection += 1;
+  }
+
+  const missingTalukLogins = [];
+  for (const [district, taluks] of Object.entries(lists.taluksByDistrict)) {
+    const row = byDistrict[district];
+    for (const taluk of taluks) {
+      if (activeTalukUsers.has(`${district}::${taluk}`)) {
+        row.talukLogins += 1;
+      } else {
+        row.missingTalukLogins += 1;
+        missingTalukLogins.push({ district, taluk });
+      }
+    }
+  }
+
+  return {
+    districts: Object.values(byDistrict).sort((a, b) => b.pending - a.pending || b.members - a.members || a.district.localeCompare(b.district)),
+    missingTalukLogins
+  };
+}
+
 async function getUserById(id) {
   if (hasPostgres) {
     const result = await pool.query("select * from users where id = $1 and active = true", [id]);
@@ -406,7 +474,7 @@ async function getDashboard(user) {
     summary.taluks = masterTalukCount(user);
     const charts = dashboardCharts(members, user);
     charts.pendingCorrections = await pendingCorrectionChart(user);
-    return { summary, charts, meta, lists: masterLists(user) };
+    return { summary, charts, meta, lists: masterLists(user), performance: await districtPerformance(user, members) };
   }
   const db = await readJsonDb();
   const members = db.members.filter((member) => memberVisibleTo(user, member));
@@ -414,7 +482,7 @@ async function getDashboard(user) {
   summary.taluks = masterTalukCount(user);
   const charts = dashboardCharts(members, user);
   charts.pendingCorrections = await pendingCorrectionChart(user, db.members);
-  return { summary, charts, meta: db.meta, lists: masterLists(user) };
+  return { summary, charts, meta: db.meta, lists: masterLists(user), performance: await districtPerformance(user, members) };
 }
 
 async function pendingCorrectionChart(user, jsonMembers = null) {

@@ -299,6 +299,7 @@ function userScopeLabel() {
 function renderDashboard() {
   const summary = state.dashboard.summary;
   const charts = state.dashboard.charts || {};
+  const performance = state.dashboard.performance || { districts: [], missingTalukLogins: [] };
   document.querySelector("#view").innerHTML = `
     <div class="stats">
       <div class="box stat"><span class="muted">Surveyors</span><strong>${summary.total}</strong></div>
@@ -338,6 +339,7 @@ function renderDashboard() {
         <div class="list">${summary.topTaluks.map(([name, count]) => row(name, count)).join("")}</div>
       </section>
     </div>
+    ${["admin", "division"].includes(state.user.role) ? renderDistrictPerformance(performance) : ""}
   `;
 }
 
@@ -362,6 +364,64 @@ function chartBars(items = [], options = {}) {
         `;
       }).join("")}
     </div>
+  `;
+}
+
+function renderDistrictPerformance(performance) {
+  const missing = performance.missingTalukLogins || [];
+  return `
+    <section class="box section">
+      <div class="section-head">
+        <h2>District performance</h2>
+        <span class="badge">${missing.length} taluks without login</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>District</th>
+              <th>Members</th>
+              <th>Active</th>
+              <th>Pending</th>
+              <th>Needs correction</th>
+              <th>Rejected</th>
+              <th>Taluk logins</th>
+              <th>Missing</th>
+              <th>President</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(performance.districts || []).map((item) => `
+              <tr>
+                <td>${escapeHtml(item.district)}</td>
+                <td>${item.members}</td>
+                <td>${item.active}</td>
+                <td>${item.pending}</td>
+                <td>${item.needsCorrection}</td>
+                <td>${item.rejected}</td>
+                <td>${item.talukLogins} / ${item.taluks}</td>
+                <td>${item.missingTalukLogins}</td>
+                <td><span class="badge">${item.districtPresident ? "Active" : "Missing"}</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="box section">
+      <div class="section-head">
+        <h2>Missing taluk team logins</h2>
+        <span class="badge">${missing.length} Missing</span>
+      </div>
+      <div class="missing-grid">
+        ${missing.length ? missing.map((item) => `
+          <div class="missing-item">
+            <strong>${escapeHtml(item.taluk)}</strong>
+            <span class="muted">${escapeHtml(item.district)}</span>
+          </div>
+        `).join("") : `<p class="muted">All taluks have active technical team logins.</p>`}
+      </div>
+    </section>
   `;
 }
 

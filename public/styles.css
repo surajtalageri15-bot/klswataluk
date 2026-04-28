@@ -484,6 +484,21 @@ textarea {
   border-radius: 8px;
 }
 
+.missing-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.missing-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8faf5;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -657,6 +672,7 @@ tr:last-child td {
   .split,
   .chart-grid,
   .stats,
+  .missing-grid,
   .toolbar,
   .user-toolbar {
     grid-template-columns: 1fr;
