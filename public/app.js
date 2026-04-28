@@ -604,11 +604,12 @@ function renderPendingQueue() {
                 <td>${escapeHtml(member.qualification)}</td>
                 <td>${escapeHtml(member.remarks)}</td>
                 <td class="actions">
-                  <button class="primary" data-status="Active" data-member="${member.id}">Approve</button>
-                  <button class="secondary" data-status="Needs correction" data-member="${member.id}">Needs correction</button>
+                  <button class="secondary" data-view-pending="${member.id}">View</button>
+                  <button class="primary" data-review-status="Active" data-member="${member.id}">Approve</button>
+                  <button class="secondary" data-review-status="Needs correction" data-member="${member.id}">Needs correction</button>
                   <button class="secondary" data-copy-followup="${member.id}">Copy msg</button>
                   ${member.phoneNumber ? `<a class="secondary" href="${whatsAppLink(member)}" target="_blank">WhatsApp</a>` : ""}
-                  <button class="danger" data-status="Rejected" data-member="${member.id}">Reject</button>
+                  <button class="danger" data-review-status="Rejected" data-member="${member.id}">Reject</button>
                 </td>
               </tr>
             `).join("")}
@@ -628,23 +629,17 @@ function renderPendingQueue() {
     await loadPending();
     renderApp();
   });
-  document.querySelectorAll("[data-status]").forEach((button) => {
+  document.querySelectorAll("[data-view-pending]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const member = state.pending.rows.find((item) => item.id === button.dataset.viewPending);
+      openPendingApplicationModal(member);
+    });
+  });
+  document.querySelectorAll("[data-review-status]").forEach((button) => {
     button.addEventListener("click", async () => {
-      const status = button.dataset.status;
+      const status = button.dataset.reviewStatus;
       const member = state.pending.rows.find((item) => item.id === button.dataset.member);
-      let remarks = member.remarks || "";
-      if (status !== "Active") {
-        const note = prompt(`Enter note for ${status}:`, remarks);
-        if (note === null) return;
-        remarks = note;
-      }
-      await request(`/api/members/${button.dataset.member}/status`, {
-        method: "PUT",
-        body: JSON.stringify({ status, remarks })
-      });
-      await loadDashboard();
-      await loadPending();
-      renderApp();
+      openPendingStatusModal(member, status);
     });
   });
   document.querySelectorAll("[data-copy-followup]").forEach((button) => {
@@ -654,6 +649,131 @@ function renderPendingQueue() {
       button.textContent = "Copied";
       setTimeout(() => { button.textContent = "Copy msg"; }, 1400);
     });
+  });
+}
+
+function pendingDetailRows(member) {
+  const rows = [
+    ["Full name", member.name],
+    ["Phone number", member.phoneNumber],
+    ["Date of birth", member.dateOfBirth],
+    ["Age", member.age],
+    ["Gender", member.gender],
+    ["Marital status", member.maritalStatus],
+    ["Kalyana Karnataka", member.kalyanaKarnataka],
+    ["Category", member.category],
+    ["Caste", member.caste],
+    ["Religion", member.religion],
+    ["Disability", member.disability],
+    ["LS number", member.lsNumber],
+    ["Mojini login ID", member.loginId],
+    ["Batch year", member.batchYear],
+    ["Education", member.qualification],
+    ["District", member.district],
+    ["Taluk", member.taluk],
+    ["Other taluks", member.otherTaluks],
+    ["Address", member.address],
+    ["Declaration accepted", member.declarationAccepted ? "Yes" : "No"],
+    ["Current status", member.status],
+    ["Remarks", member.remarks]
+  ];
+  return rows.map(([label, value]) => `
+    <div>
+      <span class="muted">${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value || "-")}</strong>
+    </div>
+  `).join("");
+}
+
+function openPendingApplicationModal(member) {
+  if (!member) return;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <section class="box modal">
+        <div class="modal-head">
+          <div>
+            <h2>Full application</h2>
+            <p class="muted">${escapeHtml(member.name)} - ${escapeHtml(member.lsNumber)} - ${escapeHtml(member.taluk)}</p>
+          </div>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <div class="detail-grid">
+          ${pendingDetailRows(member)}
+        </div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Close</button>
+          <button class="primary" type="button" data-modal-status="Active">Approve</button>
+          <button class="secondary" type="button" data-modal-status="Needs correction">Needs correction</button>
+          <button class="danger" type="button" data-modal-status="Rejected">Reject</button>
+        </div>
+      </section>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
+  backdrop.querySelectorAll("[data-modal-status]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const status = button.dataset.modalStatus;
+      backdrop.remove();
+      openPendingStatusModal(member, status);
+    });
+  });
+}
+
+function openPendingStatusModal(member, status) {
+  if (!member) return;
+  const needsReason = status !== "Active";
+  const actionLabels = {
+    Active: "Approve application",
+    "Needs correction": "Send for correction",
+    Rejected: "Reject application"
+  };
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <form class="box modal" id="pendingStatusForm">
+        <div class="modal-head">
+          <div>
+            <h2>${escapeHtml(actionLabels[status] || "Review application")}</h2>
+            <p class="muted">${escapeHtml(member.name)} - ${escapeHtml(member.lsNumber)} - ${escapeHtml(member.taluk)}</p>
+          </div>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <div class="status-review-card">
+          <strong>${escapeHtml(status)}</strong>
+          <span>${status === "Active" ? "This member will move from pending queue to active members." : "This reason will be saved in remarks and shown to the team/admin."}</span>
+        </div>
+        <label>Reason ${needsReason ? "*" : ""}
+          <textarea name="remarks" rows="4" ${needsReason ? "required" : ""} placeholder="${needsReason ? "Enter clear reason" : "Optional approval note"}">${escapeHtml(member.remarks)}</textarea>
+        </label>
+        <div class="message" id="pendingStatusMessage"></div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Cancel</button>
+          <button class="${status === "Rejected" ? "danger" : "primary"}" type="submit">${escapeHtml(actionLabels[status] || "Save")}</button>
+        </div>
+      </form>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
+  backdrop.querySelector("#pendingStatusForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const remarks = String(new FormData(event.currentTarget).get("remarks") || "").trim();
+    if (needsReason && !remarks) {
+      backdrop.querySelector("#pendingStatusMessage").textContent = "Reason is required.";
+      return;
+    }
+    try {
+      await request(`/api/members/${member.id}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status, remarks })
+      });
+      backdrop.remove();
+      await loadDashboard();
+      await loadPending();
+      renderApp();
+    } catch (error) {
+      backdrop.querySelector("#pendingStatusMessage").textContent = error.message;
+    }
   });
 }
 

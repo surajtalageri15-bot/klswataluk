@@ -424,8 +424,14 @@ async function api(req, res, pathname) {
     if (!member) return json(res, 404, { error: "Member not found" });
     if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your area" });
     const body = await parseBody(req);
-    const updated = await store.updateMemberStatus(member.id, String(body.status || ""), String(body.remarks || ""));
-    await store.createAuditLogs(auditDiffs({ action: "Status changed", before: member, after: updated, actor: user }));
+    const status = String(body.status || "").trim();
+    const remarks = String(body.remarks || "").trim();
+    if (["Rejected", "Needs correction"].includes(status) && !remarks) {
+      return json(res, 400, { error: "Reason is required for rejection or correction" });
+    }
+    const updated = await store.updateMemberStatus(member.id, status, remarks);
+    if (!updated) return json(res, 404, { error: "Member not found" });
+    await tryCreateAuditLogs(auditDiffs({ action: "Status changed", before: member, after: updated, actor: user }));
     return json(res, 200, { member: updated });
   }
 

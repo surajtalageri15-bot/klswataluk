@@ -530,6 +530,39 @@ textarea {
   gap: 4px;
 }
 
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.detail-grid div,
+.status-review-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbf7 100%);
+  padding: 12px;
+}
+
+.detail-grid span,
+.detail-grid strong,
+.status-review-card span,
+.status-review-card strong {
+  display: block;
+}
+
+.detail-grid strong,
+.status-review-card strong {
+  margin-top: 4px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.status-review-card {
+  margin: 12px 0;
+}
+
 .account-meta {
   display: flex;
   gap: 6px;
@@ -799,6 +832,7 @@ tr:last-child td {
 
   .two,
   .three,
+  .detail-grid,
   .status-grid {
     grid-template-columns: 1fr;
   }
