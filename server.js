@@ -386,6 +386,16 @@ async function api(req, res, pathname) {
     }));
   }
 
+  if (pathname === "/api/duplicates" && req.method === "GET") {
+    requireAdmin(user);
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, await store.listDuplicateGroups({
+      type: (url.searchParams.get("type") || "").trim(),
+      search: (url.searchParams.get("search") || "").trim(),
+      limit: Number(url.searchParams.get("limit") || 200)
+    }));
+  }
+
   if (pathname === "/api/users" && req.method === "GET") {
     if (!canViewUsers(user)) return json(res, 403, { error: "User list access required" });
     const dashboard = await store.getDashboard(user);

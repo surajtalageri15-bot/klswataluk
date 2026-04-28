@@ -446,6 +446,94 @@ function filterMemberRows(rows, filters) {
   return filtered;
 }
 
+function duplicateKey(value, type) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (type === "phoneNumber") return text.replace(/\D/g, "");
+  return text.toLowerCase().replace(/\s+/g, " ");
+}
+
+function duplicateLabel(type) {
+  return {
+    phoneNumber: "Phone Number",
+    lsNumber: "LS Number",
+    loginId: "Login ID",
+    name: "Same Name"
+  }[type] || type;
+}
+
+function buildDuplicateGroups(rows) {
+  const normalizedRows = rows.map(normalizeMemberLocation);
+  const checks = ["phoneNumber", "lsNumber", "loginId", "name"];
+  const groups = [];
+
+  for (const field of checks) {
+    const grouped = new Map();
+    for (const member of normalizedRows) {
+      const key = duplicateKey(member[field], field);
+      if (!key) continue;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(member);
+    }
+
+    for (const [key, members] of grouped.entries()) {
+      if (members.length < 2) continue;
+      groups.push({
+        id: `${field}:${key}`,
+        type: field,
+        label: duplicateLabel(field),
+        value: members[0][field],
+        count: members.length,
+        members: members
+          .sort((a, b) => String(a.district || "").localeCompare(String(b.district || "")) || String(a.taluk || "").localeCompare(String(b.taluk || "")) || String(a.name || "").localeCompare(String(b.name || "")))
+          .map((member) => ({
+            id: member.id,
+            name: member.name,
+            lsNumber: member.lsNumber,
+            loginId: member.loginId,
+            district: member.district,
+            taluk: member.taluk,
+            phoneNumber: member.phoneNumber,
+            status: member.status
+          }))
+      });
+    }
+  }
+
+  return groups.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label) || String(a.value || "").localeCompare(String(b.value || "")));
+}
+
+async function listDuplicateGroups(filters = {}) {
+  const type = String(filters.type || "").trim();
+  const search = String(filters.search || "").trim().toLowerCase();
+  const limit = Math.min(500, Math.max(25, Number(filters.limit || 200)));
+  const rows = hasPostgres
+    ? (await pool.query("select * from members order by district, taluk, name")).rows.map(toMember)
+    : (await readJsonDb()).members;
+
+  let groups = buildDuplicateGroups(rows);
+  if (type) groups = groups.filter((group) => group.type === type);
+  if (search) {
+    groups = groups.filter((group) => {
+      const groupText = [group.label, group.value, group.type].join(" ").toLowerCase();
+      if (groupText.includes(search)) return true;
+      return group.members.some((member) => [
+        member.name, member.lsNumber, member.loginId, member.district, member.taluk, member.phoneNumber, member.status
+      ].some((value) => String(value || "").toLowerCase().includes(search)));
+    });
+  }
+  return {
+    summary: {
+      totalGroups: groups.length,
+      phoneNumber: groups.filter((group) => group.type === "phoneNumber").length,
+      lsNumber: groups.filter((group) => group.type === "lsNumber").length,
+      loginId: groups.filter((group) => group.type === "loginId").length,
+      name: groups.filter((group) => group.type === "name").length
+    },
+    groups: groups.slice(0, limit)
+  };
+}
+
 async function getMember(id) {
   if (hasPostgres) {
     const result = await pool.query("select * from members where id = $1", [id]);
@@ -1004,6 +1092,7 @@ module.exports = {
   memberVisibleTo,
   createAuditLogs,
   listAuditLogs,
+  listDuplicateGroups,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,

@@ -407,6 +407,18 @@ textarea {
   word-break: break-all;
 }
 
+.duplicate-list {
+  display: grid;
+  gap: 16px;
+}
+
+.duplicate-group {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
 .account-meta {
   display: flex;
   gap: 6px;

@@ -8,10 +8,12 @@ const state = {
   members: { rows: [], page: 1, size: 25, total: 0 },
   teamRequests: [],
   auditLogs: [],
+  duplicates: { summary: { totalGroups: 0, phoneNumber: 0, lsNumber: 0, loginId: 0, name: 0 }, groups: [] },
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" },
   userFilters: { search: "", role: "", district: "" },
-  auditFilters: { search: "" }
+  auditFilters: { search: "" },
+  duplicateFilters: { search: "", type: "" }
 };
 
 let latestJoinLink = "";
@@ -189,6 +191,16 @@ async function loadAuditLogs() {
   state.auditLogs = await request(`/api/audit-logs?${params.toString()}`);
 }
 
+async function loadDuplicates() {
+  if (state.user.role !== "admin") return;
+  const params = new URLSearchParams({
+    search: state.duplicateFilters.search,
+    type: state.duplicateFilters.type,
+    limit: "250"
+  });
+  state.duplicates = await request(`/api/duplicates?${params.toString()}`);
+}
+
 function renderApp() {
   app.innerHTML = `
     <section class="app-shell">
@@ -204,6 +216,7 @@ function renderApp() {
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
           ${["admin", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
+          ${state.user.role === "admin" ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">Audit History</button>` : ""}
         </nav>
@@ -227,6 +240,7 @@ function renderApp() {
       if (state.tab === "pending") await loadPending();
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "users") await loadUsers();
+      if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
       if (state.tab === "audit") await loadAuditLogs();
       renderApp();
@@ -244,6 +258,7 @@ function renderApp() {
   if (state.tab === "pending") renderPendingQueue();
   if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "users") renderUsers();
+  if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
   if (state.tab === "audit") renderAuditLogs();
 }
@@ -254,6 +269,7 @@ function pageTitle() {
   if (state.tab === "pending") return "Pending Verification Queue";
   if (state.tab === "membership") return "Membership Form";
   if (state.tab === "users") return "Taluk Team Assignment";
+  if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
   if (state.tab === "audit") return "Audit History";
   return "Dashboard";
@@ -1038,6 +1054,83 @@ function renderCorrections() {
       renderApp();
     });
   });
+}
+
+function renderDuplicates() {
+  const summary = state.duplicates.summary || {};
+  document.querySelector("#view").innerHTML = `
+    <div class="stats">
+      <div class="box stat"><span class="muted">Duplicate groups</span><strong>${summary.totalGroups || 0}</strong></div>
+      <div class="box stat"><span class="muted">Phone</span><strong>${summary.phoneNumber || 0}</strong></div>
+      <div class="box stat"><span class="muted">LS Number</span><strong>${summary.lsNumber || 0}</strong></div>
+      <div class="box stat"><span class="muted">Login ID / Name</span><strong>${(summary.loginId || 0) + (summary.name || 0)}</strong></div>
+    </div>
+    <section class="box section">
+      <div class="toolbar">
+        <label>Search <input id="duplicateSearch" value="${escapeHtml(state.duplicateFilters.search)}" placeholder="Name, phone, LS number, login ID"></label>
+        <label>Type <select id="duplicateType">
+          <option value="">All duplicate types</option>
+          ${optionList(["phoneNumber", "lsNumber", "loginId", "name"], state.duplicateFilters.type, {
+            phoneNumber: "Phone Number",
+            lsNumber: "LS Number",
+            loginId: "Login ID",
+            name: "Same Name"
+          })}
+        </select></label>
+        <span></span>
+        <button class="secondary" id="applyDuplicateFilters">Apply</button>
+      </div>
+      <div class="duplicate-list">
+        ${state.duplicates.groups.length ? state.duplicates.groups.map(duplicateGroup).join("") : `<p class="muted">No duplicates found.</p>`}
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyDuplicateFilters").addEventListener("click", async () => {
+    state.duplicateFilters.search = document.querySelector("#duplicateSearch").value;
+    state.duplicateFilters.type = document.querySelector("#duplicateType").value;
+    await loadDuplicates();
+    renderApp();
+  });
+}
+
+function duplicateGroup(group) {
+  return `
+    <section class="duplicate-group">
+      <div class="section-head">
+        <h2>${escapeHtml(group.label)}: ${escapeHtml(group.value)}</h2>
+        <span class="badge">${group.count} records</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>LS Number</th>
+              <th>Login ID</th>
+              <th>District</th>
+              <th>Taluk</th>
+              <th>Phone</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${group.members.map((member) => `
+              <tr>
+                <td>${escapeHtml(member.name)}</td>
+                <td>${escapeHtml(member.lsNumber)}</td>
+                <td>${escapeHtml(member.loginId)}</td>
+                <td>${escapeHtml(member.district)}</td>
+                <td>${escapeHtml(member.taluk)}</td>
+                <td>${escapeHtml(member.phoneNumber)}</td>
+                <td><span class="badge">${escapeHtml(member.status)}</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
 }
 
 function renderAuditLogs() {
