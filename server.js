@@ -335,6 +335,31 @@ async function api(req, res, pathname) {
     return json(res, 200, { ok: true, member: publicMember(activated) });
   }
 
+  if (pathname === "/api/member-forgot-password" && req.method === "POST") {
+    const body = asObject(await parseBody(req));
+    const password = String(body.password || "");
+    const confirmPassword = String(body.confirmPassword || "");
+    if (password.length < 6) return json(res, 400, { error: "Password must be at least 6 characters" });
+    if (password !== confirmPassword) return json(res, 400, { error: "Passwords do not match" });
+    const member = await store.findMemberForActivation({
+      phoneNumber: body.phoneNumber,
+      lsNumber: body.lsNumber,
+      dateOfBirth: body.dateOfBirth
+    });
+    if (!member) return json(res, 404, { error: "Member not found. Check phone number, LS number and date of birth." });
+    const updated = await store.updateMemberPassword(member.id, password);
+    await tryCreateAuditLogs([{
+      memberId: updated.id,
+      memberName: updated.name,
+      action: "Member password reset",
+      field: "memberPassword",
+      oldValue: "Hidden",
+      newValue: "Reset by member",
+      ...auditActor({ id: updated.id, name: updated.name, role: "member" })
+    }]);
+    return json(res, 200, { ok: true });
+  }
+
   if (pathname === "/api/member-login" && req.method === "POST") {
     const body = asObject(await parseBody(req));
     const member = await store.findMemberByLogin(body.identifier, body.password);
@@ -382,6 +407,29 @@ async function api(req, res, pathname) {
         requestedByRole: "member"
       })
     });
+  }
+
+  if (pathname === "/api/member-change-password" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    const body = asObject(await parseBody(req));
+    const currentPassword = String(body.currentPassword || "");
+    const password = String(body.password || "");
+    const confirmPassword = String(body.confirmPassword || "");
+    if (!(await store.verifyMemberPassword(member.id, currentPassword))) return json(res, 400, { error: "Current password is incorrect" });
+    if (password.length < 6) return json(res, 400, { error: "New password must be at least 6 characters" });
+    if (password !== confirmPassword) return json(res, 400, { error: "Passwords do not match" });
+    const updated = await store.updateMemberPassword(member.id, password);
+    await tryCreateAuditLogs([{
+      memberId: updated.id,
+      memberName: updated.name,
+      action: "Member password changed",
+      field: "memberPassword",
+      oldValue: "Hidden",
+      newValue: "Changed by member",
+      ...auditActor({ id: updated.id, name: updated.name, role: "member" })
+    }]);
+    return json(res, 200, { ok: true });
   }
 
   if (pathname === "/api/logout" && req.method === "POST") {
@@ -514,6 +562,38 @@ async function api(req, res, pathname) {
     const updated = await store.updateMemberStatus(member.id, status, remarks);
     if (!updated) return json(res, 404, { error: "Member not found" });
     await tryCreateAuditLogs(auditDiffs({ action: "Status changed", before: member, after: updated, actor: user }));
+    return json(res, 200, { member: updated });
+  }
+
+  const loginControlMatch = pathname.match(/^\/api\/members\/([^/]+)\/login-control$/);
+  if (loginControlMatch && req.method === "PUT") {
+    requireAdmin(user);
+    const member = await store.getMember(loginControlMatch[1]);
+    if (!member) return json(res, 404, { error: "Member not found" });
+    const body = asObject(await parseBody(req));
+    const password = String(body.password || "").trim();
+    if (password && password.length < 6) return json(res, 400, { error: "Password must be at least 6 characters" });
+    const updated = await store.updateMemberLoginControl(member.id, {
+      active: body.active === true || body.active === "true" || body.active === "on",
+      password
+    });
+    await tryCreateAuditLogs([{
+      memberId: updated.id,
+      memberName: updated.name,
+      action: "Member login control",
+      field: "memberLoginActive",
+      oldValue: member.memberLoginActive ? "Active" : "Disabled",
+      newValue: updated.memberLoginActive ? "Active" : "Disabled",
+      ...auditActor(user)
+    }, ...(password ? [{
+      memberId: updated.id,
+      memberName: updated.name,
+      action: "Member login control",
+      field: "memberPassword",
+      oldValue: "Hidden",
+      newValue: "Reset by admin",
+      ...auditActor(user)
+    }] : [])]);
     return json(res, 200, { member: updated });
   }
 
@@ -818,7 +898,9 @@ const server = http.createServer(async (req, res) => {
       "/api/member-activate",
       "/api/member-login",
       "/api/member-me",
-      "/api/member-correction-request"
+      "/api/member-correction-request",
+      "/api/member-forgot-password",
+      "/api/member-change-password"
     ].includes(url?.pathname)) {
       console.error(`${url.pathname} failed:`, error);
       const publicMessage = url.pathname === "/api/public-status"

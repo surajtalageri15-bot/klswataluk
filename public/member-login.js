@@ -1,7 +1,9 @@
 const activateForm = document.querySelector("#activateMemberForm");
 const loginForm = document.querySelector("#memberLoginForm");
+const forgotForm = document.querySelector("#forgotPasswordForm");
 const activateMessage = document.querySelector("#activateMessage");
 const loginMessage = document.querySelector("#loginMessage");
+const forgotMessage = document.querySelector("#forgotMessage");
 const dashboard = document.querySelector("#memberDashboard");
 
 function escapeHtml(value) {
@@ -89,6 +91,21 @@ function correctionForm(member) {
   `;
 }
 
+function changePasswordForm() {
+  return `
+    <form id="changePasswordForm" class="box public-form-card">
+      <h2>Change password</h2>
+      <div class="three">
+        <label>Current Password <input name="currentPassword" type="password" required></label>
+        <label>New Password <input name="password" type="password" required minlength="6"></label>
+        <label>Confirm Password <input name="confirmPassword" type="password" required minlength="6"></label>
+      </div>
+      <div class="message" id="changePasswordMessage"></div>
+      <button class="primary" type="submit">Change password</button>
+    </form>
+  `;
+}
+
 function renderDashboard(member, auditLogs = []) {
   dashboard.innerHTML = `
     <section class="box status-card">
@@ -109,6 +126,7 @@ function renderDashboard(member, auditLogs = []) {
         <button class="secondary" id="memberLogout" type="button">Logout</button>
       </div>
     </section>
+    ${changePasswordForm()}
     ${correctionForm(member)}
     <section class="box public-form-card">
       <h2>My audit timeline</h2>
@@ -153,6 +171,23 @@ function renderDashboard(member, auditLogs = []) {
       }
     });
   }
+
+  const changePassword = document.querySelector("#changePasswordForm");
+  changePassword.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#changePasswordMessage");
+    message.textContent = "";
+    try {
+      await request("/api/member-change-password", {
+        method: "POST",
+        body: JSON.stringify(formObject(changePassword))
+      });
+      changePassword.reset();
+      message.textContent = "Password changed successfully.";
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
 }
 
 async function loadMemberSession() {
@@ -192,6 +227,21 @@ loginForm.addEventListener("submit", async (event) => {
     renderDashboard(session.member || data.member, session.auditLogs || []);
   } catch (error) {
     loginMessage.textContent = error.message;
+  }
+});
+
+forgotForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  forgotMessage.textContent = "";
+  try {
+    await request("/api/member-forgot-password", {
+      method: "POST",
+      body: JSON.stringify(formObject(forgotForm))
+    });
+    forgotForm.reset();
+    forgotMessage.textContent = "Password reset. You can sign in now.";
+  } catch (error) {
+    forgotMessage.textContent = error.message;
   }
 });
 

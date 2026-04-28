@@ -523,6 +523,7 @@ function renderMembers() {
                 ${columns.slice(0, 10).map(([key]) => `<td>${escapeHtml(member[key])}</td>`).join("")}
                 <td class="actions">
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Edit" data-edit="${member.id}">E</button>` : ""}
+                  ${state.user.role === "admin" ? `<button class="secondary" data-login-control="${member.id}">Login</button>` : ""}
                   ${state.user.role === "taluk" ? `<button class="secondary" data-request-correction="${member.id}">Request</button>` : ""}
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Delete" data-delete="${member.id}">D</button>` : ""}
                 </td>
@@ -567,6 +568,9 @@ function renderMembers() {
   });
   document.querySelectorAll("[data-request-correction]").forEach((button) => {
     button.addEventListener("click", () => openCorrectionRequestModal(state.members.rows.find((member) => member.id === button.dataset.requestCorrection)));
+  });
+  document.querySelectorAll("[data-login-control]").forEach((button) => {
+    button.addEventListener("click", () => openMemberLoginControlModal(state.members.rows.find((member) => member.id === button.dataset.loginControl)));
   });
   document.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -849,6 +853,59 @@ function openMemberModal(member = {}) {
       renderApp();
     } catch (error) {
       backdrop.querySelector("#memberMessage").textContent = error.message;
+    }
+  });
+}
+
+function openMemberLoginControlModal(member) {
+  if (!member) return;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <form class="box modal" id="memberLoginControlForm">
+        <div class="modal-head">
+          <div>
+            <h2>Member login control</h2>
+            <p class="muted">${escapeHtml(member.name)} - ${escapeHtml(member.lsNumber)} - ${escapeHtml(member.taluk)}</p>
+          </div>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <div class="status-review-card">
+          <strong>${member.memberLoginActive ? "Login active" : "Login disabled"}</strong>
+          <span>Admin can enable/disable member login or reset password.</span>
+        </div>
+        <label class="check">
+          <input type="checkbox" name="active" ${member.memberLoginActive ? "checked" : ""}>
+          Login active
+        </label>
+        <label>Reset password
+          <input name="password" type="password" minlength="6" placeholder="Leave blank to keep existing password">
+        </label>
+        <div class="message" id="memberLoginControlMessage"></div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Cancel</button>
+          <button class="primary" type="submit">Save login control</button>
+        </div>
+      </form>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
+  backdrop.querySelector("#memberLoginControlForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await request(`/api/members/${member.id}/login-control`, {
+        method: "PUT",
+        body: JSON.stringify({
+          active: form.get("active") === "on",
+          password: form.get("password") || ""
+        })
+      });
+      backdrop.remove();
+      await loadMembers(state.members.page);
+      renderApp();
+    } catch (error) {
+      backdrop.querySelector("#memberLoginControlMessage").textContent = error.message;
     }
   });
 }

@@ -880,6 +880,66 @@ async function activateMemberLogin(id, password) {
   return safe;
 }
 
+async function verifyMemberPassword(id, password) {
+  const pass = String(password || "");
+  if (!id || !pass) return false;
+  if (hasPostgres) {
+    const result = await pool.query(
+      "select 1 from members where id = $1 and member_password = $2 and member_login_active = true",
+      [id, pass]
+    );
+    return result.rowCount > 0;
+  }
+  const db = await readJsonDb();
+  return db.members.some((item) => item.id === id && item.memberPassword === pass && item.memberLoginActive === true);
+}
+
+async function updateMemberPassword(id, password) {
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update members
+       set member_password = $2, member_login_active = true, updated_at = now()
+       where id = $1 returning *`,
+      [id, password]
+    );
+    return toMember(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  const member = db.members.find((item) => item.id === id);
+  if (!member) return null;
+  member.memberPassword = password;
+  member.memberLoginActive = true;
+  member.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  const { memberPassword, ...safe } = member;
+  return safe;
+}
+
+async function updateMemberLoginControl(id, { active, password = "" }) {
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update members
+       set member_login_active = $2,
+           member_password = case when $3 = '' then member_password else $3 end,
+           updated_at = now()
+       where id = $1 returning *`,
+      [id, Boolean(active), String(password || "")]
+    );
+    return toMember(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  const member = db.members.find((item) => item.id === id);
+  if (!member) return null;
+  member.memberLoginActive = Boolean(active);
+  if (password) member.memberPassword = password;
+  member.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  const { memberPassword, ...safe } = member;
+  return safe;
+}
+
 async function findMemberByLogin(identifier, password) {
   const raw = String(identifier || "").trim();
   const pass = String(password || "");
@@ -1622,6 +1682,9 @@ module.exports = {
   findPublicMemberStatus,
   findMemberForActivation,
   activateMemberLogin,
+  verifyMemberPassword,
+  updateMemberPassword,
+  updateMemberLoginControl,
   findMemberByLogin,
   duplicateReason,
   exportMembers,

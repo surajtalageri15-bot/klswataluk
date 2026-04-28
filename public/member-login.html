@@ -35,6 +35,18 @@
         <div class="message" id="loginMessage"></div>
         <button class="primary" type="submit">Login</button>
       </form>
+
+      <form id="forgotPasswordForm" class="box public-form-card">
+        <h2>Forgot password</h2>
+        <p class="muted">Reset password using the same identity details used for activation.</p>
+        <label>Phone Number * <input name="phoneNumber" required inputmode="numeric"></label>
+        <label>LS Number * <input name="lsNumber" required></label>
+        <label>Date of Birth <input name="dateOfBirth" type="date"></label>
+        <label>New Password * <input name="password" type="password" required minlength="6"></label>
+        <label>Confirm Password * <input name="confirmPassword" type="password" required minlength="6"></label>
+        <div class="message" id="forgotMessage"></div>
+        <button class="primary" type="submit">Reset password</button>
+      </form>
     </section>
 
     <section id="memberDashboard"></section>
