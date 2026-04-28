@@ -15,7 +15,7 @@ function escapeHtml(value) {
 async function request(path) {
   const response = await fetch(path);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  if (!response.ok) throw new Error(data.error || "Could not check status. Please try again.");
   return data;
 }
 
@@ -37,7 +37,8 @@ form.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.textContent = "Checking...";
   try {
-    const query = new FormData(form).get("query");
+    const query = String(new FormData(form).get("query") || "").trim();
+    if (!query) throw new Error("Enter phone number or LS number");
     const data = await request(`/api/public-status?query=${encodeURIComponent(query)}`);
     const member = data.member;
     result.innerHTML = `

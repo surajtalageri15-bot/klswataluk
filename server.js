@@ -676,9 +676,12 @@ const server = http.createServer(async (req, res) => {
       await staticFile(req, res, url.pathname);
     }
   } catch (error) {
-    if (url?.pathname === "/api/public-membership") {
-      console.error("Public membership submit failed:", error);
-      return json(res, error.status || 500, { error: error.status ? error.message : "Could not submit membership. Please check all fields and try again." });
+    if (url?.pathname === "/api/public-membership" || url?.pathname === "/api/public-status") {
+      console.error(`${url.pathname} failed:`, error);
+      const publicMessage = url.pathname === "/api/public-status"
+        ? "Could not check status. Please verify the phone number or LS number and try again."
+        : "Could not submit membership. Please check all fields and try again.";
+      return json(res, error.status || 500, { error: error.status ? error.message : publicMessage });
     }
     json(res, error.status || 500, { error: error.message || "Server error" });
   }

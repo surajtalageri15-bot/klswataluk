@@ -58,6 +58,7 @@ function toCamel(row) {
 
 function toMember(row) {
   const item = toCamel(row);
+  if (!item) return item;
   delete item.username;
   delete item.password;
   delete item.role;
