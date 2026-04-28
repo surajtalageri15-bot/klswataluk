@@ -334,13 +334,23 @@ async function api(req, res, pathname) {
     const rows = await store.exportMembers(user, {
       search: (url.searchParams.get("search") || "").trim(),
       district: url.searchParams.get("district") || "",
-      taluk: url.searchParams.get("taluk") || ""
+      taluk: url.searchParams.get("taluk") || "",
+      status: url.searchParams.get("status") || "",
+      missingOnly: url.searchParams.get("missingOnly") === "true"
     });
     return csvDownload(res, "surveyor-members.csv", [
       "name", "lsNumber", "loginId", "district", "taluk", "gender",
       "dateOfBirth", "age", "phoneNumber", "qualification", "batchYear", "status",
       "remarks"
     ], rows);
+  }
+
+  if (pathname === "/api/missing-data" && req.method === "GET") {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, await store.listMissingDataMembers(user, {
+      search: (url.searchParams.get("search") || "").trim(),
+      limit: Number(url.searchParams.get("limit") || 200)
+    }));
   }
 
   if (pathname === "/api/exports/corrections" && req.method === "GET") {
@@ -420,7 +430,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/audit-logs" && req.method === "GET") {
-    requireAdmin(user);
+    if (!["admin", "taluk"].includes(user.role)) return json(res, 403, { error: "Activity log access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, await store.listAuditLogs(user, {
       search: (url.searchParams.get("search") || "").trim(),

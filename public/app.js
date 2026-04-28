@@ -8,6 +8,7 @@ const state = {
   members: { rows: [], page: 1, size: 25, total: 0 },
   teamRequests: [],
   auditLogs: [],
+  missingData: { rows: [], total: 0 },
   duplicates: { summary: { totalGroups: 0, phoneNumber: 0, lsNumber: 0, loginId: 0, name: 0 }, groups: [] },
   dataCorrectionRequests: [],
   filters: { search: "", district: "", taluk: "" },
@@ -186,12 +187,21 @@ async function loadCorrections(page = 1) {
 }
 
 async function loadAuditLogs() {
-  if (state.user.role !== "admin") return;
+  if (!["admin", "taluk"].includes(state.user.role)) return;
   const params = new URLSearchParams({
     search: state.auditFilters.search,
     limit: "150"
   });
   state.auditLogs = await request(`/api/audit-logs?${params.toString()}`);
+}
+
+async function loadMissingData() {
+  if (state.user.role !== "taluk") return;
+  const params = new URLSearchParams({
+    search: state.filters.search,
+    limit: "300"
+  });
+  state.missingData = await request(`/api/missing-data?${params.toString()}`);
 }
 
 async function loadDuplicates() {
@@ -226,10 +236,11 @@ function renderApp() {
           ${["admin", "division", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
+          ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${["admin", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
-          ${state.user.role === "admin" ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">Audit History</button>` : ""}
+          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
         </nav>
         <button class="secondary" id="logoutBtn">Logout</button>
       </aside>
@@ -251,6 +262,7 @@ function renderApp() {
       if (state.tab === "pending") await loadPending();
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "dataCorrections") await loadDataCorrectionRequests();
+      if (state.tab === "missingData") await loadMissingData();
       if (state.tab === "users") await loadUsers();
       if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
@@ -270,6 +282,7 @@ function renderApp() {
   if (state.tab === "pending") renderPendingQueue();
   if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "dataCorrections") renderDataCorrectionRequests();
+  if (state.tab === "missingData") renderMissingData();
   if (state.tab === "users") renderUsers();
   if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
@@ -282,10 +295,11 @@ function pageTitle() {
   if (state.tab === "pending") return "Pending Verification Queue";
   if (state.tab === "membership") return "Membership Form";
   if (state.tab === "dataCorrections") return "Correction Requests";
+  if (state.tab === "missingData") return "Missing Data Report";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
-  if (state.tab === "audit") return "Audit History";
+  if (state.tab === "audit") return state.user.role === "taluk" ? "Taluk Activity Log" : "Audit History";
   return "Dashboard";
 }
 
@@ -303,9 +317,15 @@ function renderDashboard() {
   document.querySelector("#view").innerHTML = `
     <div class="stats">
       <div class="box stat"><span class="muted">Surveyors</span><strong>${summary.total}</strong></div>
-      <div class="box stat"><span class="muted">Districts</span><strong>${summary.districts}</strong></div>
-      <div class="box stat"><span class="muted">Taluks</span><strong>${summary.taluks}</strong></div>
-      <div class="box stat"><span class="muted">Female</span><strong>${summary.gender.Female || 0}</strong></div>
+      ${state.user.role === "taluk" ? `
+        <div class="box stat"><span class="muted">Active</span><strong>${summary.statusCounts?.Active || 0}</strong></div>
+        <div class="box stat"><span class="muted">Pending</span><strong>${summary.statusCounts?.["Pending verification"] || 0}</strong></div>
+        <div class="box stat"><span class="muted">Needs correction</span><strong>${summary.statusCounts?.["Needs correction"] || 0}</strong></div>
+      ` : `
+        <div class="box stat"><span class="muted">Districts</span><strong>${summary.districts}</strong></div>
+        <div class="box stat"><span class="muted">Taluks</span><strong>${summary.taluks}</strong></div>
+        <div class="box stat"><span class="muted">Female</span><strong>${summary.gender.Female || 0}</strong></div>
+      `}
     </div>
     <div class="chart-grid">
       <section class="box section">
@@ -365,6 +385,51 @@ function chartBars(items = [], options = {}) {
       }).join("")}
     </div>
   `;
+}
+
+const requiredMemberFields = {
+  name: "Name",
+  phoneNumber: "Phone",
+  dateOfBirth: "DOB",
+  gender: "Gender",
+  lsNumber: "LS",
+  loginId: "Login ID",
+  batchYear: "Batch",
+  qualification: "Education",
+  district: "District",
+  taluk: "Taluk",
+  address: "Address"
+};
+
+function missingFields(member) {
+  return Object.entries(requiredMemberFields)
+    .filter(([key]) => !String(member[key] ?? "").trim())
+    .map(([, label]) => label);
+}
+
+function verificationChecklist(member) {
+  const missing = missingFields(member);
+  if (!missing.length) return `<span class="badge">Ready</span>`;
+  return `<span class="badge">${missing.length} missing</span><div class="mini-list">${missing.slice(0, 4).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>`;
+}
+
+function followupMessage(member) {
+  const missing = member.missingFields || missingFields(member);
+  return [
+    `Dear ${member.name || "Member"},`,
+    "",
+    "KLSWA membership data verification is pending.",
+    `LS Number: ${member.lsNumber || "-"}`,
+    `Taluk: ${member.taluk || "-"}`,
+    missing.length ? `Please update/correct: ${missing.join(", ")}` : "Please contact your taluk technical team for verification.",
+    "",
+    "Status check: https://klswa.in/status.html"
+  ].join("\n");
+}
+
+function whatsAppLink(member) {
+  const phone = String(member.phoneNumber || "").replace(/\D/g, "");
+  return `https://wa.me/91${encodeURIComponent(phone)}?text=${encodeURIComponent(followupMessage(member))}`;
 }
 
 function renderDistrictPerformance(performance) {
@@ -437,6 +502,11 @@ function renderMembers() {
         <span class="actions">
           <button class="secondary" id="applyFilters">Apply</button>
           <a class="secondary" id="memberExportLink" href="${exportUrl("/api/exports/members", state.filters)}">Export CSV</a>
+          ${state.user.role === "taluk" ? `
+            <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Pending verification" })}">Pending CSV</a>
+            <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Needs correction" })}">Needs correction CSV</a>
+            <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, missingOnly: "true" })}">Missing data CSV</a>
+          ` : ""}
         </span>
       </div>
       <div class="table-wrap">
@@ -516,6 +586,7 @@ function renderPendingQueue() {
               <th>District</th>
               <th>Taluk</th>
               <th>Phone</th>
+              <th>Checklist</th>
               <th>Qualification</th>
               <th>Remarks</th>
               <th>Action</th>
@@ -529,11 +600,14 @@ function renderPendingQueue() {
                 <td>${escapeHtml(member.district)}</td>
                 <td>${escapeHtml(member.taluk)}</td>
                 <td>${escapeHtml(member.phoneNumber)}</td>
+                <td>${verificationChecklist(member)}</td>
                 <td>${escapeHtml(member.qualification)}</td>
                 <td>${escapeHtml(member.remarks)}</td>
                 <td class="actions">
                   <button class="primary" data-status="Active" data-member="${member.id}">Approve</button>
                   <button class="secondary" data-status="Needs correction" data-member="${member.id}">Needs correction</button>
+                  <button class="secondary" data-copy-followup="${member.id}">Copy msg</button>
+                  ${member.phoneNumber ? `<a class="secondary" href="${whatsAppLink(member)}" target="_blank">WhatsApp</a>` : ""}
                   <button class="danger" data-status="Rejected" data-member="${member.id}">Reject</button>
                 </td>
               </tr>
@@ -571,6 +645,14 @@ function renderPendingQueue() {
       await loadDashboard();
       await loadPending();
       renderApp();
+    });
+  });
+  document.querySelectorAll("[data-copy-followup]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const member = state.pending.rows.find((item) => item.id === button.dataset.copyFollowup);
+      await copyText(followupMessage(member));
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = "Copy msg"; }, 1400);
     });
   });
 }
@@ -1231,6 +1313,68 @@ function renderDuplicates() {
     state.duplicateFilters.type = document.querySelector("#duplicateType").value;
     await loadDuplicates();
     renderApp();
+  });
+}
+
+function renderMissingData() {
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <h2>Missing data report</h2>
+        <span class="badge">${state.missingData.total || 0} records</span>
+      </div>
+      <div class="toolbar">
+        <label>Search <input id="missingSearch" value="${escapeHtml(state.filters.search)}" placeholder="Name, phone, LS number"></label>
+        <span></span>
+        <span class="actions">
+          <button class="secondary" id="applyMissingSearch">Apply</button>
+          <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, missingOnly: "true" })}">Export missing CSV</a>
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>LS Number</th>
+              <th>Phone</th>
+              <th>Status</th>
+              <th>Missing Fields</th>
+              <th>Follow-up</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${state.missingData.rows.map((member) => `
+              <tr>
+                <td>${escapeHtml(member.name)}</td>
+                <td>${escapeHtml(member.lsNumber)}</td>
+                <td>${escapeHtml(member.phoneNumber)}</td>
+                <td><span class="badge">${escapeHtml(member.status)}</span></td>
+                <td><div class="mini-list">${member.missingFields.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div></td>
+                <td class="actions">
+                  <button class="secondary" data-copy-missing="${member.id}">Copy msg</button>
+                  ${member.phoneNumber ? `<a class="secondary" href="${whatsAppLink(member)}" target="_blank">WhatsApp</a>` : ""}
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyMissingSearch").addEventListener("click", async () => {
+    state.filters.search = document.querySelector("#missingSearch").value;
+    await loadMissingData();
+    renderApp();
+  });
+  document.querySelectorAll("[data-copy-missing]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const member = state.missingData.rows.find((item) => item.id === button.dataset.copyMissing);
+      await copyText(followupMessage(member));
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = "Copy msg"; }, 1400);
+    });
   });
 }
 

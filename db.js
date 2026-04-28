@@ -318,6 +318,7 @@ function summarize(members) {
   const districts = new Set();
   const taluks = new Set();
   const gender = {};
+  const statusCounts = {};
   const districtCounts = {};
   const talukCounts = {};
 
@@ -326,6 +327,7 @@ function summarize(members) {
     if (normalized.district) districts.add(normalized.district);
     if (normalized.taluk) taluks.add(normalized.taluk);
     gender[normalized.gender || "Not specified"] = (gender[normalized.gender || "Not specified"] || 0) + 1;
+    statusCounts[normalized.status || "Active"] = (statusCounts[normalized.status || "Active"] || 0) + 1;
     districtCounts[normalized.district] = (districtCounts[normalized.district] || 0) + 1;
     talukCounts[normalized.taluk] = (talukCounts[normalized.taluk] || 0) + 1;
   }
@@ -335,6 +337,7 @@ function summarize(members) {
     districts: districts.size,
     taluks: taluks.size,
     gender,
+    statusCounts,
     topDistricts: Object.entries(districtCounts).sort((a, b) => b[1] - a[1]).slice(0, 8),
     topTaluks: Object.entries(talukCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
   };
@@ -526,10 +529,34 @@ async function exportMembers(user, filters) {
     search: filters.search || "",
     district: filters.district || "",
     taluk: filters.taluk || "",
+    status: filters.status || "",
+    missingOnly: filters.missingOnly === true || filters.missingOnly === "true",
     page: 1,
     size: Number.MAX_SAFE_INTEGER
   });
   return rows.rows;
+}
+
+const missingFieldLabels = {
+  phoneNumber: "Phone",
+  dateOfBirth: "Date of birth",
+  gender: "Gender",
+  maritalStatus: "Marital status",
+  kalyanaKarnataka: "Kalyana Karnataka",
+  category: "Category",
+  caste: "Caste",
+  religion: "Religion",
+  disability: "Disability",
+  loginId: "Login ID",
+  batchYear: "Batch year",
+  qualification: "Education",
+  address: "Address"
+};
+
+function missingMemberFields(member) {
+  return Object.entries(missingFieldLabels)
+    .filter(([key]) => !String(member[key] ?? "").trim())
+    .map(([, label]) => label);
 }
 
 async function updateMemberStatus(id, status, remarks = "") {
@@ -564,6 +591,8 @@ function filterMemberRows(rows, filters) {
   let filtered = rows;
   if (filters.district) filtered = filtered.filter((member) => member.district === filters.district);
   if (filters.taluk) filtered = filtered.filter((member) => member.taluk === filters.taluk);
+  if (filters.status) filtered = filtered.filter((member) => member.status === filters.status);
+  if (filters.missingOnly) filtered = filtered.filter((member) => missingMemberFields(member).length > 0);
   if (filters.search) {
     const search = filters.search.toLowerCase();
     filtered = filtered.filter((member) => [member.name, member.lsNumber, member.loginId, member.phoneNumber, member.qualification]
@@ -577,6 +606,31 @@ function duplicateKey(value, type) {
   if (!text) return "";
   if (type === "phoneNumber") return text.replace(/\D/g, "");
   return text.toLowerCase().replace(/\s+/g, " ");
+}
+
+async function listMissingDataMembers(user, filters = {}) {
+  const rows = await listMembers(user, {
+    search: filters.search || "",
+    district: filters.district || "",
+    taluk: filters.taluk || "",
+    missingOnly: true,
+    page: 1,
+    size: Math.min(500, Math.max(25, Number(filters.limit || 200)))
+  });
+  return {
+    rows: rows.rows.map((member) => ({
+      id: member.id,
+      name: member.name,
+      lsNumber: member.lsNumber,
+      loginId: member.loginId,
+      district: member.district,
+      taluk: member.taluk,
+      phoneNumber: member.phoneNumber,
+      status: member.status,
+      missingFields: missingMemberFields(member)
+    })),
+    total: rows.total
+  };
 }
 
 function duplicateLabel(type) {
@@ -951,6 +1005,7 @@ async function createAuditLogs(logs) {
 async function listAuditLogs(user, filters = {}) {
   const search = String(filters.search || "").trim().toLowerCase();
   const limit = Math.min(300, Math.max(25, Number(filters.limit || 100)));
+  const memberIds = user.role === "admin" ? null : new Set((await exportMembers(user, {})).map((member) => member.id));
 
   if (hasPostgres) {
     const result = await pool.query(
@@ -960,7 +1015,8 @@ async function listAuditLogs(user, filters = {}) {
        limit $3`,
       [search, `%${search}%`, limit]
     );
-    return result.rows.map(toAuditLog);
+    const rows = result.rows.map(toAuditLog);
+    return memberIds ? rows.filter((row) => memberIds.has(row.memberId) || row.actorId === user.id) : rows;
   }
 
   const db = await readJsonDb();
@@ -970,6 +1026,7 @@ async function listAuditLogs(user, filters = {}) {
     rows = rows.filter((row) => [row.memberName, row.field, row.actorName, row.oldValue, row.newValue]
       .some((value) => String(value || "").toLowerCase().includes(search)));
   }
+  if (memberIds) rows = rows.filter((row) => memberIds.has(row.memberId) || row.actorId === user.id);
   return rows.slice(0, limit);
 }
 
@@ -1410,6 +1467,7 @@ module.exports = {
   findPublicMemberStatus,
   duplicateReason,
   exportMembers,
+  listMissingDataMembers,
   createMember,
   updateMember,
   updateMemberStatus,
