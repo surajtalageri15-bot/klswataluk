@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Membership Status Check</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="public-form-shell">
+    <section class="public-form-intro">
+      <p class="eyebrow">AKSPBS / KLSWA</p>
+      <h1>Membership Status Check</h1>
+      <p>ಸದಸ್ಯತ್ವ ಅರ್ಜಿ ಸ್ಥಿತಿಯನ್ನು ಪರಿಶೀಲಿಸಲು ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ಅಥವಾ LS number ನಮೂದಿಸಿ.</p>
+    </section>
+
+    <section class="box public-form-card">
+      <form id="statusCheckForm" class="form-grid">
+        <label>
+          Phone Number / LS Number *
+          <input name="query" required placeholder="Enter 10-digit phone or LS number">
+        </label>
+        <div class="message" id="statusMessage"></div>
+        <button class="primary" type="submit">Check status</button>
+      </form>
+      <div id="statusResult"></div>
+    </section>
+  </main>
+  <script src="/status.js"></script>
+</body>
+</html>

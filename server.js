@@ -276,6 +276,15 @@ async function api(req, res, pathname) {
     return json(res, 201, { ok: true, request: await store.createTeamRequest(requestBody) });
   }
 
+  if (pathname === "/api/public-status" && req.method === "GET") {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const query = (url.searchParams.get("query") || "").trim();
+    if (!query) return json(res, 400, { error: "Enter phone number or LS number" });
+    const member = await store.findPublicMemberStatus({ query });
+    if (!member) return json(res, 404, { error: "No application found for this phone number or LS number" });
+    return json(res, 200, { member });
+  }
+
   if (pathname === "/api/logout" && req.method === "POST") {
     const token = getCookie(req, "session");
     if (token) sessions.delete(token);

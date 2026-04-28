@@ -622,6 +622,45 @@ function duplicateReason(existing, incoming) {
   return "Member already exists";
 }
 
+async function findPublicMemberStatus({ query = "" }) {
+  const raw = String(query || "").trim();
+  if (!raw) return null;
+  const phone = raw.replace(/\D/g, "");
+  const ls = raw.toLowerCase();
+
+  let member = null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select * from members
+       where ($1 <> '' and regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g') = $1)
+          or ($2 <> '' and lower(ls_number) = $2)
+       order by updated_at desc
+       limit 1`,
+      [phone.length >= 10 ? phone : "", ls]
+    );
+    member = toMember(result.rows[0]) || null;
+  } else {
+    const db = await readJsonDb();
+    member = db.members.find((item) => {
+      const itemPhone = String(item.phoneNumber || "").replace(/\D/g, "");
+      const itemLs = String(item.lsNumber || "").trim().toLowerCase();
+      return (phone.length >= 10 && itemPhone === phone) || (ls && itemLs === ls);
+    }) || null;
+  }
+
+  if (!member) return null;
+  const normalized = normalizeMemberLocation(member);
+  return {
+    name: normalized.name,
+    lsNumber: normalized.lsNumber,
+    district: normalized.district,
+    taluk: normalized.taluk,
+    status: normalized.status,
+    remarks: normalized.remarks,
+    updatedAt: normalized.updatedAt
+  };
+}
+
 async function createMember(member) {
   member.id = crypto.randomUUID();
   member.createdAt = new Date().toISOString();
@@ -1214,6 +1253,7 @@ module.exports = {
   listMembers,
   getMember,
   findDuplicateMember,
+  findPublicMemberStatus,
   duplicateReason,
   exportMembers,
   createMember,
