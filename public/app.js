@@ -750,6 +750,25 @@ function openCorrectionRequestModal(member) {
           ${field("qualification", "Qualification", member.qualification)}
           ${field("batchYear", "Batch Year", member.batchYear, "number")}
         </div>
+        <div class="three">
+          ${field("dateOfBirth", "Date of Birth", member.dateOfBirth, "date")}
+          ${field("age", "Age", member.age, "number")}
+          ${selectField("gender", "Gender", ["Male", "Female", "Other"], member.gender)}
+        </div>
+        <div class="three">
+          ${selectField("maritalStatus", "Marital Status", ["Married", "Unmarried", "Widow/Widower", "Divorced"], member.maritalStatus)}
+          ${selectField("kalyanaKarnataka", "Kalyana Karnataka", ["Yes", "No"], member.kalyanaKarnataka)}
+          ${selectField("category", "Category", ["GM", "SC", "ST", "Cat-1", "2A", "2B", "3A", "3B"], member.category)}
+        </div>
+        <div class="three">
+          ${field("caste", "Caste", member.caste)}
+          ${field("religion", "Religion", member.religion)}
+          ${selectField("disability", "Disability", ["None", "Yes"], member.disability)}
+        </div>
+        <div class="two">
+          ${field("otherTaluks", "Other Taluks", member.otherTaluks)}
+          <label>Address <textarea name="address" rows="2">${escapeHtml(member.address)}</textarea></label>
+        </div>
         <label>Reason <textarea name="reason" rows="3" required placeholder="Explain why this correction is needed"></textarea></label>
         <div class="message" id="correctionRequestMessage"></div>
         <div class="modal-actions">
@@ -766,7 +785,11 @@ function openCorrectionRequestModal(member) {
     const form = new FormData(event.currentTarget);
     const reason = String(form.get("reason") || "").trim();
     const changes = {};
-    ["name", "phoneNumber", "lsNumber", "loginId", "qualification", "batchYear"].forEach((fieldName) => {
+    [
+      "name", "phoneNumber", "lsNumber", "loginId", "qualification", "batchYear",
+      "dateOfBirth", "age", "gender", "maritalStatus", "kalyanaKarnataka", "category",
+      "caste", "religion", "disability", "otherTaluks", "address"
+    ].forEach((fieldName) => {
       changes[fieldName] = form.get(fieldName);
     });
     try {
@@ -1352,6 +1375,7 @@ function renderMissingData() {
                 <td><span class="badge">${escapeHtml(member.status)}</span></td>
                 <td><div class="mini-list">${member.missingFields.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div></td>
                 <td class="actions">
+                  <button class="primary" data-missing-request="${member.id}">Fill / Request</button>
                   <button class="secondary" data-copy-missing="${member.id}">Copy msg</button>
                   ${member.phoneNumber ? `<a class="secondary" href="${whatsAppLink(member)}" target="_blank">WhatsApp</a>` : ""}
                 </td>
@@ -1374,6 +1398,12 @@ function renderMissingData() {
       await copyText(followupMessage(member));
       button.textContent = "Copied";
       setTimeout(() => { button.textContent = "Copy msg"; }, 1400);
+    });
+  });
+  document.querySelectorAll("[data-missing-request]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const member = state.missingData.rows.find((item) => item.id === button.dataset.missingRequest);
+      openCorrectionRequestModal(member);
     });
   });
 }
