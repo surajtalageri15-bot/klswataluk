@@ -244,6 +244,10 @@ async function api(req, res, pathname) {
     return json(res, 200, { lists: masterLists(), scope });
   }
 
+  if (pathname === "/api/public-summary" && req.method === "GET") {
+    return json(res, 200, await store.getPublicSummary());
+  }
+
   if (pathname === "/api/login" && req.method === "POST") {
     const body = await parseBody(req);
     const found = await store.findUserByLogin(body.username, body.password);

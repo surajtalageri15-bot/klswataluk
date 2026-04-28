@@ -495,6 +495,32 @@ async function getDashboard(user) {
   return { summary, charts, meta: db.meta, lists: masterLists(user), performance: await districtPerformance(user, members) };
 }
 
+async function getPublicSummary() {
+  let members = [];
+  let updatedAt = new Date().toISOString();
+  if (hasPostgres) {
+    members = (await pool.query("select * from members")).rows.map(toMember);
+    const metaRows = (await pool.query("select key, value from app_meta")).rows;
+    const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
+    updatedAt = meta.updatedAt || updatedAt;
+  } else {
+    const db = await readJsonDb();
+    members = db.members || [];
+    updatedAt = db.meta?.updatedAt || updatedAt;
+  }
+  const summary = summarize(members);
+  return {
+    total: summary.total,
+    districts: summary.districts,
+    taluks: summary.taluks,
+    masterTaluks: masterTalukCount({ role: "admin" }),
+    pending: summary.statusCounts["Pending verification"] || 0,
+    active: summary.statusCounts.Active || 0,
+    needsCorrection: summary.statusCounts["Needs correction"] || 0,
+    updatedAt
+  };
+}
+
 async function pendingCorrectionChart(user, jsonMembers = null) {
   if (!["admin", "division", "district"].includes(user.role)) return [];
   const rows = await exportTalukCorrections(user, {});
@@ -1676,6 +1702,7 @@ module.exports = {
   findUserByLogin,
   getUserById,
   getDashboard,
+  getPublicSummary,
   listMembers,
   getMember,
   findDuplicateMember,

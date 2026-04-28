@@ -46,6 +46,102 @@ a.primary {
   text-decoration: none;
 }
 
+.home-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 22px 0 42px;
+}
+
+.home-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0 20px;
+}
+
+.home-nav strong {
+  color: var(--green-dark);
+  font-size: 20px;
+}
+
+.home-nav div,
+.home-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.home-nav a {
+  color: var(--text);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.home-hero {
+  min-height: 72vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  align-items: center;
+  gap: 28px;
+  padding: 36px 0;
+}
+
+.home-hero h1 {
+  max-width: 840px;
+  margin: 0 0 14px;
+  font-size: clamp(38px, 6vw, 76px);
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--green-dark);
+}
+
+.home-hero p {
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.home-summary-card {
+  padding: 20px;
+}
+
+.home-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.home-summary div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  padding: 13px;
+}
+
+.home-summary strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 28px;
+  color: var(--green-dark);
+}
+
+.home-section {
+  margin: 22px 0;
+}
+
+.home-list span {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.home-list span:last-child {
+  border-bottom: 0;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -842,6 +938,7 @@ tr:last-child td {
 @media (max-width: 900px) {
   .login-shell,
   .app-shell,
+  .home-hero,
   .split,
   .chart-grid,
   .stats,
@@ -858,6 +955,25 @@ tr:last-child td {
 
   .public-form-shell {
     padding: 16px;
+  }
+
+  .home-shell {
+    width: min(100% - 24px, 1180px);
+    padding-top: 12px;
+  }
+
+  .home-nav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home-hero {
+    min-height: auto;
+    padding: 24px 0;
+  }
+
+  .home-summary {
+    grid-template-columns: 1fr;
   }
 
   .public-link-grid {

@@ -1,13 +1,111 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Karnataka Surveyor Taluk Login</title>
-    <link rel="stylesheet" href="/styles.css">
-  </head>
-  <body>
-    <main id="app"></main>
-    <script src="/app.js"></script>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KLSWA - Karnataka Licensed Surveyors Welfare Association</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="home-shell">
+    <nav class="home-nav">
+      <strong>AKSPBS / KLSWA</strong>
+      <div>
+        <a href="/membership.html">Membership</a>
+        <a href="/member-login.html">Member Login</a>
+        <a href="/status.html">Status</a>
+        <a href="/admin.html">Admin</a>
+      </div>
+    </nav>
+
+    <section class="home-hero">
+      <div>
+        <p class="eyebrow">ಅಖಿಲ ಕರ್ನಾಟಕ ಸರ್ಕಾರಿ ಪರವಾನಗಿ ಭೂಮಾಪಕರ ಸಂಘ</p>
+        <h1>All Karnataka State Government Licensed Surveyors Union</h1>
+        <p>Official digital platform for Karnataka licensed surveyor membership data, verification, correction requests, taluk technical teams, and member self-service.</p>
+        <div class="home-actions">
+          <a class="primary" href="/membership.html">Fill Membership Form</a>
+          <a class="secondary" href="/member-login.html">Open Member Login</a>
+          <a class="secondary" href="/status.html">Check Status</a>
+        </div>
+      </div>
+      <section class="box home-summary-card">
+        <span class="badge">Live public summary</span>
+        <div class="home-summary" id="homeSummary">
+          <div><span class="muted">Members</span><strong>...</strong></div>
+          <div><span class="muted">Districts</span><strong>...</strong></div>
+          <div><span class="muted">Taluks</span><strong>...</strong></div>
+          <div><span class="muted">Pending</span><strong>...</strong></div>
+        </div>
+        <p class="muted" id="summaryUpdated">Loading latest status...</p>
+      </section>
+    </section>
+
+    <section class="home-section">
+      <div class="section-head">
+        <h2>Quick Services</h2>
+        <a class="secondary" href="/links.html">All public links</a>
+      </div>
+      <div class="public-link-grid">
+        <a class="public-link-card" href="/membership.html">
+          <span class="badge">Member</span>
+          <strong>Membership Form</strong>
+          <p>Submit official member information for verification.</p>
+        </a>
+        <a class="public-link-card" href="/member-login.html">
+          <span class="badge">Login</span>
+          <strong>Member Login</strong>
+          <p>Activate existing member login, view profile, and request corrections.</p>
+        </a>
+        <a class="public-link-card" href="/status.html">
+          <span class="badge">Status</span>
+          <strong>Status Check</strong>
+          <p>Check pending, approved, rejected, or needs-correction status.</p>
+        </a>
+        <a class="public-link-card" href="/taluk-join.html">
+          <span class="badge">Taluk Team</span>
+          <strong>Join Taluk Team</strong>
+          <p>Interested members can request taluk technical team login access.</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="home-section split">
+      <div class="box section">
+        <h2>Important Announcements</h2>
+        <div class="mini-list home-list">
+          <span><strong>Membership data update:</strong> Members should keep phone, LS number, district, taluk, and address updated.</span>
+          <span><strong>Correction flow:</strong> Use member login or taluk team support when your record needs correction.</span>
+          <span><strong>Privacy:</strong> Member information is used only for association verification and administration.</span>
+        </div>
+      </div>
+      <div class="box section">
+        <h2>About Association</h2>
+        <p class="muted">KLSWA supports Karnataka licensed surveyors with organized member records, taluk-level coordination, correction workflows, and administrative transparency.</p>
+        <p class="muted">ಸದಸ್ಯರ ಮಾಹಿತಿಯ ಗೌಪ್ಯತೆಯನ್ನು ಮತ್ತು ಗೌರವವನ್ನು ಸಂಘವು ಸದಾ ಕಾಪಾಡುತ್ತದೆ.</p>
+      </div>
+    </section>
+
+    <section class="home-section split">
+      <div class="box section">
+        <h2>Help</h2>
+        <div class="mini-list home-list">
+          <span>1. New members should fill the membership form with all mandatory details.</span>
+          <span>2. Existing members can activate login using phone number and LS number.</span>
+          <span>3. If status shows Needs correction, submit corrected details from member login.</span>
+          <span>4. Taluk teams can support members and send correction requests to admin.</span>
+        </div>
+      </div>
+      <div class="box section">
+        <h2>Downloads</h2>
+        <div class="home-actions">
+          <a class="secondary" href="/membership.html">Membership Form</a>
+          <a class="secondary" href="/status.html">Status Check</a>
+          <a class="secondary" href="/member-login.html">Member Portal</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="/home.js"></script>
+</body>
 </html>
