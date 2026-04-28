@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KLSWA Member Login</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="public-form-shell">
+    <section class="public-form-intro">
+      <p class="eyebrow">AKSPBS / KLSWA</p>
+      <h1>Member Login</h1>
+      <p>Existing registered members can activate login access, sign in, check their own record, and submit correction requests when needed.</p>
+    </section>
+
+    <section class="public-member-grid">
+      <form id="activateMemberForm" class="box public-form-card">
+        <h2>Activate existing member</h2>
+        <p class="muted">Use the phone number and LS number already saved in KLSWA data. Date of birth is checked when available in the record.</p>
+        <label>Phone Number * <input name="phoneNumber" required inputmode="numeric" placeholder="10-digit phone"></label>
+        <label>LS Number * <input name="lsNumber" required placeholder="License / LS number"></label>
+        <label>Date of Birth <input name="dateOfBirth" type="date"></label>
+        <label>Create Password * <input name="password" type="password" required minlength="6" placeholder="Minimum 6 characters"></label>
+        <label>Confirm Password * <input name="confirmPassword" type="password" required minlength="6"></label>
+        <div class="message" id="activateMessage"></div>
+        <button class="primary" type="submit">Activate login</button>
+      </form>
+
+      <form id="memberLoginForm" class="box public-form-card">
+        <h2>Member sign in</h2>
+        <p class="muted">Login using phone number, LS number, or Mojini login ID after activation.</p>
+        <label>Phone / LS / Login ID * <input name="identifier" required placeholder="Phone, LS number, or login ID"></label>
+        <label>Password * <input name="password" type="password" required></label>
+        <div class="message" id="loginMessage"></div>
+        <button class="primary" type="submit">Login</button>
+      </form>
+    </section>
+
+    <section id="memberDashboard"></section>
+  </main>
+  <script src="/member-login.js"></script>
+</body>
+</html>

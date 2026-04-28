@@ -11,6 +11,7 @@ const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 
 const sessions = new Map();
+const memberSessions = new Map();
 
 function send(res, status, body, headers = {}) {
   const payload = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -73,6 +74,13 @@ async function currentUser(req) {
   if (!token || !sessions.has(token)) return null;
   const session = sessions.get(token);
   return await store.getUserById(session.userId);
+}
+
+async function currentMember(req) {
+  const token = getCookie(req, "member_session");
+  if (!token || !memberSessions.has(token)) return null;
+  const session = memberSessions.get(token);
+  return await store.getMember(session.memberId);
 }
 
 function requireAdmin(user) {
@@ -300,6 +308,80 @@ async function api(req, res, pathname) {
     const member = await store.findPublicMemberStatus({ query });
     if (!member) return json(res, 404, { error: "No application found for this phone number or LS number" });
     return json(res, 200, { member });
+  }
+
+  if (pathname === "/api/member-activate" && req.method === "POST") {
+    const body = asObject(await parseBody(req));
+    const password = String(body.password || "");
+    const confirmPassword = String(body.confirmPassword || "");
+    if (password.length < 6) return json(res, 400, { error: "Password must be at least 6 characters" });
+    if (password !== confirmPassword) return json(res, 400, { error: "Passwords do not match" });
+    const member = await store.findMemberForActivation({
+      phoneNumber: body.phoneNumber,
+      lsNumber: body.lsNumber,
+      dateOfBirth: body.dateOfBirth
+    });
+    if (!member) return json(res, 404, { error: "Member not found. Check phone number, LS number and date of birth." });
+    const activated = await store.activateMemberLogin(member.id, password);
+    await tryCreateAuditLogs([{
+      memberId: activated.id,
+      memberName: activated.name,
+      action: "Member login activated",
+      field: "memberLoginActive",
+      oldValue: member.memberLoginActive ? "Yes" : "No",
+      newValue: "Yes",
+      ...auditActor({ id: activated.id, name: activated.name, role: "member" })
+    }]);
+    return json(res, 200, { ok: true, member: publicMember(activated) });
+  }
+
+  if (pathname === "/api/member-login" && req.method === "POST") {
+    const body = asObject(await parseBody(req));
+    const member = await store.findMemberByLogin(body.identifier, body.password);
+    if (!member) return json(res, 401, { error: "Invalid member login or login not activated" });
+    const token = crypto.randomBytes(24).toString("hex");
+    memberSessions.set(token, { memberId: member.id, createdAt: Date.now() });
+    return json(res, 200, { member: publicMember(member) }, {
+      "Set-Cookie": `member_session=${token}; HttpOnly; SameSite=Lax; Path=/`
+    });
+  }
+
+  if (pathname === "/api/member-logout" && req.method === "POST") {
+    const token = getCookie(req, "member_session");
+    if (token) memberSessions.delete(token);
+    return json(res, 200, { ok: true }, { "Set-Cookie": "member_session=; Max-Age=0; Path=/" });
+  }
+
+  if (pathname === "/api/member-me" && req.method === "GET") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    const auditLogs = await store.listAuditLogs({ id: member.id, role: "taluk", district: member.district, taluk: member.taluk }, {
+      memberId: member.id,
+      limit: 100
+    });
+    return json(res, 200, { member: publicMember(member), auditLogs });
+  }
+
+  if (pathname === "/api/member-correction-request" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    if (member.status !== "Needs correction") return json(res, 400, { error: "Correction request is available only when status is Needs correction" });
+    const body = asObject(await parseBody(req));
+    const reason = String(body.reason || "").trim();
+    const requestedChanges = sanitizeCorrectionChanges(body.changes || {}, member);
+    if (!reason) return json(res, 400, { error: "Reason is required" });
+    if (!Object.keys(requestedChanges).length) return json(res, 400, { error: "Change at least one field before submitting" });
+    return json(res, 201, {
+      request: await store.createDataCorrectionRequest({
+        memberId: member.id,
+        memberName: member.name,
+        requestedChanges,
+        reason,
+        requestedById: member.id,
+        requestedByName: member.name,
+        requestedByRole: "member"
+      })
+    });
   }
 
   if (pathname === "/api/logout" && req.method === "POST") {
@@ -694,6 +776,16 @@ function publicUser(user) {
   return safe;
 }
 
+function publicMember(member) {
+  const {
+    memberPassword,
+    password,
+    sourceRow,
+    ...safe
+  } = member || {};
+  return safe;
+}
+
 async function staticFile(req, res, pathname) {
   const filePath = pathname === "/" ? path.join(PUBLIC_DIR, "index.html") : path.join(PUBLIC_DIR, pathname);
   const resolved = path.resolve(filePath);
@@ -720,10 +812,19 @@ const server = http.createServer(async (req, res) => {
       await staticFile(req, res, url.pathname);
     }
   } catch (error) {
-    if (url?.pathname === "/api/public-membership" || url?.pathname === "/api/public-status") {
+    if ([
+      "/api/public-membership",
+      "/api/public-status",
+      "/api/member-activate",
+      "/api/member-login",
+      "/api/member-me",
+      "/api/member-correction-request"
+    ].includes(url?.pathname)) {
       console.error(`${url.pathname} failed:`, error);
       const publicMessage = url.pathname === "/api/public-status"
         ? "Could not check status. Please verify the phone number or LS number and try again."
+        : url.pathname.startsWith("/api/member")
+          ? "Member request failed. Please check the details and try again."
         : "Could not submit membership. Please check all fields and try again.";
       return json(res, error.status || 500, { error: error.status ? error.message : publicMessage });
     }

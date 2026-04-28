@@ -52,6 +52,8 @@ function toCamel(row) {
     batchYear: row.batch_year ?? "",
     status: row.status || "Active",
     remarks: row.remarks || "",
+    memberPassword: row.member_password || "",
+    memberLoginActive: row.member_login_active || false,
     maritalStatus: row.marital_status || "",
     kalyanaKarnataka: row.kalyana_karnataka || "",
     category: row.category || "",
@@ -71,6 +73,7 @@ function toMember(row) {
   if (!item) return item;
   delete item.username;
   delete item.password;
+  delete item.memberPassword;
   delete item.role;
   delete item.active;
   return item;
@@ -200,6 +203,8 @@ async function initDb() {
       other_taluks text,
       address text,
       declaration_accepted boolean not null default false,
+      member_password text,
+      member_login_active boolean not null default false,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
@@ -276,6 +281,8 @@ async function initDb() {
     alter table members add column if not exists other_taluks text;
     alter table members add column if not exists address text;
     alter table members add column if not exists declaration_accepted boolean not null default false;
+    alter table members add column if not exists member_password text;
+    alter table members add column if not exists member_login_active boolean not null default false;
   `);
 
   await pool.query(`
@@ -812,6 +819,100 @@ async function findPublicMemberStatus({ query = "" }) {
     remarks: normalized.remarks,
     updatedAt: normalized.updatedAt
   };
+}
+
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function sameDate(left, right) {
+  const a = String(left || "").slice(0, 10);
+  const b = String(right || "").slice(0, 10);
+  return a && b && a === b;
+}
+
+async function findMemberForActivation({ phoneNumber = "", lsNumber = "", dateOfBirth = "" }) {
+  const phone = normalizePhone(phoneNumber);
+  const ls = String(lsNumber || "").trim().toLowerCase();
+  if (!phone || !ls) return null;
+
+  let member = null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select * from members
+       where regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g') = $1
+         and lower(ls_number) = $2
+       order by updated_at desc
+       limit 1`,
+      [phone, ls]
+    );
+    member = toCamel(result.rows[0]) || null;
+  } else {
+    const db = await readJsonDb();
+    member = db.members.find((item) => normalizePhone(item.phoneNumber) === phone
+      && String(item.lsNumber || "").trim().toLowerCase() === ls) || null;
+  }
+
+  if (!member) return null;
+  if (member.dateOfBirth && !sameDate(member.dateOfBirth, dateOfBirth)) return null;
+  return member;
+}
+
+async function activateMemberLogin(id, password) {
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update members
+       set member_password = $2, member_login_active = true, updated_at = now()
+       where id = $1 returning *`,
+      [id, password]
+    );
+    return toMember(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  const member = db.members.find((item) => item.id === id);
+  if (!member) return null;
+  member.memberPassword = password;
+  member.memberLoginActive = true;
+  member.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  const { memberPassword, ...safe } = member;
+  return safe;
+}
+
+async function findMemberByLogin(identifier, password) {
+  const raw = String(identifier || "").trim();
+  const pass = String(password || "");
+  const phone = normalizePhone(raw);
+  const text = raw.toLowerCase();
+  if (!raw || !pass) return null;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select * from members
+       where member_login_active = true
+         and member_password = $1
+         and (
+           ($2 <> '' and regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g') = $2)
+           or lower(ls_number) = $3
+           or lower(coalesce(login_id, '')) = $3
+         )
+       order by updated_at desc
+       limit 1`,
+      [pass, phone.length >= 10 ? phone : "", text]
+    );
+    return toMember(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  const member = db.members.find((item) => item.memberLoginActive === true
+    && item.memberPassword === pass
+    && ((phone.length >= 10 && normalizePhone(item.phoneNumber) === phone)
+      || String(item.lsNumber || "").trim().toLowerCase() === text
+      || String(item.loginId || "").trim().toLowerCase() === text)) || null;
+  if (!member) return null;
+  const { memberPassword, ...safe } = member;
+  return safe;
 }
 
 async function createMember(member) {
@@ -1519,6 +1620,9 @@ module.exports = {
   getMember,
   findDuplicateMember,
   findPublicMemberStatus,
+  findMemberForActivation,
+  activateMemberLogin,
+  findMemberByLogin,
   duplicateReason,
   exportMembers,
   listMissingDataMembers,
