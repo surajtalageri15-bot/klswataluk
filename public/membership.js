@@ -23,6 +23,32 @@ function options(items) {
   return items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("");
 }
 
+function membershipPayload() {
+  const data = new FormData(form);
+  return {
+    name: String(data.get("name") || "").trim(),
+    phoneNumber: String(data.get("phoneNumber") || "").trim(),
+    dateOfBirth: String(data.get("dateOfBirth") || "").trim(),
+    age: String(data.get("age") || "").trim(),
+    gender: String(data.get("gender") || "").trim(),
+    maritalStatus: String(data.get("maritalStatus") || "").trim(),
+    kalyanaKarnataka: String(data.get("kalyanaKarnataka") || "").trim(),
+    category: String(data.get("category") || "").trim(),
+    caste: String(data.get("caste") || "").trim(),
+    religion: String(data.get("religion") || "").trim(),
+    disability: String(data.get("disability") || "").trim(),
+    lsNumber: String(data.get("lsNumber") || "").trim(),
+    loginId: String(data.get("loginId") || "").trim(),
+    batchYear: String(data.get("batchYear") || "").trim(),
+    qualification: String(data.get("qualification") || "").trim(),
+    district: String(data.get("district") || "").trim(),
+    taluk: String(data.get("taluk") || "").trim(),
+    otherTaluks: String(data.get("otherTaluks") || "").trim(),
+    address: String(data.get("address") || "").trim(),
+    declarationAccepted: data.get("declarationAccepted") === "on"
+  };
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -85,7 +111,7 @@ form.addEventListener("submit", async (event) => {
   try {
     await request("/api/public-membership", {
       method: "POST",
-      body: JSON.stringify(Object.fromEntries(new FormData(form)))
+      body: JSON.stringify(membershipPayload())
     });
     form.reset();
     if (scopedJoin) {

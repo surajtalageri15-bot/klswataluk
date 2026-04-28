@@ -814,7 +814,7 @@ async function deleteMember(id) {
 }
 
 async function createAuditLogs(logs) {
-  const entries = logs
+  const entries = (Array.isArray(logs) ? logs : [])
     .filter((log) => log && log.field)
     .map((log) => ({
       id: crypto.randomUUID(),

@@ -55,6 +55,10 @@ async function parseBody(req) {
   }
 }
 
+function asObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
 function getCookie(req, name) {
   const header = req.headers.cookie || "";
   return header
@@ -201,13 +205,22 @@ function auditDiffs({ action, before = {}, after = {}, actor }) {
 }
 
 function sanitizeCorrectionChanges(body, member) {
+  const input = asObject(body);
   const changes = {};
   for (const field of correctionRequestFields) {
-    if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
-    const next = String(body[field] ?? "").trim();
+    if (!Object.prototype.hasOwnProperty.call(input, field)) continue;
+    const next = String(input[field] ?? "").trim();
     if (next !== valueForAudit(member[field]).trim()) changes[field] = next;
   }
   return changes;
+}
+
+async function tryCreateAuditLogs(logs) {
+  try {
+    await store.createAuditLogs(logs);
+  } catch (error) {
+    console.error("Audit log failed:", error);
+  }
 }
 
 async function api(req, res, pathname) {
@@ -231,7 +244,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/public-membership" && req.method === "POST") {
-    const body = await parseBody(req);
+    const body = asObject(await parseBody(req));
     const member = normalizeMember({
       ...body,
       status: "Pending verification",
@@ -262,12 +275,12 @@ async function api(req, res, pathname) {
     const duplicate = await store.findDuplicateMember(member);
     if (duplicate) return json(res, 409, { error: store.duplicateReason(duplicate, member) });
     const created = await store.createMember(member);
-    await store.createAuditLogs(auditDiffs({ action: "Created", after: created, actor: null }));
+    await tryCreateAuditLogs(auditDiffs({ action: "Created", after: created, actor: null }));
     return json(res, 201, { ok: true, member: created });
   }
 
   if (pathname === "/api/public-taluk-team-request" && req.method === "POST") {
-    const requestBody = normalizeTeamRequest(await parseBody(req));
+    const requestBody = normalizeTeamRequest(asObject(await parseBody(req)));
     const validation = assertTeamRequest(requestBody);
     if (validation) return json(res, 400, { error: validation });
     if (await store.usernameExists(requestBody.requestedUsername)) return json(res, 409, { error: "This User ID is already used" });
@@ -433,7 +446,7 @@ async function api(req, res, pathname) {
 
   if (pathname === "/api/data-correction-requests" && req.method === "POST") {
     if (user.role !== "taluk") return json(res, 403, { error: "Taluk team can submit correction requests" });
-    const body = await parseBody(req);
+    const body = asObject(await parseBody(req));
     const member = await store.getMember(String(body.memberId || ""));
     if (!member) return json(res, 404, { error: "Member not found" });
     if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This member is outside your taluk" });
@@ -460,13 +473,13 @@ async function api(req, res, pathname) {
     const target = await store.getDataCorrectionRequest(dataCorrectionMatch[1]);
     if (!target) return json(res, 404, { error: "Request not found" });
     if (target.status !== "Pending") return json(res, 400, { error: "Request is already reviewed" });
-    const body = await parseBody(req);
+    const body = asObject(await parseBody(req));
     const status = String(body.status || "").trim();
     const adminRemarks = String(body.adminRemarks || "").trim();
     if (status === "Approved") {
       const member = await store.getMember(target.memberId);
       if (!member) return json(res, 404, { error: "Member not found" });
-      const next = normalizeMember({ ...member, ...target.requestedChanges }, member);
+      const next = normalizeMember({ ...member, ...asObject(target.requestedChanges) }, member);
       const validation = assertMember(next);
       if (validation) return json(res, 400, { error: validation });
       const updated = await store.updateMember(member.id, next);
@@ -654,14 +667,19 @@ async function staticFile(req, res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
+  let url;
   try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname.startsWith("/api/")) {
       await api(req, res, url.pathname);
     } else {
       await staticFile(req, res, url.pathname);
     }
   } catch (error) {
+    if (url?.pathname === "/api/public-membership") {
+      console.error("Public membership submit failed:", error);
+      return json(res, error.status || 500, { error: error.status ? error.message : "Could not submit membership. Please check all fields and try again." });
+    }
     json(res, error.status || 500, { error: error.message || "Server error" });
   }
 });
