@@ -68,7 +68,7 @@ function memberRows(member) {
 function correctionForm(member) {
   if (member.status !== "Needs correction") return "";
   return `
-    <form id="memberCorrectionForm" class="box public-form-card">
+    <form id="memberCorrectionForm" class="box public-form-card member-dashboard-card correction-card">
       <h2>Submit correction request</h2>
       <p class="notice">${escapeHtml(member.remarks || "Please update the required details and submit for admin review.")}</p>
       <div class="two">
@@ -93,7 +93,7 @@ function correctionForm(member) {
 
 function changePasswordForm() {
   return `
-    <form id="changePasswordForm" class="box public-form-card">
+    <form id="changePasswordForm" class="box public-form-card member-dashboard-card password-card">
       <h2>Change password</h2>
       <div class="three">
         <label>Current Password <input name="currentPassword" type="password" required></label>
@@ -146,7 +146,7 @@ function renderTalukTeamContact(member, talukTeam) {
   const message = memberSupportMessage(member, talukTeam);
   const whatsapp = whatsappLink(talukTeam?.phoneNumber, message);
   return `
-    <section class="box public-form-card">
+    <section class="box public-form-card member-dashboard-card contact-team-card">
       <div class="section-head">
         <div>
           <h2>Contact Taluk Team</h2>
@@ -179,7 +179,7 @@ function renderTalukTeamContact(member, talukTeam) {
 function renderPresidentMessages(messages = []) {
   if (!messages.length) return "";
   return `
-    <section class="box public-form-card">
+    <section class="box public-form-card member-dashboard-card notice-card">
       <div class="section-head">
         <h2>State President Notices</h2>
         <span class="badge">${messages.length} Latest</span>
@@ -200,9 +200,10 @@ function renderPresidentMessages(messages = []) {
 function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null) {
   dashboard.innerHTML = `
     ${renderPresidentMessages(presidentMessages)}
-    <section class="box status-card">
+    <section class="box status-card member-profile-card">
       <div class="section-head">
         <div>
+          <p class="eyebrow">Member Dashboard</p>
           <h2>${escapeHtml(member.name)}</h2>
           <p class="muted">${escapeHtml(member.district)} / ${escapeHtml(member.taluk)}</p>
         </div>
@@ -221,7 +222,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     ${renderTalukTeamContact(member, talukTeam)}
     ${changePasswordForm()}
     ${correctionForm(member)}
-    <section class="box public-form-card">
+    <section class="box public-form-card member-dashboard-card audit-card">
       <h2>My audit timeline</h2>
       <div class="timeline">
         ${auditLogs.map((log) => `

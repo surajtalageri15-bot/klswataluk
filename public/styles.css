@@ -380,6 +380,104 @@ a.primary {
   background: var(--green-soft);
 }
 
+.member-login-shell .member-profile-card {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+.member-login-shell .member-profile-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 132px;
+  background: linear-gradient(135deg, rgba(13, 79, 56, 0.98), rgba(20, 108, 76, 0.78));
+}
+
+.member-login-shell .member-profile-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.member-login-shell .member-profile-card > .section-head {
+  min-height: 132px;
+  align-items: flex-start;
+  padding: 24px;
+  border-bottom: 0;
+  color: #fff;
+}
+
+.member-login-shell .member-profile-card .section-head h2 {
+  margin: 4px 0;
+  color: #fff;
+  font-size: clamp(26px, 4vw, 38px);
+}
+
+.member-login-shell .member-profile-card .section-head .muted,
+.member-login-shell .member-profile-card .section-head .eyebrow {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.member-login-shell .member-profile-card .section-head .badge {
+  background: #fff;
+  color: var(--green-dark);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.member-login-shell .member-profile-card > .status-grid,
+.member-login-shell .member-profile-card > .notice,
+.member-login-shell .member-profile-card > .detail-grid,
+.member-login-shell .member-profile-card > .modal-actions {
+  margin-left: 22px;
+  margin-right: 22px;
+}
+
+.member-login-shell .member-profile-card > .status-grid {
+  margin-top: 18px;
+}
+
+.member-login-shell .member-profile-card > .modal-actions {
+  padding-bottom: 22px;
+}
+
+.member-login-shell .member-dashboard-card {
+  border-left: 4px solid rgba(20, 108, 76, 0.58);
+}
+
+.member-login-shell .contact-team-card {
+  border-left-color: var(--gold);
+}
+
+.member-login-shell .password-card {
+  border-left-color: var(--blue);
+}
+
+.member-login-shell .correction-card {
+  border-left-color: var(--red);
+}
+
+.member-login-shell .audit-card {
+  border-left-color: var(--green-dark);
+}
+
+.member-login-shell .notice-card {
+  border-left-color: var(--gold);
+}
+
+.member-login-shell .contact-team-card textarea[readonly] {
+  background: #f4f8f2;
+  color: var(--text);
+}
+
+.member-login-shell .audit-card .timeline {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.member-login-shell .audit-card .timeline-item {
+  border-left-width: 4px;
+  min-height: 120px;
+}
+
 .public-link-card {
   display: grid;
   gap: 12px;
@@ -1301,6 +1399,23 @@ tr:last-child td {
   .member-login-shell .primary,
   .member-login-shell .secondary {
     width: 100%;
+  }
+
+  .member-login-shell .member-profile-card > .section-head {
+    flex-direction: column;
+    min-height: 170px;
+  }
+
+  .member-login-shell .member-profile-card > .status-grid,
+  .member-login-shell .member-profile-card > .notice,
+  .member-login-shell .member-profile-card > .detail-grid,
+  .member-login-shell .member-profile-card > .modal-actions {
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+
+  .member-login-shell .audit-card .timeline {
+    grid-template-columns: 1fr;
   }
 
   .home-shell {
