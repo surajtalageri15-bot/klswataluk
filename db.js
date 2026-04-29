@@ -153,6 +153,21 @@ function toPresidentMessage(row) {
   };
 }
 
+function toTeamChatMessage(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    body: row.body || "",
+    authorId: row.author_id || "",
+    authorName: row.author_name || "",
+    authorRole: row.author_role || "",
+    district: row.district || "",
+    taluk: row.taluk || "",
+    createdAt: row.created_at
+  };
+}
+
 function normalizeMemberLocation(member) {
   const district = canonicalDistrict(member.district);
   return {
@@ -283,6 +298,17 @@ async function initDb() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists team_chat_messages (
+      id text primary key,
+      body text not null,
+      author_id text,
+      author_name text,
+      author_role text,
+      district text,
+      taluk text,
+      created_at timestamptz not null default now()
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
@@ -293,6 +319,7 @@ async function initDb() {
     create index if not exists idx_data_correction_requests_status on data_correction_requests (status);
     create index if not exists idx_data_correction_requests_member on data_correction_requests (member_id);
     create index if not exists idx_president_messages_active on president_messages (active, created_at desc);
+    create index if not exists idx_team_chat_messages_scope on team_chat_messages (district, taluk, created_at desc);
   `);
 
   await pool.query(`
@@ -1484,6 +1511,104 @@ async function listPresidentMessagesForMember(member, limit = 5) {
   return messages.filter((message) => messageVisibleToMember(message, member)).slice(0, limit);
 }
 
+function chatScopeForUser(user) {
+  if (!user) return { district: "", taluk: "" };
+  const district = user.role === "division" ? "" : canonicalDistrict(user.district || "");
+  const taluk = user.role === "taluk" ? normalizedTaluk(district, user.taluk || "") : "";
+  return { district, taluk };
+}
+
+async function listTeamChatMessages(user, limit = 100) {
+  const safeLimit = Math.min(200, Math.max(20, Number(limit || 100)));
+  if (hasPostgres) {
+    if (["admin", "state_president"].includes(user.role)) {
+      const result = await pool.query("select * from team_chat_messages order by created_at desc limit $1", [safeLimit]);
+      return result.rows.map(toTeamChatMessage).reverse();
+    }
+    if (user.role === "division") {
+      const districts = divisionDistricts(user.district);
+      if (!districts.length) return [];
+      const placeholders = districts.map((_, index) => `$${index + 1}`).join(", ");
+      const result = await pool.query(
+        `select * from team_chat_messages
+         where district in (${placeholders})
+         order by created_at desc limit $${districts.length + 1}`,
+        [...districts, safeLimit]
+      );
+      return result.rows.map(toTeamChatMessage).reverse();
+    }
+    const district = canonicalDistrict(user.district || "");
+    const taluk = user.role === "taluk" ? normalizedTaluk(district, user.taluk || "") : "";
+    const result = await pool.query(
+      `select * from team_chat_messages
+       where district = $1 and ($2 = '' or lower(coalesce(taluk, '')) = lower($2))
+       order by created_at desc limit $3`,
+      [district, taluk, safeLimit]
+    );
+    return result.rows.map(toTeamChatMessage).reverse();
+  }
+
+  const db = await readJsonDb();
+  db.teamChatMessages ||= [];
+  let rows = db.teamChatMessages;
+  if (!["admin", "state_president"].includes(user.role)) {
+    if (user.role === "division") {
+      const districts = divisionDistricts(user.district);
+      rows = rows.filter((item) => districts.includes(canonicalDistrict(item.district)));
+    } else {
+      const district = canonicalDistrict(user.district || "");
+      const taluk = user.role === "taluk" ? normalizedTaluk(district, user.taluk || "") : "";
+      rows = rows.filter((item) => canonicalDistrict(item.district) === district
+        && (!taluk || normalizedTaluk(district, item.taluk) === taluk));
+    }
+  }
+  return rows
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
+    .slice(-safeLimit);
+}
+
+async function createTeamChatMessage(user, body) {
+  const text = String(body || "").trim();
+  if (!text) {
+    const error = new Error("Message is required");
+    error.status = 400;
+    throw error;
+  }
+  if (text.length > 1000) {
+    const error = new Error("Message must be 1000 characters or less");
+    error.status = 400;
+    throw error;
+  }
+
+  const scope = chatScopeForUser(user);
+  const item = {
+    id: crypto.randomUUID(),
+    body: text,
+    authorId: user.id,
+    authorName: user.name || user.username,
+    authorRole: user.role,
+    district: scope.district,
+    taluk: scope.taluk,
+    createdAt: new Date().toISOString()
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into team_chat_messages (
+        id, body, author_id, author_name, author_role, district, taluk, created_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+      [item.id, item.body, item.authorId, item.authorName, item.authorRole, item.district, item.taluk, item.createdAt]
+    );
+    return toTeamChatMessage(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.teamChatMessages ||= [];
+  db.teamChatMessages.push(item);
+  await writeJsonDb(db);
+  return item;
+}
+
 async function listUsers(viewer = null) {
   if (hasPostgres) {
     if (viewer?.role === "division") {
@@ -1948,6 +2073,8 @@ module.exports = {
   createPresidentMessage,
   listPresidentMessages,
   listPresidentMessagesForMember,
+  listTeamChatMessages,
+  createTeamChatMessage,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,

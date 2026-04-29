@@ -7,6 +7,7 @@ const state = {
   pending: { rows: [], page: 1, size: 25, total: 0 },
   members: { rows: [], page: 1, size: 25, total: 0 },
   teamRequests: [],
+  teamChatMessages: [],
   auditLogs: [],
   presidentMessages: [],
   missingData: { rows: [], total: 0 },
@@ -239,6 +240,11 @@ async function loadPresidentMessages() {
   state.presidentMessages = data.messages || [];
 }
 
+async function loadTeamChat() {
+  const data = await request("/api/team-chat?limit=100");
+  state.teamChatMessages = data.messages || [];
+}
+
 function renderApp() {
   app.innerHTML = `
     <section class="app-shell">
@@ -257,6 +263,7 @@ function renderApp() {
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
+          ${["admin", "state_president", "division", "district", "taluk"].includes(state.user.role) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${["admin", "division"].includes(state.user.role) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
@@ -288,6 +295,7 @@ function renderApp() {
         await loadPresidentMessages();
       }
       if (state.tab === "users") await loadUsers();
+      if (state.tab === "teamChat") await loadTeamChat();
       if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
       if (state.tab === "audit") await loadAuditLogs();
@@ -309,6 +317,7 @@ function renderApp() {
   if (state.tab === "missingData") renderMissingData();
   if (state.tab === "messages") renderMessages();
   if (state.tab === "users") renderUsers();
+  if (state.tab === "teamChat") renderTeamChat();
   if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
   if (state.tab === "audit") renderAuditLogs();
@@ -323,6 +332,7 @@ function pageTitle() {
   if (state.tab === "missingData") return "Missing Data Report";
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "users") return "Taluk Team Assignment";
+  if (state.tab === "teamChat") return "Team Chat";
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
   if (state.tab === "audit") return state.user.role === "taluk" ? "Taluk Activity Log" : "Audit History";
@@ -519,6 +529,69 @@ function renderMessages() {
       }
     });
   }
+}
+
+function chatScopeLabel(message) {
+  if (message.taluk) return `${message.district} / ${message.taluk}`;
+  if (message.district) return message.district;
+  return "State";
+}
+
+function renderTeamChat() {
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <div>
+          <h2>Taluk team group chat</h2>
+          <p class="muted">Messages are visible according to your login scope.</p>
+        </div>
+        <button class="secondary" id="refreshTeamChat">Refresh</button>
+      </div>
+      <div class="chat-list">
+        ${state.teamChatMessages.map((message) => `
+          <article class="chat-message">
+            <div class="chat-meta">
+              <strong>${escapeHtml(message.authorName || "Team")}</strong>
+              <span class="badge">${escapeHtml(roleLabels[message.authorRole] || message.authorRole)}</span>
+              <span class="muted">${escapeHtml(chatScopeLabel(message))}</span>
+              <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
+            </div>
+            <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+          </article>
+        `).join("") || `<p class="muted">No chat messages yet.</p>`}
+      </div>
+      <form id="teamChatForm" class="chat-form">
+        <label>Message
+          <textarea name="body" rows="3" maxlength="1000" required placeholder="Type message for your team group"></textarea>
+        </label>
+        <div class="message" id="teamChatMessage"></div>
+        <div class="actions">
+          <button class="primary" type="submit">Send message</button>
+        </div>
+      </form>
+    </section>
+  `;
+
+  document.querySelector("#refreshTeamChat").addEventListener("click", async () => {
+    await loadTeamChat();
+    renderTeamChat();
+  });
+  document.querySelector("#teamChatForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#teamChatMessage");
+    message.textContent = "";
+    try {
+      await request("/api/team-chat", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget)))
+      });
+      event.currentTarget.reset();
+      await loadTeamChat();
+      renderTeamChat();
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
 }
 
 function renderDashboard() {

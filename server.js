@@ -103,6 +103,10 @@ function canCorrectTaluks(user) {
   return user && ["admin", "division"].includes(user.role);
 }
 
+function canUseTeamChat(user) {
+  return user && ["admin", "state_president", "division", "district", "taluk"].includes(user.role);
+}
+
 function canSeeTeamRequest(user, request) {
   if (user?.role === "admin") return true;
   if (user?.role === "division") {
@@ -488,6 +492,20 @@ async function api(req, res, pathname) {
       createdByName: user.name
     });
     return json(res, 201, { message });
+  }
+
+  if (pathname === "/api/team-chat" && req.method === "GET") {
+    if (!canUseTeamChat(user)) return json(res, 403, { error: "Team chat access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, {
+      messages: await store.listTeamChatMessages(user, Number(url.searchParams.get("limit") || 100))
+    });
+  }
+
+  if (pathname === "/api/team-chat" && req.method === "POST") {
+    if (!canUseTeamChat(user)) return json(res, 403, { error: "Team chat access required" });
+    const body = asObject(await parseBody(req));
+    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body) });
   }
 
   if (pathname === "/api/members" && req.method === "GET") {

@@ -727,6 +727,38 @@ textarea {
   margin-top: 8px;
 }
 
+.chat-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.chat-message {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcf8;
+}
+
+.chat-message p {
+  margin: 8px 0 0;
+  line-height: 1.55;
+}
+
+.chat-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-form {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
 .account-meta {
   display: flex;
   gap: 6px;
