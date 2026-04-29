@@ -184,6 +184,29 @@ function toMemberNote(row) {
   };
 }
 
+function toMemberProblem(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    memberId: row.member_id || "",
+    memberName: row.member_name || "",
+    lsNumber: row.ls_number || "",
+    phoneNumber: row.phone_number || "",
+    district: row.district || "",
+    taluk: row.taluk || "",
+    category: row.category || "General",
+    subject: row.subject || "",
+    description: row.description || "",
+    status: row.status || "Submitted",
+    response: row.response || "",
+    reviewedById: row.reviewed_by_id || "",
+    reviewedByName: row.reviewed_by_name || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 function normalizeMemberLocation(member) {
   const district = canonicalDistrict(member.district);
   return {
@@ -337,6 +360,25 @@ async function initDb() {
       created_at timestamptz not null default now()
     );
 
+    create table if not exists member_problems (
+      id text primary key,
+      member_id text not null,
+      member_name text not null,
+      ls_number text,
+      phone_number text,
+      district text,
+      taluk text,
+      category text not null default 'General',
+      subject text not null,
+      description text not null,
+      status text not null default 'Submitted',
+      response text,
+      reviewed_by_id text,
+      reviewed_by_name text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
@@ -349,6 +391,8 @@ async function initDb() {
     create index if not exists idx_president_messages_active on president_messages (active, created_at desc);
     create index if not exists idx_team_chat_messages_scope on team_chat_messages (district, taluk, created_at desc);
     create index if not exists idx_member_notes_member on member_notes (member_id, created_at desc);
+    create index if not exists idx_member_problems_scope on member_problems (district, taluk, status, created_at desc);
+    create index if not exists idx_member_problems_member on member_problems (member_id, created_at desc);
   `);
 
   await pool.query(`
@@ -1713,6 +1757,144 @@ async function createMemberNote(user, memberId, noteInput) {
   return { member, note: item };
 }
 
+async function createMemberProblem(member, input = {}) {
+  const subject = String(input.subject || "").trim();
+  const description = String(input.description || "").trim();
+  const category = String(input.category || "General").trim() || "General";
+  if (!subject) {
+    const error = new Error("Subject is required");
+    error.status = 400;
+    throw error;
+  }
+  if (!description) {
+    const error = new Error("Problem details are required");
+    error.status = 400;
+    throw error;
+  }
+  const normalized = normalizeMemberLocation(member);
+  const item = {
+    id: crypto.randomUUID(),
+    memberId: member.id,
+    memberName: member.name,
+    lsNumber: member.lsNumber || "",
+    phoneNumber: member.phoneNumber || "",
+    district: normalized.district,
+    taluk: normalized.taluk,
+    category,
+    subject,
+    description,
+    status: "Submitted",
+    response: "",
+    reviewedById: "",
+    reviewedByName: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into member_problems (
+        id, member_id, member_name, ls_number, phone_number, district, taluk,
+        category, subject, description, status, response, reviewed_by_id, reviewed_by_name,
+        created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Submitted', '', '', '', $11, $11) returning *`,
+      [
+        item.id, item.memberId, item.memberName, item.lsNumber, item.phoneNumber, item.district, item.taluk,
+        item.category, item.subject, item.description, item.createdAt
+      ]
+    );
+    return toMemberProblem(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.memberProblems ||= [];
+  db.memberProblems.unshift(item);
+  await writeJsonDb(db);
+  return item;
+}
+
+function problemVisibleTo(user, problem) {
+  if (["admin", "state_president"].includes(user.role)) return true;
+  const district = canonicalDistrict(problem.district || "");
+  if (user.role === "division") return divisionDistricts(user.district).includes(district);
+  if (user.role === "district") return canonicalDistrict(user.district) === district;
+  if (user.role === "taluk") return canonicalDistrict(user.district) === district
+    && normalizedTaluk(district, user.taluk) === normalizedTaluk(district, problem.taluk);
+  return false;
+}
+
+async function listMemberProblems(userOrMember, filters = {}) {
+  const search = String(filters.search || "").trim().toLowerCase();
+  const status = String(filters.status || "").trim();
+  const memberId = String(filters.memberId || "").trim();
+  const limit = Math.min(500, Math.max(25, Number(filters.limit || 200)));
+  let rows;
+
+  if (hasPostgres) {
+    rows = (await pool.query("select * from member_problems order by case status when 'Submitted' then 0 when 'In review' then 1 else 2 end, created_at desc")).rows
+      .map(toMemberProblem);
+  } else {
+    const db = await readJsonDb();
+    db.memberProblems ||= [];
+    rows = [...db.memberProblems].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  }
+
+  if (userOrMember.role === "member") rows = rows.filter((row) => row.memberId === userOrMember.id);
+  else rows = rows.filter((row) => problemVisibleTo(userOrMember, row));
+  if (memberId) rows = rows.filter((row) => row.memberId === memberId);
+  if (status) rows = rows.filter((row) => row.status === status);
+  if (search) {
+    rows = rows.filter((row) => [
+      row.memberName, row.lsNumber, row.phoneNumber, row.district, row.taluk,
+      row.category, row.subject, row.description, row.status, row.response
+    ].some((value) => String(value || "").toLowerCase().includes(search)));
+  }
+  return rows.slice(0, limit);
+}
+
+async function updateMemberProblem(user, id, changes = {}) {
+  const status = String(changes.status || "").trim();
+  const response = String(changes.response || "").trim();
+  const allowed = ["Submitted", "In review", "Resolved", "Rejected"];
+  if (!allowed.includes(status)) {
+    const error = new Error("Use Submitted, In review, Resolved or Rejected");
+    error.status = 400;
+    throw error;
+  }
+
+  let current;
+  if (hasPostgres) {
+    current = toMemberProblem((await pool.query("select * from member_problems where id = $1", [id])).rows[0]);
+  } else {
+    const db = await readJsonDb();
+    db.memberProblems ||= [];
+    current = db.memberProblems.find((item) => item.id === id) || null;
+  }
+  if (!current || !problemVisibleTo(user, current)) return null;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update member_problems
+       set status = $2, response = $3, reviewed_by_id = $4, reviewed_by_name = $5, updated_at = now()
+       where id = $1 returning *`,
+      [id, status, response, user.id || "", user.name || user.username || ""]
+    );
+    return toMemberProblem(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  const target = db.memberProblems.find((item) => item.id === id);
+  Object.assign(target, {
+    status,
+    response,
+    reviewedById: user.id || "",
+    reviewedByName: user.name || user.username || "",
+    updatedAt: new Date().toISOString()
+  });
+  await writeJsonDb(db);
+  return target;
+}
+
 async function listUsers(viewer = null) {
   if (hasPostgres) {
     if (viewer?.role === "division") {
@@ -2179,7 +2361,8 @@ const backupTables = [
   "data_correction_requests",
   "president_messages",
   "team_chat_messages",
-  "member_notes"
+  "member_notes",
+  "member_problems"
 ];
 
 const jsonBackupKeys = {
@@ -2191,7 +2374,8 @@ const jsonBackupKeys = {
   data_correction_requests: "dataCorrectionRequests",
   president_messages: "presidentMessages",
   team_chat_messages: "teamChatMessages",
-  member_notes: "memberNotes"
+  member_notes: "memberNotes",
+  member_problems: "memberProblems"
 };
 
 async function createBackup(createdBy = {}) {
@@ -2277,7 +2461,8 @@ async function restoreBackup(backup, restoredBy = {}) {
       dataCorrectionRequests: backup.tables.data_correction_requests || [],
       presidentMessages: backup.tables.president_messages || [],
       teamChatMessages: backup.tables.team_chat_messages || [],
-      memberNotes: backup.tables.member_notes || []
+      memberNotes: backup.tables.member_notes || [],
+      memberProblems: backup.tables.member_problems || []
     };
     nextDb.meta.updatedAt = new Date().toISOString();
     await writeJsonDb(nextDb);
@@ -2355,6 +2540,9 @@ module.exports = {
   createTeamChatMessage,
   listMemberNotes,
   createMemberNote,
+  createMemberProblem,
+  listMemberProblems,
+  updateMemberProblem,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,

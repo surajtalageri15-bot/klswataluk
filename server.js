@@ -413,7 +413,25 @@ async function api(req, res, pathname) {
     });
     const presidentMessages = await store.listPresidentMessagesForMember(member);
     const talukTeam = await store.findTalukTeamContactForMember(member);
-    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages, talukTeam });
+    const problems = await store.listMemberProblems({ ...member, role: "member" }, { limit: 100 });
+    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages, talukTeam, problems });
+  }
+
+  if (pathname === "/api/member-problems" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    const body = asObject(await parseBody(req));
+    const problem = await store.createMemberProblem(member, body);
+    await tryCreateAuditLogs([{
+      memberId: member.id,
+      memberName: member.name,
+      action: "Problem submitted",
+      field: problem.category,
+      oldValue: "",
+      newValue: `${problem.subject}: ${problem.description}`,
+      ...auditActor({ id: member.id, name: member.name, role: "member" })
+    }]);
+    return json(res, 201, { problem });
   }
 
   if (pathname === "/api/member-correction-request" && req.method === "POST") {
@@ -475,6 +493,27 @@ async function api(req, res, pathname) {
 
   if (pathname === "/api/dashboard" && req.method === "GET") {
     return json(res, 200, await store.getDashboard(user));
+  }
+
+  if (pathname === "/api/member-problems" && req.method === "GET") {
+    if (!["admin", "state_president", "division", "district"].includes(user.role)) return json(res, 403, { error: "Member problems access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, {
+      problems: await store.listMemberProblems(user, {
+        search: (url.searchParams.get("search") || "").trim(),
+        status: (url.searchParams.get("status") || "").trim(),
+        limit: Number(url.searchParams.get("limit") || 200)
+      })
+    });
+  }
+
+  const memberProblemMatch = pathname.match(/^\/api\/member-problems\/([^/]+)$/);
+  if (memberProblemMatch && req.method === "PUT") {
+    if (!["admin", "state_president", "division", "district"].includes(user.role)) return json(res, 403, { error: "Leadership access required" });
+    const body = asObject(await parseBody(req));
+    const problem = await store.updateMemberProblem(user, memberProblemMatch[1], body);
+    if (!problem) return json(res, 404, { error: "Problem not found or outside your area" });
+    return json(res, 200, { problem });
   }
 
   if (pathname === "/api/admin/backup" && req.method === "GET") {

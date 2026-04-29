@@ -111,6 +111,56 @@ function changePasswordForm() {
   `;
 }
 
+function memberProblemForm() {
+  return `
+    <form id="memberProblemForm" class="box public-form-card member-dashboard-card problem-card">
+      <div class="section-head">
+        <div>
+          <h2>Submit Problem to Leadership</h2>
+          <p class="muted">Your issue will be visible to the association leadership body for review.</p>
+        </div>
+      </div>
+      <div class="two">
+        <label>Category
+          <select name="category">
+            <option>Service issue</option>
+            <option>Department issue</option>
+            <option>Payment / fee issue</option>
+            <option>Member data issue</option>
+            <option>Other</option>
+          </select>
+        </label>
+        <label>Subject * <input name="subject" required maxlength="160" placeholder="Short problem title"></label>
+      </div>
+      <label>Problem details * <textarea name="description" rows="5" required placeholder="Explain the issue clearly"></textarea></label>
+      <div class="message" id="memberProblemMessage"></div>
+      <button class="primary" type="submit">Submit problem</button>
+    </form>
+  `;
+}
+
+function renderMyProblems(problems = []) {
+  return `
+    <section class="box public-form-card member-dashboard-card problem-list-card">
+      <div class="section-head">
+        <h2>My submitted problems</h2>
+        <span class="badge">${problems.length} Total</span>
+      </div>
+      <div class="timeline">
+        ${problems.map((problem) => `
+          <div class="timeline-item">
+            <span class="badge">${escapeHtml(problem.status)}</span>
+            <span class="muted">${escapeHtml(problem.category)} / ${escapeHtml(new Date(problem.createdAt).toLocaleString())}</span>
+            <strong>${escapeHtml(problem.subject)}</strong>
+            <p>${escapeHtml(problem.description).replace(/\n/g, "<br>")}</p>
+            ${problem.response ? `<p class="notice">${escapeHtml(problem.response)}</p>` : ""}
+          </div>
+        `).join("") || `<p class="muted">No problems submitted yet.</p>`}
+      </div>
+    </section>
+  `;
+}
+
 function memberSupportMessage(member, talukTeam) {
   return [
     `Dear ${talukTeam?.name || "Taluk Technical Team"},`,
@@ -202,7 +252,7 @@ function renderPresidentMessages(messages = []) {
   `;
 }
 
-function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null) {
+function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = []) {
   setMemberDashboardMode(true);
   dashboard.innerHTML = `
     ${renderPresidentMessages(presidentMessages)}
@@ -226,6 +276,8 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       </div>
     </section>
     ${renderTalukTeamContact(member, talukTeam)}
+    ${memberProblemForm()}
+    ${renderMyProblems(problems)}
     ${changePasswordForm()}
     ${correctionForm(member)}
     <section class="box public-form-card member-dashboard-card audit-card">
@@ -280,6 +332,25 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     });
   }
 
+  const problemForm = document.querySelector("#memberProblemForm");
+  problemForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#memberProblemMessage");
+    message.textContent = "";
+    try {
+      await request("/api/member-problems", {
+        method: "POST",
+        body: JSON.stringify(formObject(problemForm))
+      });
+      problemForm.reset();
+      message.textContent = "Problem submitted to leadership.";
+      const session = await request("/api/member-me");
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || []);
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
+
   const changePassword = document.querySelector("#changePasswordForm");
   changePassword.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -301,7 +372,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
 async function loadMemberSession() {
   try {
     const data = await request("/api/member-me");
-    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null);
+    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null, data.problems || []);
   } catch {
     dashboard.innerHTML = "";
     setMemberDashboardMode(false);
@@ -333,7 +404,7 @@ loginForm.addEventListener("submit", async (event) => {
     });
     loginForm.reset();
     const session = await request("/api/member-me");
-    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null);
+    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || []);
   } catch (error) {
     loginMessage.textContent = error.message;
   }

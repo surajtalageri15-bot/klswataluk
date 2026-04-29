@@ -13,6 +13,8 @@ const state = {
   missingData: { rows: [], total: 0 },
   duplicates: { summary: { totalGroups: 0, phoneNumber: 0, lsNumber: 0, loginId: 0, name: 0 }, groups: [] },
   dataCorrectionRequests: [],
+  memberProblems: [],
+  problemFilters: { search: "", status: "" },
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" },
   userFilters: { search: "", role: "", district: "" },
@@ -262,6 +264,17 @@ async function loadTeamChat() {
   state.teamChatMessages = data.messages || [];
 }
 
+async function loadMemberProblems() {
+  if (!["admin", "state_president", "division", "district"].includes(state.user.role)) return;
+  const params = new URLSearchParams({
+    search: state.problemFilters.search,
+    status: state.problemFilters.status,
+    limit: "300"
+  });
+  const data = await request(`/api/member-problems?${params.toString()}`);
+  state.memberProblems = data.problems || [];
+}
+
 function renderApp() {
   const unreadChat = unreadChatCount();
   app.innerHTML = `
@@ -282,6 +295,7 @@ function renderApp() {
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${["admin", "state_president", "division", "district", "taluk"].includes(state.user.role) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
+          ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">Member Problems</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${["admin", "division"].includes(state.user.role) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
@@ -318,6 +332,7 @@ function renderApp() {
       }
       if (state.tab === "users") await loadUsers();
       if (state.tab === "teamChat") await loadTeamChat();
+      if (state.tab === "memberProblems") await loadMemberProblems();
       if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
       if (state.tab === "audit") await loadAuditLogs();
@@ -340,6 +355,7 @@ function renderApp() {
   if (state.tab === "messages") renderMessages();
   if (state.tab === "users") renderUsers();
   if (state.tab === "teamChat") renderTeamChat();
+  if (state.tab === "memberProblems") renderMemberProblems();
   if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
   if (state.tab === "audit") renderAuditLogs();
@@ -356,6 +372,7 @@ function pageTitle() {
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "teamChat") return "Team Chat";
+  if (state.tab === "memberProblems") return "Member Problems";
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
   if (state.tab === "audit") return state.user.role === "taluk" ? "Taluk Activity Log" : "Audit History";
@@ -655,6 +672,83 @@ function renderTeamChat() {
     } catch (error) {
       message.textContent = error.message;
     }
+  });
+}
+
+function renderMemberProblems() {
+  const openCount = state.memberProblems.filter((item) => ["Submitted", "In review"].includes(item.status)).length;
+  const canUpdate = ["admin", "state_president", "division", "district"].includes(state.user.role);
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <div>
+          <h2>Member problems to leadership</h2>
+          <p class="muted">Problems submitted from member login. Review and reply from here.</p>
+        </div>
+        <span class="badge">${openCount} Open</span>
+      </div>
+      <div class="toolbar">
+        <label>Search <input id="problemSearch" value="${escapeHtml(state.problemFilters.search)}" placeholder="Member, LS, subject, taluk"></label>
+        <label>Status <select id="problemStatus"><option value="">All status</option>${optionList(["Submitted", "In review", "Resolved", "Rejected"], state.problemFilters.status)}</select></label>
+        <span></span>
+        <button class="secondary" id="applyProblemFilters">Apply</button>
+      </div>
+      <div class="problem-grid">
+        ${state.memberProblems.map((problem) => `
+          <article class="problem-card-ui">
+            <div class="section-head">
+              <div>
+                <span class="badge">${escapeHtml(problem.status)}</span>
+                <h2>${escapeHtml(problem.subject)}</h2>
+                <p class="muted">${escapeHtml(problem.memberName)} / ${escapeHtml(problem.lsNumber)} / ${escapeHtml(problem.district)} / ${escapeHtml(problem.taluk)}</p>
+              </div>
+            </div>
+            <p>${escapeHtml(problem.description).replace(/\n/g, "<br>")}</p>
+            <div class="mini-list">
+              <span><strong>Category:</strong> ${escapeHtml(problem.category)}</span>
+              <span><strong>Phone:</strong> ${escapeHtml(problem.phoneNumber || "-")}</span>
+              <span><strong>Submitted:</strong> ${escapeHtml(new Date(problem.createdAt).toLocaleString())}</span>
+              ${problem.reviewedByName ? `<span><strong>Reviewed by:</strong> ${escapeHtml(problem.reviewedByName)}</span>` : ""}
+            </div>
+            ${problem.response ? `<p class="notice">${escapeHtml(problem.response)}</p>` : ""}
+            ${canUpdate ? `
+              <div class="problem-review">
+                <label>Status
+                  <select data-problem-status="${problem.id}">
+                    ${optionList(["Submitted", "In review", "Resolved", "Rejected"], problem.status)}
+                  </select>
+                </label>
+                <label>Leadership response
+                  <textarea data-problem-response="${problem.id}" rows="3" placeholder="Reply or action taken">${escapeHtml(problem.response || "")}</textarea>
+                </label>
+                <button class="primary" data-save-problem="${problem.id}">Save response</button>
+              </div>
+            ` : ""}
+          </article>
+        `).join("") || `<p class="muted">No member problems found.</p>`}
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyProblemFilters").addEventListener("click", async () => {
+    state.problemFilters.search = document.querySelector("#problemSearch").value;
+    state.problemFilters.status = document.querySelector("#problemStatus").value;
+    await loadMemberProblems();
+    renderApp();
+  });
+  document.querySelectorAll("[data-save-problem]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.saveProblem;
+      await request(`/api/member-problems/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          status: document.querySelector(`[data-problem-status="${id}"]`).value,
+          response: document.querySelector(`[data-problem-response="${id}"]`).value
+        })
+      });
+      await loadMemberProblems();
+      renderApp();
+    });
   });
 }
 

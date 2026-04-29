@@ -456,6 +456,11 @@ a.primary {
   border-left-color: var(--red);
 }
 
+.member-login-shell .problem-card,
+.member-login-shell .problem-list-card {
+  border-left-color: #6d5bd0;
+}
+
 .member-login-shell .audit-card {
   border-left-color: var(--green-dark);
 }
@@ -476,6 +481,35 @@ a.primary {
 .member-login-shell .audit-card .timeline-item {
   border-left-width: 4px;
   min-height: 120px;
+}
+
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 14px;
+}
+
+.problem-card-ui {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbf7 100%);
+  padding: 14px;
+  box-shadow: var(--shadow-soft);
+}
+
+.problem-card-ui h2 {
+  margin: 8px 0 4px;
+  font-size: 19px;
+  color: var(--green-dark);
+}
+
+.problem-review {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
 .public-link-card {
