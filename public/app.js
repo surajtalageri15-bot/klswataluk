@@ -8,6 +8,7 @@ const state = {
   members: { rows: [], page: 1, size: 25, total: 0 },
   teamRequests: [],
   auditLogs: [],
+  presidentMessages: [],
   missingData: { rows: [], total: 0 },
   duplicates: { summary: { totalGroups: 0, phoneNumber: 0, lsNumber: 0, loginId: 0, name: 0 }, groups: [] },
   dataCorrectionRequests: [],
@@ -232,6 +233,12 @@ async function loadDataCorrectionRequests() {
   state.dataCorrectionRequests = data.requests;
 }
 
+async function loadPresidentMessages() {
+  if (!["admin", "state_president"].includes(state.user.role)) return;
+  const data = await request("/api/president-messages");
+  state.presidentMessages = data.messages || [];
+}
+
 function renderApp() {
   app.innerHTML = `
     <section class="app-shell">
@@ -278,6 +285,7 @@ function renderApp() {
       if (state.tab === "messages") {
         await loadDashboard();
         await loadUsers();
+        await loadPresidentMessages();
       }
       if (state.tab === "users") await loadUsers();
       if (state.tab === "duplicates") await loadDuplicates();
@@ -436,6 +444,7 @@ function renderMessages() {
           </label>
           <div class="actions">
             <button class="primary" id="copyBroadcastMessage">Copy message</button>
+            ${isMemberAudience ? `<button class="secondary" id="publishBroadcastMessage">Publish to member login</button>` : ""}
             ${isMemberAudience ? `<a class="secondary" href="${exportUrl("/api/exports/members", exportParams)}">Download member CSV</a>` : ""}
           </div>
           <div class="message success" id="broadcastMessageStatus"></div>
@@ -449,7 +458,17 @@ function renderMessages() {
           <div class="list-row"><span>Pending Verification</span><span class="badge">${state.dashboard.summary.statusCounts?.["Pending verification"] || 0}</span></div>
           <div class="list-row"><span>Needs Correction</span><span class="badge">${state.dashboard.summary.statusCounts?.["Needs correction"] || 0}</span></div>
         </div>
-        <p class="muted">Use copy message for WhatsApp groups or download member CSV for phone/contact list.</p>
+        <h2>Recent published notices</h2>
+        <div class="timeline">
+          ${state.presidentMessages.map((message) => `
+            <div class="timeline-item">
+              <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())} / ${escapeHtml(messageAudienceLabels[message.audience] || message.audience)}</span>
+              <strong>${escapeHtml(message.subject)}</strong>
+              <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+            </div>
+          `).join("") || `<p class="muted">No published notices yet.</p>`}
+        </div>
+        <p class="muted">Use copy message for WhatsApp groups, publish for member login, or download member CSV for phone/contact list.</p>
       </section>
     </div>
   `;
@@ -477,6 +496,29 @@ function renderMessages() {
     await copyText(`${subject.value}\n\n${body.value}`);
     document.querySelector("#broadcastMessageStatus").textContent = "Message copied. Paste in WhatsApp/SMS group.";
   });
+  const publishButton = document.querySelector("#publishBroadcastMessage");
+  if (publishButton) {
+    publishButton.addEventListener("click", async () => {
+      const status = document.querySelector("#broadcastMessageStatus");
+      status.textContent = "";
+      try {
+        await request("/api/president-messages", {
+          method: "POST",
+          body: JSON.stringify({
+            audience: audience.value,
+            subject: subject.value,
+            body: body.value
+          })
+        });
+        await loadPresidentMessages();
+        renderMessages();
+        document.querySelector("#broadcastMessageStatus").textContent = "Published. Members will see this notice after login.";
+      } catch (error) {
+        status.textContent = error.message;
+        status.classList.remove("success");
+      }
+    });
+  }
 }
 
 function renderDashboard() {

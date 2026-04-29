@@ -137,6 +137,22 @@ function toDataCorrectionRequest(row) {
   };
 }
 
+function toPresidentMessage(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    audience: row.audience || "all_members",
+    subject: row.subject || "",
+    body: row.body || "",
+    active: row.active !== false,
+    createdById: row.created_by_id || "",
+    createdByName: row.created_by_name || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 function normalizeMemberLocation(member) {
   const district = canonicalDistrict(member.district);
   return {
@@ -255,6 +271,18 @@ async function initDb() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists president_messages (
+      id text primary key,
+      audience text not null,
+      subject text not null,
+      body text not null,
+      active boolean not null default true,
+      created_by_id text,
+      created_by_name text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
@@ -264,6 +292,7 @@ async function initDb() {
     create index if not exists idx_member_audit_logs_created on member_audit_logs (created_at desc);
     create index if not exists idx_data_correction_requests_status on data_correction_requests (status);
     create index if not exists idx_data_correction_requests_member on data_correction_requests (member_id);
+    create index if not exists idx_president_messages_active on president_messages (active, created_at desc);
   `);
 
   await pool.query(`
@@ -1371,6 +1400,85 @@ async function updateDataCorrectionRequest(id, changes) {
   return target;
 }
 
+const presidentMessageAudiences = new Set([
+  "all_members",
+  "active_members",
+  "pending_members",
+  "correction_members",
+  "all_teams"
+]);
+
+function normalizePresidentMessage(message) {
+  return {
+    id: crypto.randomUUID(),
+    audience: presidentMessageAudiences.has(message.audience) ? message.audience : "all_members",
+    subject: String(message.subject || "State President Notice").trim(),
+    body: String(message.body || "").trim(),
+    active: message.active !== false,
+    createdById: String(message.createdById || ""),
+    createdByName: String(message.createdByName || ""),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function messageVisibleToMember(message, member) {
+  if (!message.active || message.audience === "all_teams") return false;
+  if (message.audience === "active_members") return member.status === "Active";
+  if (message.audience === "pending_members") return member.status === "Pending verification";
+  if (message.audience === "correction_members") return member.status === "Needs correction";
+  return message.audience === "all_members";
+}
+
+async function createPresidentMessage(message) {
+  const item = normalizePresidentMessage(message);
+  if (!item.subject) {
+    const error = new Error("Subject is required");
+    error.status = 400;
+    throw error;
+  }
+  if (!item.body) {
+    const error = new Error("Message is required");
+    error.status = 400;
+    throw error;
+  }
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into president_messages (
+        id, audience, subject, body, active, created_by_id, created_by_name, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $8) returning *`,
+      [item.id, item.audience, item.subject, item.body, item.active, item.createdById, item.createdByName, item.createdAt]
+    );
+    return toPresidentMessage(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.presidentMessages ||= [];
+  db.presidentMessages.unshift(item);
+  await writeJsonDb(db);
+  return item;
+}
+
+async function listPresidentMessages(limit = 25) {
+  const safeLimit = Math.min(100, Math.max(1, Number(limit || 25)));
+  if (hasPostgres) {
+    const result = await pool.query("select * from president_messages order by created_at desc limit $1", [safeLimit]);
+    return result.rows.map(toPresidentMessage);
+  }
+
+  const db = await readJsonDb();
+  db.presidentMessages ||= [];
+  return [...db.presidentMessages]
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+    .slice(0, safeLimit);
+}
+
+async function listPresidentMessagesForMember(member, limit = 5) {
+  const messages = await listPresidentMessages(50);
+  return messages.filter((message) => messageVisibleToMember(message, member)).slice(0, limit);
+}
+
 async function listUsers(viewer = null) {
   if (hasPostgres) {
     if (viewer?.role === "division") {
@@ -1797,6 +1905,9 @@ module.exports = {
   listDataCorrectionRequests,
   getDataCorrectionRequest,
   updateDataCorrectionRequest,
+  createPresidentMessage,
+  listPresidentMessages,
+  listPresidentMessagesForMember,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,

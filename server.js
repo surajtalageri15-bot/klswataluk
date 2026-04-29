@@ -400,7 +400,8 @@ async function api(req, res, pathname) {
       memberId: member.id,
       limit: 100
     });
-    return json(res, 200, { member: publicMember(member), auditLogs });
+    const presidentMessages = await store.listPresidentMessagesForMember(member);
+    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages });
   }
 
   if (pathname === "/api/member-correction-request" && req.method === "POST") {
@@ -462,6 +463,24 @@ async function api(req, res, pathname) {
 
   if (pathname === "/api/dashboard" && req.method === "GET") {
     return json(res, 200, await store.getDashboard(user));
+  }
+
+  if (pathname === "/api/president-messages" && req.method === "GET") {
+    if (!["admin", "state_president"].includes(user.role)) return json(res, 403, { error: "State President message access required" });
+    return json(res, 200, { messages: await store.listPresidentMessages() });
+  }
+
+  if (pathname === "/api/president-messages" && req.method === "POST") {
+    if (user.role !== "state_president") return json(res, 403, { error: "State President access required" });
+    const body = asObject(await parseBody(req));
+    const message = await store.createPresidentMessage({
+      audience: body.audience,
+      subject: body.subject,
+      body: body.body,
+      createdById: user.id,
+      createdByName: user.name
+    });
+    return json(res, 201, { message });
   }
 
   if (pathname === "/api/members" && req.method === "GET") {

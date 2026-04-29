@@ -106,8 +106,30 @@ function changePasswordForm() {
   `;
 }
 
-function renderDashboard(member, auditLogs = []) {
+function renderPresidentMessages(messages = []) {
+  if (!messages.length) return "";
+  return `
+    <section class="box public-form-card">
+      <div class="section-head">
+        <h2>State President Notices</h2>
+        <span class="badge">${messages.length} Latest</span>
+      </div>
+      <div class="timeline">
+        ${messages.map((message) => `
+          <div class="timeline-item">
+            <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
+            <strong>${escapeHtml(message.subject)}</strong>
+            <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderDashboard(member, auditLogs = [], presidentMessages = []) {
   dashboard.innerHTML = `
+    ${renderPresidentMessages(presidentMessages)}
     <section class="box status-card">
       <div class="section-head">
         <div>
@@ -193,7 +215,7 @@ function renderDashboard(member, auditLogs = []) {
 async function loadMemberSession() {
   try {
     const data = await request("/api/member-me");
-    renderDashboard(data.member, data.auditLogs || []);
+    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || []);
   } catch {
     dashboard.innerHTML = "";
   }
@@ -224,7 +246,7 @@ loginForm.addEventListener("submit", async (event) => {
     });
     loginForm.reset();
     const session = await request("/api/member-me");
-    renderDashboard(session.member || data.member, session.auditLogs || []);
+    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || []);
   } catch (error) {
     loginMessage.textContent = error.message;
   }
