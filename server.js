@@ -76,6 +76,12 @@ async function currentUser(req) {
   return await store.getUserById(session.userId);
 }
 
+function currentLoginSession(req) {
+  const token = getCookie(req, "session");
+  if (!token || !sessions.has(token)) return null;
+  return { token, session: sessions.get(token) };
+}
+
 async function currentMember(req) {
   const token = getCookie(req, "member_session");
   if (!token || !memberSessions.has(token)) return null;
@@ -92,6 +98,10 @@ function requireAdmin(user) {
 }
 
 function canViewUsers(user) {
+  return user && ["admin", "state_president", "division", "district"].includes(user.role);
+}
+
+function canViewSessionAnalytics(user) {
   return user && ["admin", "state_president", "division", "district"].includes(user.role);
 }
 
@@ -273,7 +283,8 @@ async function api(req, res, pathname) {
     const found = await store.findUserByLogin(body.username, body.password);
     if (!found) return json(res, 401, { error: "Invalid username or password" });
     const token = crypto.randomBytes(24).toString("hex");
-    sessions.set(token, { userId: found.id, createdAt: Date.now() });
+    const userSession = await store.startUserSession(found);
+    sessions.set(token, { userId: found.id, userSessionId: userSession?.id || "", createdAt: Date.now() });
     return json(res, 200, { user: publicUser(found) }, {
       "Set-Cookie": `session=${token}; HttpOnly; SameSite=Lax; Path=/`
     });
@@ -480,12 +491,19 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/logout" && req.method === "POST") {
-    const token = getCookie(req, "session");
-    if (token) sessions.delete(token);
+    const loginSession = currentLoginSession(req);
+    if (loginSession?.session?.userSessionId) await store.endUserSession(loginSession.session.userSessionId);
+    if (loginSession?.token) sessions.delete(loginSession.token);
     return json(res, 200, { ok: true }, { "Set-Cookie": "session=; Max-Age=0; Path=/" });
   }
 
   if (!user) return json(res, 401, { error: "Login required" });
+
+  if (pathname === "/api/session-heartbeat" && req.method === "POST") {
+    const loginSession = currentLoginSession(req);
+    if (loginSession?.session?.userSessionId) await store.touchUserSession(loginSession.session.userSessionId);
+    return json(res, 200, { ok: true });
+  }
 
   if (pathname === "/api/me" && req.method === "GET") {
     return json(res, 200, { user: publicUser(user) });
@@ -493,6 +511,17 @@ async function api(req, res, pathname) {
 
   if (pathname === "/api/dashboard" && req.method === "GET") {
     return json(res, 200, await store.getDashboard(user));
+  }
+
+  if (pathname === "/api/session-analytics" && req.method === "GET") {
+    if (!canViewSessionAnalytics(user)) return json(res, 403, { error: "Team time analytics access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, await store.listUserSessionStats(user, {
+      search: url.searchParams.get("search") || "",
+      role: url.searchParams.get("role") || "taluk",
+      from: url.searchParams.get("from") || "",
+      to: url.searchParams.get("to") || ""
+    }));
   }
 
   if (pathname === "/api/member-problems" && req.method === "GET") {

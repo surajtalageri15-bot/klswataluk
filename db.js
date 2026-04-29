@@ -207,6 +207,26 @@ function toMemberProblem(row) {
   };
 }
 
+function toUserSession(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  const iso = (value) => value ? (value instanceof Date ? value.toISOString() : String(value)) : "";
+  return {
+    id: row.id,
+    userId: row.user_id || "",
+    username: row.username || "",
+    name: row.name || "",
+    role: row.role || "",
+    district: row.district || "",
+    taluk: row.taluk || "",
+    startedAt: iso(row.started_at),
+    lastSeenAt: iso(row.last_seen_at),
+    endedAt: iso(row.ended_at),
+    durationSeconds: Number(row.duration_seconds || 0),
+    active: row.active !== false
+  };
+}
+
 function normalizeMemberLocation(member) {
   const district = canonicalDistrict(member.district);
   return {
@@ -379,6 +399,21 @@ async function initDb() {
       updated_at timestamptz not null default now()
     );
 
+    create table if not exists user_sessions (
+      id text primary key,
+      user_id text not null,
+      username text,
+      name text,
+      role text,
+      district text,
+      taluk text,
+      started_at timestamptz not null default now(),
+      last_seen_at timestamptz not null default now(),
+      ended_at timestamptz,
+      duration_seconds integer not null default 0,
+      active boolean not null default true
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
@@ -393,6 +428,8 @@ async function initDb() {
     create index if not exists idx_member_notes_member on member_notes (member_id, created_at desc);
     create index if not exists idx_member_problems_scope on member_problems (district, taluk, status, created_at desc);
     create index if not exists idx_member_problems_member on member_problems (member_id, created_at desc);
+    create index if not exists idx_user_sessions_user on user_sessions (user_id, started_at desc);
+    create index if not exists idx_user_sessions_role on user_sessions (role, district, taluk, started_at desc);
   `);
 
   await pool.query(`
@@ -449,6 +486,14 @@ function memberVisibleTo(user, member) {
   if (user.role === "district") return Boolean(userDistrict) && memberLocation.district === userDistrict;
   const userTaluk = normalizedTaluk(userDistrict, user.taluk);
   return memberLocation.taluk === userTaluk && (!userDistrict || memberLocation.district === userDistrict);
+}
+
+function userSessionVisibleTo(user, session) {
+  if (["admin", "state_president"].includes(user.role)) return true;
+  const sessionDistrict = canonicalDistrict(session.district || "");
+  if (user.role === "division") return divisionDistricts(user.district).includes(sessionDistrict);
+  if (user.role === "district") return canonicalDistrict(user.district || "") === sessionDistrict;
+  return user.id === session.userId;
 }
 
 function summarize(members) {
@@ -1895,6 +1940,186 @@ async function updateMemberProblem(user, id, changes = {}) {
   return target;
 }
 
+async function startUserSession(user) {
+  const now = new Date().toISOString();
+  const item = {
+    id: crypto.randomUUID(),
+    userId: user.id,
+    username: user.username || "",
+    name: user.name || "",
+    role: user.role || "",
+    district: user.district || "",
+    taluk: user.taluk || "",
+    startedAt: now,
+    lastSeenAt: now,
+    endedAt: "",
+    durationSeconds: 0,
+    active: true
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into user_sessions (
+        id, user_id, username, name, role, district, taluk, started_at, last_seen_at, duration_seconds, active
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $8, 0, true) returning *`,
+      [item.id, item.userId, item.username, item.name, item.role, item.district, item.taluk, item.startedAt]
+    );
+    return toUserSession(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.userSessions ||= [];
+  db.userSessions.unshift(item);
+  await writeJsonDb(db);
+  return item;
+}
+
+async function touchUserSession(id) {
+  if (!id) return null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update user_sessions
+       set last_seen_at = now(),
+           duration_seconds = greatest(duration_seconds, floor(extract(epoch from (now() - started_at)))::integer),
+           active = true
+       where id = $1 returning *`,
+      [id]
+    );
+    return toUserSession(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.userSessions ||= [];
+  const session = db.userSessions.find((item) => item.id === id);
+  if (!session) return null;
+  const now = new Date();
+  session.lastSeenAt = now.toISOString();
+  session.durationSeconds = Math.max(
+    Number(session.durationSeconds || 0),
+    Math.floor((now - new Date(session.startedAt || session.lastSeenAt)) / 1000)
+  );
+  session.active = true;
+  await writeJsonDb(db);
+  return session;
+}
+
+async function endUserSession(id) {
+  if (!id) return null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update user_sessions
+       set last_seen_at = now(),
+           ended_at = now(),
+           duration_seconds = greatest(duration_seconds, floor(extract(epoch from (now() - started_at)))::integer),
+           active = false
+       where id = $1 returning *`,
+      [id]
+    );
+    return toUserSession(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.userSessions ||= [];
+  const session = db.userSessions.find((item) => item.id === id);
+  if (!session) return null;
+  const now = new Date();
+  session.lastSeenAt = now.toISOString();
+  session.endedAt = now.toISOString();
+  session.durationSeconds = Math.max(
+    Number(session.durationSeconds || 0),
+    Math.floor((now - new Date(session.startedAt || session.lastSeenAt)) / 1000)
+  );
+  session.active = false;
+  await writeJsonDb(db);
+  return session;
+}
+
+async function listUserSessionStats(user, filters = {}) {
+  const search = String(filters.search || "").trim().toLowerCase();
+  const role = String(filters.role || "taluk").trim();
+  const from = String(filters.from || "").trim();
+  const to = String(filters.to || "").trim();
+  let rows;
+
+  if (hasPostgres) {
+    rows = (await pool.query(
+      `select *,
+        greatest(duration_seconds, floor(extract(epoch from ((case when ended_at is null and active then now() else coalesce(ended_at, last_seen_at, now()) end) - started_at)))::integer) as duration_seconds
+       from user_sessions
+       order by last_seen_at desc`
+    )).rows.map(toUserSession);
+  } else {
+    const db = await readJsonDb();
+    db.userSessions ||= [];
+    rows = [...db.userSessions];
+  }
+
+  const fromTime = from ? new Date(`${from}T00:00:00`).getTime() : 0;
+  const toTime = to ? new Date(`${to}T23:59:59`).getTime() : 0;
+  rows = rows
+    .filter((session) => userSessionVisibleTo(user, session))
+    .filter((session) => !role || session.role === role)
+    .filter((session) => {
+      const started = new Date(session.startedAt || session.started_at || 0).getTime();
+      if (fromTime && started < fromTime) return false;
+      if (toTime && started > toTime) return false;
+      return true;
+    });
+
+  if (search) {
+    rows = rows.filter((session) => [
+      session.username, session.name, session.role, session.district, session.taluk
+    ].some((value) => String(value || "").toLowerCase().includes(search)));
+  }
+
+  const todayPrefix = new Date().toISOString().slice(0, 10);
+  const nowMs = Date.now();
+  const activeCutoff = nowMs - (2 * 60 * 1000);
+  const grouped = new Map();
+  for (const session of rows) {
+    const key = session.userId || session.username || session.id;
+    const existing = grouped.get(key) || {
+      userId: session.userId || "",
+      username: session.username || "",
+      name: session.name || "",
+      role: session.role || "",
+      district: session.district || "",
+      taluk: session.taluk || "",
+      sessionCount: 0,
+      totalSeconds: 0,
+      todaySeconds: 0,
+      activeSessions: 0,
+      lastSeenAt: "",
+      lastStartedAt: ""
+    };
+    const startedAt = session.startedAt || "";
+    const lastSeenAt = session.lastSeenAt || "";
+    const liveSeconds = session.active && !session.endedAt
+      ? Math.floor((nowMs - new Date(startedAt || lastSeenAt || nowMs).getTime()) / 1000)
+      : 0;
+    const durationSeconds = Math.max(0, Number(session.durationSeconds || 0), liveSeconds);
+    existing.sessionCount += 1;
+    existing.totalSeconds += durationSeconds;
+    if (String(startedAt).slice(0, 10) === todayPrefix) existing.todaySeconds += durationSeconds;
+    if (session.active && !session.endedAt && new Date(lastSeenAt || startedAt || 0).getTime() >= activeCutoff) existing.activeSessions += 1;
+    if (!existing.lastSeenAt || String(lastSeenAt) > String(existing.lastSeenAt)) existing.lastSeenAt = lastSeenAt;
+    if (!existing.lastStartedAt || String(startedAt) > String(existing.lastStartedAt)) existing.lastStartedAt = startedAt;
+    grouped.set(key, existing);
+  }
+
+  const users = Array.from(grouped.values()).sort((a, b) => b.totalSeconds - a.totalSeconds || String(b.lastSeenAt).localeCompare(String(a.lastSeenAt)));
+  return {
+    summary: {
+      users: users.length,
+      sessionCount: rows.length,
+      totalSeconds: users.reduce((sum, item) => sum + item.totalSeconds, 0),
+      todaySeconds: users.reduce((sum, item) => sum + item.todaySeconds, 0),
+      activeUsers: users.filter((item) => item.activeSessions > 0).length
+    },
+    rows: users
+  };
+}
+
 async function listUsers(viewer = null) {
   if (hasPostgres) {
     if (viewer?.role === "division") {
@@ -2362,7 +2587,8 @@ const backupTables = [
   "president_messages",
   "team_chat_messages",
   "member_notes",
-  "member_problems"
+  "member_problems",
+  "user_sessions"
 ];
 
 const jsonBackupKeys = {
@@ -2375,7 +2601,8 @@ const jsonBackupKeys = {
   president_messages: "presidentMessages",
   team_chat_messages: "teamChatMessages",
   member_notes: "memberNotes",
-  member_problems: "memberProblems"
+  member_problems: "memberProblems",
+  user_sessions: "userSessions"
 };
 
 async function createBackup(createdBy = {}) {
@@ -2462,7 +2689,8 @@ async function restoreBackup(backup, restoredBy = {}) {
       presidentMessages: backup.tables.president_messages || [],
       teamChatMessages: backup.tables.team_chat_messages || [],
       memberNotes: backup.tables.member_notes || [],
-      memberProblems: backup.tables.member_problems || []
+      memberProblems: backup.tables.member_problems || [],
+      userSessions: backup.tables.user_sessions || []
     };
     nextDb.meta.updatedAt = new Date().toISOString();
     await writeJsonDb(nextDb);
@@ -2543,6 +2771,10 @@ module.exports = {
   createMemberProblem,
   listMemberProblems,
   updateMemberProblem,
+  startUserSession,
+  touchUserSession,
+  endUserSession,
+  listUserSessionStats,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,

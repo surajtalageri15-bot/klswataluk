@@ -1361,6 +1361,11 @@ tr:last-child td {
   min-height: 24px;
 }
 
+.badge-active {
+  background: #d6f4df;
+  color: #0d6b35;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

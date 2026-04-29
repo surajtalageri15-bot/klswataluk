@@ -15,6 +15,8 @@ const state = {
   dataCorrectionRequests: [],
   memberProblems: [],
   problemFilters: { search: "", status: "" },
+  sessionAnalytics: { summary: { users: 0, sessionCount: 0, totalSeconds: 0, todaySeconds: 0, activeUsers: 0 }, rows: [] },
+  sessionFilters: { search: "", role: "taluk", from: "", to: "" },
   filters: { search: "", district: "", taluk: "" },
   correctionFilters: { search: "", district: "" },
   userFilters: { search: "", role: "", district: "" },
@@ -31,6 +33,7 @@ const state = {
 };
 
 let latestJoinLink = "";
+let heartbeatTimer = null;
 
 const app = document.querySelector("#app");
 
@@ -94,14 +97,46 @@ function exportUrl(path, params = {}) {
   return `${path}?${query.toString()}`;
 }
 
+async function sendHeartbeat() {
+  if (!state.user) return;
+  try {
+    await request("/api/session-heartbeat", { method: "POST", body: "{}" });
+  } catch {
+    // Ignore heartbeat failures so normal work is never interrupted.
+  }
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+  sendHeartbeat();
+  heartbeatTimer = setInterval(sendHeartbeat, 60000);
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") sendHeartbeat();
+});
+
+window.addEventListener("beforeunload", () => {
+  if (state.user && navigator.sendBeacon) {
+    navigator.sendBeacon("/api/session-heartbeat", new Blob(["{}"], { type: "application/json" }));
+  }
+});
+
 async function boot() {
   try {
     const data = await request("/api/me");
     state.user = data.user;
     await loadDashboard();
     if (state.user.role === "taluk") await loadTalukWork();
+    startHeartbeat();
     renderApp();
   } catch {
+    stopHeartbeat();
     renderLogin();
   }
 }
@@ -140,6 +175,7 @@ function renderLogin(message = "") {
       });
       state.user = data.user;
       await loadDashboard();
+      startHeartbeat();
       renderApp();
     } catch (error) {
       renderLogin(error.message);
@@ -275,6 +311,17 @@ async function loadMemberProblems() {
   state.memberProblems = data.problems || [];
 }
 
+async function loadSessionAnalytics() {
+  if (!["admin", "state_president", "division", "district"].includes(state.user.role)) return;
+  const params = new URLSearchParams({
+    search: state.sessionFilters.search,
+    role: state.sessionFilters.role,
+    from: state.sessionFilters.from,
+    to: state.sessionFilters.to
+  });
+  state.sessionAnalytics = await request(`/api/session-analytics?${params.toString()}`);
+}
+
 function renderApp() {
   const unreadChat = unreadChatCount();
   app.innerHTML = `
@@ -294,6 +341,7 @@ function renderApp() {
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
+          ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="sessionAnalytics" class="${state.tab === "sessionAnalytics" ? "active" : ""}">Team Time</button>` : ""}
           ${["admin", "state_president", "division", "district", "taluk"].includes(state.user.role) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">Member Problems</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
@@ -331,6 +379,7 @@ function renderApp() {
         await loadPresidentMessages();
       }
       if (state.tab === "users") await loadUsers();
+      if (state.tab === "sessionAnalytics") await loadSessionAnalytics();
       if (state.tab === "teamChat") await loadTeamChat();
       if (state.tab === "memberProblems") await loadMemberProblems();
       if (state.tab === "duplicates") await loadDuplicates();
@@ -342,6 +391,7 @@ function renderApp() {
 
   document.querySelector("#logoutBtn").addEventListener("click", async () => {
     await request("/api/logout", { method: "POST" });
+    stopHeartbeat();
     state.user = null;
     renderLogin();
   });
@@ -354,6 +404,7 @@ function renderApp() {
   if (state.tab === "missingData") renderMissingData();
   if (state.tab === "messages") renderMessages();
   if (state.tab === "users") renderUsers();
+  if (state.tab === "sessionAnalytics") renderSessionAnalytics();
   if (state.tab === "teamChat") renderTeamChat();
   if (state.tab === "memberProblems") renderMemberProblems();
   if (state.tab === "duplicates") renderDuplicates();
@@ -371,6 +422,7 @@ function pageTitle() {
   if (state.tab === "missingData") return "Missing Data Report";
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "users") return "Taluk Team Assignment";
+  if (state.tab === "sessionAnalytics") return "Team Time Analytics";
   if (state.tab === "teamChat") return "Team Chat";
   if (state.tab === "memberProblems") return "Member Problems";
   if (state.tab === "duplicates") return "Duplicate Detection";
@@ -749,6 +801,86 @@ function renderMemberProblems() {
       await loadMemberProblems();
       renderApp();
     });
+  });
+}
+
+function renderSessionAnalytics() {
+  const data = state.sessionAnalytics || {};
+  const summary = data.summary || {};
+  const rows = data.rows || [];
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <div>
+          <h2>Taluk Team Work Efficiency</h2>
+          <p class="muted">Tracks login sessions and active website time from browser heartbeats.</p>
+        </div>
+        <button class="secondary" id="refreshSessionAnalytics">Refresh</button>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Tracked users</span><strong>${summary.users || 0}</strong></div>
+        <div class="stat"><span>Total website time</span><strong>${escapeHtml(formatDuration(summary.totalSeconds || 0))}</strong></div>
+        <div class="stat"><span>Today time</span><strong>${escapeHtml(formatDuration(summary.todaySeconds || 0))}</strong></div>
+        <div class="stat"><span>Active now</span><strong>${summary.activeUsers || 0}</strong></div>
+      </div>
+      <div class="toolbar">
+        <input id="sessionSearch" placeholder="Search name, username, district, taluk" value="${escapeHtml(state.sessionFilters.search)}">
+        <select id="sessionRole">
+          ${optionList(["taluk", "district", "division", "state_president", "admin"], state.sessionFilters.role, roleLabels)}
+        </select>
+        <input id="sessionFrom" type="date" value="${escapeHtml(state.sessionFilters.from)}">
+        <input id="sessionTo" type="date" value="${escapeHtml(state.sessionFilters.to)}">
+        <button class="secondary" id="sessionFilterBtn">Apply</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Person</th>
+              <th>Role</th>
+              <th>District</th>
+              <th>Taluk</th>
+              <th>Sessions</th>
+              <th>Total Time</th>
+              <th>Today</th>
+              <th>Last Seen</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `
+              <tr>
+                <td>
+                  <strong>${escapeHtml(row.name || row.username || "-")}</strong><br>
+                  <span class="muted">${escapeHtml(row.username || row.userId || "")}</span>
+                </td>
+                <td>${escapeHtml(roleLabels[row.role] || row.role || "-")}</td>
+                <td>${escapeHtml(row.district || "-")}</td>
+                <td>${escapeHtml(row.taluk || "-")}</td>
+                <td>${row.sessionCount || 0}</td>
+                <td><strong>${escapeHtml(formatDuration(row.totalSeconds || 0))}</strong></td>
+                <td>${escapeHtml(formatDuration(row.todaySeconds || 0))}</td>
+                <td>${escapeHtml(formatDateTime(row.lastSeenAt))}</td>
+                <td><span class="badge ${row.activeSessions ? "badge-active" : ""}">${row.activeSessions ? "Online" : "Offline"}</span></td>
+              </tr>
+            `).join("") || `<tr><td colspan="9" class="muted">No session data yet. It will appear after team members login and keep the site open.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#refreshSessionAnalytics").addEventListener("click", async () => {
+    await loadSessionAnalytics();
+    renderApp();
+  });
+  document.querySelector("#sessionFilterBtn").addEventListener("click", async () => {
+    state.sessionFilters.search = document.querySelector("#sessionSearch").value;
+    state.sessionFilters.role = document.querySelector("#sessionRole").value;
+    state.sessionFilters.from = document.querySelector("#sessionFrom").value;
+    state.sessionFilters.to = document.querySelector("#sessionTo").value;
+    await loadSessionAnalytics();
+    renderApp();
   });
 }
 
@@ -2756,6 +2888,15 @@ function formatDateTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toLocaleString();
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Number(seconds || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (hours) return `${hours}h ${minutes}m`;
+  if (minutes) return `${minutes}m`;
+  return `${Math.floor(total)}s`;
 }
 
 function correctionRow(member, lists) {
