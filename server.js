@@ -505,7 +505,7 @@ async function api(req, res, pathname) {
   if (pathname === "/api/team-chat" && req.method === "POST") {
     if (!canUseTeamChat(user)) return json(res, 403, { error: "Team chat access required" });
     const body = asObject(await parseBody(req));
-    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body) });
+    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body, { pinned: body.pinned === true || body.pinned === "true" || body.pinned === "on" }) });
   }
 
   if (pathname === "/api/members" && req.method === "GET") {
@@ -514,6 +514,10 @@ async function api(req, res, pathname) {
       search: (url.searchParams.get("search") || "").trim(),
       district: url.searchParams.get("district") || "",
       taluk: url.searchParams.get("taluk") || "",
+      status: url.searchParams.get("status") || "",
+      gender: url.searchParams.get("gender") || "",
+      batchYear: url.searchParams.get("batchYear") || "",
+      missingOnly: url.searchParams.get("missingOnly") === "true",
       page: Math.max(1, Number(url.searchParams.get("page") || 1)),
       size: Math.min(100, Math.max(10, Number(url.searchParams.get("size") || 25)))
     }));
@@ -526,6 +530,8 @@ async function api(req, res, pathname) {
       district: url.searchParams.get("district") || "",
       taluk: url.searchParams.get("taluk") || "",
       status: url.searchParams.get("status") || "",
+      gender: url.searchParams.get("gender") || "",
+      batchYear: url.searchParams.get("batchYear") || "",
       missingOnly: url.searchParams.get("missingOnly") === "true"
     });
     return csvDownload(res, "surveyor-members.csv", [
@@ -655,6 +661,30 @@ async function api(req, res, pathname) {
       ...auditActor(user)
     }] : [])]);
     return json(res, 200, { member: updated });
+  }
+
+  const memberNotesMatch = pathname.match(/^\/api\/members\/([^/]+)\/notes$/);
+  if (memberNotesMatch && req.method === "GET") {
+    const data = await store.listMemberNotes(user, memberNotesMatch[1]);
+    if (!data) return json(res, 404, { error: "Member not found or outside your area" });
+    return json(res, 200, data);
+  }
+
+  if (memberNotesMatch && req.method === "POST") {
+    if (!["admin", "state_president", "division", "district", "taluk"].includes(user.role)) return json(res, 403, { error: "Member notes access required" });
+    const body = asObject(await parseBody(req));
+    const data = await store.createMemberNote(user, memberNotesMatch[1], body);
+    if (!data) return json(res, 404, { error: "Member not found or outside your area" });
+    await tryCreateAuditLogs([{
+      memberId: data.member.id,
+      memberName: data.member.name,
+      action: "Member note added",
+      field: data.note.noteType,
+      oldValue: "",
+      newValue: data.note.note,
+      ...auditActor(user)
+    }]);
+    return json(res, 201, data);
   }
 
   if (pathname === "/api/audit-logs" && req.method === "GET") {

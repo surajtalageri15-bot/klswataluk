@@ -19,6 +19,7 @@ const state = {
   auditFilters: { search: "", editor: "", action: "", from: "", to: "", memberId: "" },
   duplicateFilters: { search: "", type: "" },
   dataCorrectionFilters: { search: "" },
+  memberNotes: { member: null, notes: [] },
   messageDraft: {
     audience: "all_members",
     subject: "State President Notice",
@@ -95,6 +96,7 @@ async function boot() {
     const data = await request("/api/me");
     state.user = data.user;
     await loadDashboard();
+    if (state.user.role === "taluk") await loadTalukWork();
     renderApp();
   } catch {
     renderLogin();
@@ -153,7 +155,11 @@ async function loadMembers(page = 1) {
     size: String(state.members.size),
     search: state.filters.search,
     district: state.filters.district,
-    taluk: state.filters.taluk
+    taluk: state.filters.taluk,
+    status: state.filters.status || "",
+    gender: state.filters.gender || "",
+    batchYear: state.filters.batchYear || "",
+    missingOnly: state.filters.missingOnly ? "true" : ""
   });
   state.members = await request(`/api/members?${params.toString()}`);
 }
@@ -165,11 +171,11 @@ async function loadPending(page = 1) {
     size: "100",
     search: "",
     district: "",
-    taluk: ""
+    taluk: "",
+    status: "Pending verification"
   });
   const data = await request(`/api/members?${params.toString()}`);
-  const pendingRows = data.rows.filter((member) => member.status === "Pending verification");
-  state.pending = { ...data, size: 100, rows: pendingRows, total: pendingRows.length };
+  state.pending = { ...data, size: 100 };
 }
 
 async function loadUsers() {
@@ -217,6 +223,16 @@ async function loadMissingData() {
   state.missingData = await request(`/api/missing-data?${params.toString()}`);
 }
 
+async function loadTalukWork() {
+  if (state.user.role !== "taluk") return;
+  await Promise.all([
+    loadPending(),
+    loadMissingData(),
+    loadDataCorrectionRequests(),
+    loadTeamChat()
+  ]);
+}
+
 async function loadDuplicates() {
   if (!["admin", "state_president"].includes(state.user.role)) return;
   const params = new URLSearchParams({
@@ -246,6 +262,7 @@ async function loadTeamChat() {
 }
 
 function renderApp() {
+  const unreadChat = unreadChatCount();
   app.innerHTML = `
     <section class="app-shell">
       <aside class="sidebar">
@@ -263,7 +280,7 @@ function renderApp() {
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
-          ${["admin", "state_president", "division", "district", "taluk"].includes(state.user.role) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat</button>` : ""}
+          ${["admin", "state_president", "division", "district", "taluk"].includes(state.user.role) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${["admin", "division"].includes(state.user.role) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
@@ -283,7 +300,10 @@ function renderApp() {
   document.querySelectorAll("[data-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.tab = button.dataset.tab;
-      if (state.tab === "dashboard") await loadDashboard();
+      if (state.tab === "dashboard") {
+        await loadDashboard();
+        if (state.user.role === "taluk") await loadTalukWork();
+      }
       if (state.tab === "members") await loadMembers();
       if (state.tab === "pending") await loadPending();
       if (state.tab === "membership") await loadDashboard();
@@ -541,7 +561,21 @@ function chatWatermark() {
   return `${state.user.name || state.user.username} - ${userScopeLabel()}`;
 }
 
+function chatStorageKey() {
+  return `klswa:lastChatRead:${state.user?.id || "guest"}`;
+}
+
+function unreadChatCount() {
+  const lastRead = Number(localStorage.getItem(chatStorageKey()) || 0);
+  return state.teamChatMessages.filter((message) => new Date(message.createdAt).getTime() > lastRead).length;
+}
+
+function markTeamChatRead() {
+  localStorage.setItem(chatStorageKey(), String(Date.now()));
+}
+
 function renderTeamChat() {
+  markTeamChatRead();
   document.querySelector("#view").innerHTML = `
     <section class="box section secure-chat" data-watermark="${escapeHtml(chatWatermark())}">
       <div class="section-head">
@@ -554,9 +588,10 @@ function renderTeamChat() {
       <div class="notice">Confidential chat. Do not screenshot, screen record, forward, or share outside KLSWA authorized team.</div>
       <div class="chat-list">
         ${state.teamChatMessages.map((message) => `
-          <article class="chat-message">
+          <article class="chat-message ${message.pinned ? "pinned" : ""}">
             <div class="chat-meta">
               <strong>${escapeHtml(message.authorName || "Team")}</strong>
+              ${message.pinned ? `<span class="badge">Pinned</span>` : ""}
               <span class="badge">${escapeHtml(roleLabels[message.authorRole] || message.authorRole)}</span>
               <span class="muted">${escapeHtml(chatScopeLabel(message))}</span>
               <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
@@ -569,6 +604,12 @@ function renderTeamChat() {
         <label>Message
           <textarea name="body" rows="3" maxlength="1000" required placeholder="Type message for your team group"></textarea>
         </label>
+        ${["admin", "state_president", "division"].includes(state.user.role) ? `
+          <label class="check">
+            <input type="checkbox" name="pinned">
+            Pin as important message
+          </label>
+        ` : ""}
         <div class="message" id="teamChatMessage"></div>
         <div class="actions">
           <button class="primary" type="submit">Send message</button>
@@ -613,6 +654,78 @@ function renderTeamChat() {
   });
 }
 
+function renderTalukWorkDashboard() {
+  if (state.user.role !== "taluk") return "";
+  const pending = state.pending.rows || [];
+  const missing = state.missingData.rows || [];
+  const corrections = state.dataCorrectionRequests || [];
+  const pendingCorrections = corrections.filter((item) => item.status === "Pending");
+  return `
+    <section class="box section taluk-work">
+      <div class="section-head">
+        <div>
+          <h2>My taluk daily work</h2>
+          <p class="muted">Today focus: approve pending applications, fill missing data, and track correction requests.</p>
+        </div>
+        <button class="secondary" id="talukProgressPdf">Export PDF</button>
+      </div>
+      <div class="work-grid">
+        ${workCard("Pending verification", pending.length, "Open queue", "pending")}
+        ${workCard("Missing data", state.missingData.total || missing.length, "Open follow-up", "missingData")}
+        ${workCard("Pending corrections", pendingCorrections.length, "Open tracker", "dataCorrections")}
+        ${workCard("Unread chat", unreadChatCount(), "Open chat", "teamChat")}
+      </div>
+      <div class="split">
+        <div>
+          <h2>Daily follow-up list</h2>
+          <div class="table-wrap compact-table">
+            <table>
+              <thead><tr><th>Name</th><th>Phone</th><th>Missing</th><th>Action</th></tr></thead>
+              <tbody>
+                ${missing.slice(0, 8).map((member) => `
+                  <tr>
+                    <td>${escapeHtml(member.name)}</td>
+                    <td>${escapeHtml(member.phoneNumber || "-")}</td>
+                    <td><div class="mini-list">${member.missingFields.slice(0, 4).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div></td>
+                    <td class="actions">
+                      <button class="secondary" data-dashboard-copy="${member.id}">Copy</button>
+                      ${member.phoneNumber ? `<a class="secondary" href="${whatsAppLink(member)}" target="_blank">WhatsApp</a>` : ""}
+                    </td>
+                  </tr>
+                `).join("") || `<tr><td colspan="4" class="muted">No missing data follow-up pending.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h2>Correction tracker</h2>
+          <div class="list">
+            ${corrections.slice(0, 8).map((item) => `
+              <div class="list-row">
+                <span>
+                  <strong>${escapeHtml(item.memberName)}</strong><br>
+                  <span class="muted">${escapeHtml(item.reason || "-")}</span>
+                </span>
+                <span class="badge">${escapeHtml(item.status)}</span>
+              </div>
+            `).join("") || `<p class="muted">No correction requests yet.</p>`}
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function workCard(title, count, label, tab) {
+  return `
+    <article class="work-card">
+      <span class="muted">${escapeHtml(title)}</span>
+      <strong>${escapeHtml(count)}</strong>
+      <button class="secondary" data-open-work-tab="${escapeHtml(tab)}">${escapeHtml(label)}</button>
+    </article>
+  `;
+}
+
 function renderDashboard() {
   const summary = state.dashboard.summary;
   const charts = state.dashboard.charts || {};
@@ -630,6 +743,7 @@ function renderDashboard() {
         <div class="box stat"><span class="muted">Female</span><strong>${summary.gender.Female || 0}</strong></div>
       `}
     </div>
+    ${renderTalukWorkDashboard()}
     <div class="chart-grid">
       <section class="box section">
         <h2>Male / Female</h2>
@@ -666,6 +780,26 @@ function renderDashboard() {
   `;
   const pdfButton = document.querySelector("#districtPerformancePdf");
   if (pdfButton) pdfButton.addEventListener("click", () => exportDistrictPerformancePdf(performance));
+  document.querySelectorAll("[data-open-work-tab]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      state.tab = button.dataset.openWorkTab;
+      if (state.tab === "pending") await loadPending();
+      if (state.tab === "missingData") await loadMissingData();
+      if (state.tab === "dataCorrections") await loadDataCorrectionRequests();
+      if (state.tab === "teamChat") await loadTeamChat();
+      renderApp();
+    });
+  });
+  document.querySelectorAll("[data-dashboard-copy]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const member = state.missingData.rows.find((item) => item.id === button.dataset.dashboardCopy);
+      await copyText(followupMessage(member));
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = "Copy"; }, 1400);
+    });
+  });
+  const talukPdf = document.querySelector("#talukProgressPdf");
+  if (talukPdf) talukPdf.addEventListener("click", exportTalukProgressPdf);
 }
 
 function row(name, count) {
@@ -878,15 +1012,76 @@ function exportDistrictPerformancePdf(performance) {
   popup.document.close();
 }
 
+function exportTalukProgressPdf() {
+  const summary = state.dashboard.summary || {};
+  const missing = state.missingData.rows || [];
+  const pending = state.pending.rows || [];
+  const corrections = state.dataCorrectionRequests || [];
+  const popup = window.open("", "_blank");
+  if (!popup) {
+    alert("Popup blocked. Allow popups and try Export PDF again.");
+    return;
+  }
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>KLSWA Taluk Progress Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #1f2933; margin: 28px; }
+        h1, h2 { color: #104f3a; }
+        .muted { color: #607062; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+        .stat { border: 1px solid #d8ded6; border-radius: 8px; padding: 10px; }
+        .stat span { display: block; color: #607062; font-size: 12px; }
+        .stat strong { font-size: 22px; color: #104f3a; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 11px; }
+        th, td { border: 1px solid #d8ded6; padding: 6px; text-align: left; vertical-align: top; }
+        th { background: #eef5ee; color: #104f3a; }
+        @media print { body { margin: 16px; } }
+      </style>
+    </head>
+    <body>
+      <h1>KLSWA Taluk Progress Report</h1>
+      <p class="muted">${escapeHtml(userScopeLabel())} / Generated ${escapeHtml(new Date().toLocaleString())}</p>
+      <div class="stats">
+        <div class="stat"><span>Total members</span><strong>${summary.total || 0}</strong></div>
+        <div class="stat"><span>Active</span><strong>${summary.statusCounts?.Active || 0}</strong></div>
+        <div class="stat"><span>Pending</span><strong>${pending.length}</strong></div>
+        <div class="stat"><span>Missing data</span><strong>${state.missingData.total || missing.length}</strong></div>
+      </div>
+      <h2>Pending verification</h2>
+      <table><thead><tr><th>Name</th><th>LS Number</th><th>Phone</th><th>Remarks</th></tr></thead><tbody>
+        ${pending.slice(0, 50).map((member) => `<tr><td>${escapeHtml(member.name)}</td><td>${escapeHtml(member.lsNumber)}</td><td>${escapeHtml(member.phoneNumber)}</td><td>${escapeHtml(member.remarks)}</td></tr>`).join("") || `<tr><td colspan="4">No pending records.</td></tr>`}
+      </tbody></table>
+      <h2>Missing data follow-up</h2>
+      <table><thead><tr><th>Name</th><th>LS Number</th><th>Phone</th><th>Missing fields</th></tr></thead><tbody>
+        ${missing.slice(0, 75).map((member) => `<tr><td>${escapeHtml(member.name)}</td><td>${escapeHtml(member.lsNumber)}</td><td>${escapeHtml(member.phoneNumber)}</td><td>${escapeHtml(member.missingFields.join(", "))}</td></tr>`).join("") || `<tr><td colspan="4">No missing data records.</td></tr>`}
+      </tbody></table>
+      <h2>Correction requests</h2>
+      <table><thead><tr><th>Member</th><th>Status</th><th>Reason</th><th>Admin remarks</th></tr></thead><tbody>
+        ${corrections.slice(0, 50).map((item) => `<tr><td>${escapeHtml(item.memberName)}</td><td>${escapeHtml(item.status)}</td><td>${escapeHtml(item.reason)}</td><td>${escapeHtml(item.adminRemarks || "-")}</td></tr>`).join("") || `<tr><td colspan="4">No correction requests.</td></tr>`}
+      </tbody></table>
+      <script>window.addEventListener("load", () => window.print());</script>
+    </body>
+    </html>`);
+  popup.document.close();
+}
+
 function renderMembers() {
   const lists = state.dashboard.lists;
   const talukOptions = taluksForDistrict(lists, state.filters.district);
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="toolbar">
-        <label>Search <input id="searchInput" value="${escapeHtml(state.filters.search)}" placeholder="Name, LS number, phone"></label>
+        <label>Search <input id="searchInput" value="${escapeHtml(state.filters.search)}" placeholder="Name, LS, phone, caste, village"></label>
         <label>District <select id="districtFilter"><option value="">All districts</option>${optionList(lists.districts, state.filters.district)}</select></label>
         <label>Taluk <select id="talukFilter"><option value="">${state.filters.district ? "All taluks in district" : "All taluks"}</option>${optionList(talukOptions, state.filters.taluk)}</select></label>
+        <label>Status <select id="statusFilter"><option value="">All status</option>${optionList(["Active", "Pending verification", "Needs correction", "Rejected", "Inactive"], state.filters.status || "")}</select></label>
+        <label>Gender <select id="genderFilter"><option value="">All gender</option>${optionList(["Male", "Female", "Other"], state.filters.gender || "")}</select></label>
+        <label>Batch <input id="batchFilter" type="number" min="1998" max="2026" value="${escapeHtml(state.filters.batchYear || "")}" placeholder="1998-2026"></label>
+        <label class="check filter-check"><input id="missingOnlyFilter" type="checkbox" ${state.filters.missingOnly ? "checked" : ""}> Missing only</label>
         <span class="actions">
           <button class="secondary" id="applyFilters">Apply</button>
           <a class="secondary" id="memberExportLink" href="${exportUrl("/api/exports/members", state.filters)}">Export CSV</a>
@@ -908,6 +1103,7 @@ function renderMembers() {
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Edit" data-edit="${member.id}">E</button>` : ""}
                   ${state.user.role === "admin" ? `<button class="secondary" data-login-control="${member.id}">Login</button>` : ""}
                   ${state.user.role === "taluk" ? `<button class="secondary" data-request-correction="${member.id}">Request</button>` : ""}
+                  <button class="secondary" data-member-notes="${member.id}">Notes</button>
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Delete" data-delete="${member.id}">D</button>` : ""}
                 </td>
               </tr>
@@ -935,6 +1131,10 @@ function renderMembers() {
     state.filters.search = document.querySelector("#searchInput").value;
     state.filters.district = document.querySelector("#districtFilter").value;
     state.filters.taluk = document.querySelector("#talukFilter").value;
+    state.filters.status = document.querySelector("#statusFilter").value;
+    state.filters.gender = document.querySelector("#genderFilter").value;
+    state.filters.batchYear = document.querySelector("#batchFilter").value;
+    state.filters.missingOnly = document.querySelector("#missingOnlyFilter").checked;
     await loadMembers(1);
     renderApp();
   });
@@ -954,6 +1154,9 @@ function renderMembers() {
   });
   document.querySelectorAll("[data-login-control]").forEach((button) => {
     button.addEventListener("click", () => openMemberLoginControlModal(state.members.rows.find((member) => member.id === button.dataset.loginControl)));
+  });
+  document.querySelectorAll("[data-member-notes]").forEach((button) => {
+    button.addEventListener("click", () => openMemberNotesModal(button.dataset.memberNotes));
   });
   document.querySelectorAll("[data-delete]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1289,6 +1492,67 @@ function openMemberLoginControlModal(member) {
       renderApp();
     } catch (error) {
       backdrop.querySelector("#memberLoginControlMessage").textContent = error.message;
+    }
+  });
+}
+
+async function openMemberNotesModal(memberId) {
+  let data;
+  try {
+    data = await request(`/api/members/${memberId}/notes`);
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  state.memberNotes = data;
+  const member = data.member;
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <form class="box modal" id="memberNoteForm">
+        <div class="modal-head">
+          <div>
+            <h2>Member notes</h2>
+            <p class="muted">${escapeHtml(member.name)} - ${escapeHtml(member.lsNumber)} - ${escapeHtml(member.taluk)}</p>
+          </div>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <div class="two">
+          ${selectField("noteType", "Note type", ["Call", "Visit", "WhatsApp", "Correction", "General"], "Call")}
+          <label>Note
+            <textarea name="note" rows="3" required placeholder="Example: Called member, address pending"></textarea>
+          </label>
+        </div>
+        <div class="message" id="memberNoteMessage"></div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Close</button>
+          <button class="primary" type="submit">Add note</button>
+        </div>
+        <div class="timeline note-timeline">
+          ${(data.notes || []).map((note) => `
+            <div class="timeline-item">
+              <span class="badge">${escapeHtml(note.noteType)}</span>
+              <span class="muted">${escapeHtml(note.createdByName || "-")} / ${escapeHtml(new Date(note.createdAt).toLocaleString())}</span>
+              <p>${escapeHtml(note.note).replace(/\n/g, "<br>")}</p>
+            </div>
+          `).join("") || `<p class="muted">No notes yet.</p>`}
+        </div>
+      </form>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
+  backdrop.querySelector("#memberNoteForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = backdrop.querySelector("#memberNoteMessage");
+    try {
+      await request(`/api/members/${memberId}/notes`, {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget)))
+      });
+      backdrop.remove();
+      await openMemberNotesModal(memberId);
+    } catch (error) {
+      message.textContent = error.message;
     }
   });
 }
@@ -2074,7 +2338,7 @@ function renderDataCorrectionRequests() {
 }
 
 function correctionChangesList(changes = {}) {
-  const entries = Object.entries(changes);
+  const entries = Object.entries(changes && typeof changes === "object" ? changes : {});
   if (!entries.length) return "-";
   return `<div class="mini-list">${entries.map(([key, value]) => `<span><strong>${escapeHtml(key)}</strong>: ${escapeHtml(value)}</span>`).join("")}</div>`;
 }

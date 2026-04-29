@@ -346,6 +346,17 @@ label span {
   color: #7a8375;
 }
 
+label.check {
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  color: var(--text);
+}
+
+label.check input {
+  width: auto;
+  min-height: auto;
+}
+
 input,
 select,
 textarea {
@@ -485,6 +496,17 @@ textarea {
   color: #fff;
 }
 
+.nav-badge {
+  float: right;
+  min-width: 22px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--green-dark);
+  font-size: 12px;
+  text-align: center;
+}
+
 .content {
   min-width: 0;
   padding: 28px;
@@ -540,10 +562,25 @@ textarea {
 
 .toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 190px 190px auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: end;
   margin-bottom: 14px;
+}
+
+.filter-check {
+  min-height: 42px;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  align-self: end;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.filter-check input {
+  min-height: auto;
 }
 
 .user-toolbar {
@@ -666,6 +703,35 @@ textarea {
   margin: 12px 0;
 }
 
+.taluk-work {
+  border-color: rgba(20, 108, 76, 0.22);
+}
+
+.work-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 14px 0 18px;
+}
+
+.work-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbf7 100%);
+}
+
+.work-card strong {
+  font-size: 30px;
+  color: var(--green-dark);
+}
+
+.compact-table table {
+  font-size: 13px;
+}
+
 .audit-alerts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -742,6 +808,11 @@ textarea {
   border-radius: 8px;
   padding: 12px;
   background: #fbfcf8;
+}
+
+.chat-message.pinned {
+  border-color: #e4c58d;
+  background: #fff9eb;
 }
 
 .secure-chat {

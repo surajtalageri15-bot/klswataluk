@@ -164,6 +164,22 @@ function toTeamChatMessage(row) {
     authorRole: row.author_role || "",
     district: row.district || "",
     taluk: row.taluk || "",
+    pinned: row.pinned || false,
+    createdAt: row.created_at
+  };
+}
+
+function toMemberNote(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    memberId: row.member_id || "",
+    note: row.note || "",
+    noteType: row.note_type || "General",
+    createdById: row.created_by_id || "",
+    createdByName: row.created_by_name || "",
+    createdByRole: row.created_by_role || "",
     createdAt: row.created_at
   };
 }
@@ -306,6 +322,18 @@ async function initDb() {
       author_role text,
       district text,
       taluk text,
+      pinned boolean not null default false,
+      created_at timestamptz not null default now()
+    );
+
+    create table if not exists member_notes (
+      id text primary key,
+      member_id text not null,
+      note text not null,
+      note_type text not null default 'General',
+      created_by_id text,
+      created_by_name text,
+      created_by_role text,
       created_at timestamptz not null default now()
     );
 
@@ -320,6 +348,7 @@ async function initDb() {
     create index if not exists idx_data_correction_requests_member on data_correction_requests (member_id);
     create index if not exists idx_president_messages_active on president_messages (active, created_at desc);
     create index if not exists idx_team_chat_messages_scope on team_chat_messages (district, taluk, created_at desc);
+    create index if not exists idx_member_notes_member on member_notes (member_id, created_at desc);
   `);
 
   await pool.query(`
@@ -339,6 +368,7 @@ async function initDb() {
     alter table members add column if not exists declaration_accepted boolean not null default false;
     alter table members add column if not exists member_password text;
     alter table members add column if not exists member_login_active boolean not null default false;
+    alter table team_chat_messages add column if not exists pinned boolean not null default false;
   `);
 
   await pool.query(`
@@ -619,6 +649,8 @@ async function exportMembers(user, filters) {
     district: filters.district || "",
     taluk: filters.taluk || "",
     status: filters.status || "",
+    gender: filters.gender || "",
+    batchYear: filters.batchYear || "",
     missingOnly: filters.missingOnly === true || filters.missingOnly === "true",
     page: 1,
     size: Number.MAX_SAFE_INTEGER
@@ -681,10 +713,15 @@ function filterMemberRows(rows, filters) {
   if (filters.district) filtered = filtered.filter((member) => member.district === filters.district);
   if (filters.taluk) filtered = filtered.filter((member) => member.taluk === filters.taluk);
   if (filters.status) filtered = filtered.filter((member) => member.status === filters.status);
+  if (filters.gender) filtered = filtered.filter((member) => member.gender === filters.gender);
+  if (filters.batchYear) filtered = filtered.filter((member) => String(member.batchYear || "") === String(filters.batchYear));
   if (filters.missingOnly) filtered = filtered.filter((member) => missingMemberFields(member).length > 0);
   if (filters.search) {
     const search = filters.search.toLowerCase();
-    filtered = filtered.filter((member) => [member.name, member.lsNumber, member.loginId, member.phoneNumber, member.qualification]
+    filtered = filtered.filter((member) => [
+      member.name, member.lsNumber, member.loginId, member.phoneNumber, member.qualification,
+      member.district, member.taluk, member.category, member.caste, member.address, member.batchYear, member.status
+    ]
       .some((value) => String(value || "").toLowerCase().includes(search)));
   }
   return filtered;
@@ -1522,7 +1559,7 @@ async function listTeamChatMessages(user, limit = 100) {
   const safeLimit = Math.min(200, Math.max(20, Number(limit || 100)));
   if (hasPostgres) {
     if (["admin", "state_president"].includes(user.role)) {
-      const result = await pool.query("select * from team_chat_messages order by created_at desc limit $1", [safeLimit]);
+      const result = await pool.query("select * from team_chat_messages order by pinned desc, created_at desc limit $1", [safeLimit]);
       return result.rows.map(toTeamChatMessage).reverse();
     }
     if (user.role === "division") {
@@ -1532,7 +1569,7 @@ async function listTeamChatMessages(user, limit = 100) {
       const result = await pool.query(
         `select * from team_chat_messages
          where district in (${placeholders})
-         order by created_at desc limit $${districts.length + 1}`,
+         order by pinned desc, created_at desc limit $${districts.length + 1}`,
         [...districts, safeLimit]
       );
       return result.rows.map(toTeamChatMessage).reverse();
@@ -1542,7 +1579,7 @@ async function listTeamChatMessages(user, limit = 100) {
     const result = await pool.query(
       `select * from team_chat_messages
        where district = $1 and ($2 = '' or lower(coalesce(taluk, '')) = lower($2))
-       order by created_at desc limit $3`,
+       order by pinned desc, created_at desc limit $3`,
       [district, taluk, safeLimit]
     );
     return result.rows.map(toTeamChatMessage).reverse();
@@ -1563,11 +1600,11 @@ async function listTeamChatMessages(user, limit = 100) {
     }
   }
   return rows
-    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
+    .sort((a, b) => Number(Boolean(a.pinned)) - Number(Boolean(b.pinned)) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
     .slice(-safeLimit);
 }
 
-async function createTeamChatMessage(user, body) {
+async function createTeamChatMessage(user, body, options = {}) {
   const text = String(body || "").trim();
   if (!text) {
     const error = new Error("Message is required");
@@ -1589,15 +1626,16 @@ async function createTeamChatMessage(user, body) {
     authorRole: user.role,
     district: scope.district,
     taluk: scope.taluk,
+    pinned: Boolean(options.pinned && ["admin", "state_president", "division"].includes(user.role)),
     createdAt: new Date().toISOString()
   };
 
   if (hasPostgres) {
     const result = await pool.query(
       `insert into team_chat_messages (
-        id, body, author_id, author_name, author_role, district, taluk, created_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
-      [item.id, item.body, item.authorId, item.authorName, item.authorRole, item.district, item.taluk, item.createdAt]
+        id, body, author_id, author_name, author_role, district, taluk, pinned, created_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
+      [item.id, item.body, item.authorId, item.authorName, item.authorRole, item.district, item.taluk, item.pinned, item.createdAt]
     );
     return toTeamChatMessage(result.rows[0]);
   }
@@ -1607,6 +1645,68 @@ async function createTeamChatMessage(user, body) {
   db.teamChatMessages.push(item);
   await writeJsonDb(db);
   return item;
+}
+
+async function listMemberNotes(user, memberId) {
+  const member = await getMember(memberId);
+  if (!member || !memberVisibleTo(user, member)) return null;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      "select * from member_notes where member_id = $1 order by created_at desc limit 100",
+      [memberId]
+    );
+    return { member, notes: result.rows.map(toMemberNote) };
+  }
+
+  const db = await readJsonDb();
+  db.memberNotes ||= [];
+  return {
+    member,
+    notes: db.memberNotes
+      .filter((item) => item.memberId === memberId)
+      .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+      .slice(0, 100)
+  };
+}
+
+async function createMemberNote(user, memberId, noteInput) {
+  const member = await getMember(memberId);
+  if (!member || !memberVisibleTo(user, member)) return null;
+  const note = String(noteInput.note || "").trim();
+  const noteType = String(noteInput.noteType || "General").trim() || "General";
+  if (!note) {
+    const error = new Error("Note is required");
+    error.status = 400;
+    throw error;
+  }
+
+  const item = {
+    id: crypto.randomUUID(),
+    memberId,
+    note,
+    noteType,
+    createdById: user.id,
+    createdByName: user.name || user.username,
+    createdByRole: user.role,
+    createdAt: new Date().toISOString()
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into member_notes (
+        id, member_id, note, note_type, created_by_id, created_by_name, created_by_role, created_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+      [item.id, item.memberId, item.note, item.noteType, item.createdById, item.createdByName, item.createdByRole, item.createdAt]
+    );
+    return { member, note: toMemberNote(result.rows[0]) };
+  }
+
+  const db = await readJsonDb();
+  db.memberNotes ||= [];
+  db.memberNotes.unshift(item);
+  await writeJsonDb(db);
+  return { member, note: item };
 }
 
 async function listUsers(viewer = null) {
@@ -2075,6 +2175,8 @@ module.exports = {
   listPresidentMessagesForMember,
   listTeamChatMessages,
   createTeamChatMessage,
+  listMemberNotes,
+  createMemberNote,
   findTeamRequestDuplicate,
   createTeamRequest,
   listTeamRequests,
