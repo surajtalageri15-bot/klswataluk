@@ -169,7 +169,7 @@ async function loadUsers() {
   if (!["admin", "state_president", "division", "district"].includes(state.user.role)) return;
   const data = await request("/api/users");
   state.users = data.users;
-  if (state.user.role === "admin") {
+  if (["admin", "division"].includes(state.user.role)) {
     const requests = await request("/api/taluk-team-requests");
     state.teamRequests = requests.requests;
   }
@@ -1074,6 +1074,7 @@ function selectField(name, label, items, value = "", disabled = false, labels = 
 function renderUsers() {
   const lists = state.dashboard.lists;
   const canManageUsers = state.user.role === "admin";
+  const canReviewTeamRequests = ["admin", "division"].includes(state.user.role);
   const roleOptions = ["admin", "state_president", "division", "district", "taluk"];
   const filteredUsers = filterUsersForView(state.users);
   const counts = userCounts(state.users);
@@ -1130,7 +1131,7 @@ function renderUsers() {
         </div>
       </section>
     </div>
-    ${canManageUsers ? renderTeamRequests() : ""}
+    ${canReviewTeamRequests ? renderTeamRequests() : ""}
   `;
 
   document.querySelector("#applyUserFilters").addEventListener("click", () => {
@@ -1139,6 +1140,8 @@ function renderUsers() {
     state.userFilters.district = document.querySelector("#userDistrict").value;
     renderApp();
   });
+
+  if (canReviewTeamRequests && !canManageUsers) bindTeamRequestActions();
 
   if (!canManageUsers) return;
 
@@ -1207,6 +1210,10 @@ function renderUsers() {
       openPasswordModal(target);
     });
   });
+  bindTeamRequestActions();
+}
+
+function bindTeamRequestActions() {
   document.querySelectorAll("[data-team-request]").forEach((button) => {
     button.addEventListener("click", async () => {
       const status = button.dataset.status;

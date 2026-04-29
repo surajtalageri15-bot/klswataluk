@@ -1508,18 +1508,37 @@ async function createTeamRequest(request) {
   return item;
 }
 
-async function listTeamRequests() {
+function visibleTeamRequestsFor(viewer, requests) {
+  if (viewer?.role !== "division") return requests;
+  const districts = divisionDistricts(viewer.district);
+  return requests.filter((item) => districts.includes(canonicalDistrict(item.district)));
+}
+
+async function listTeamRequests(viewer = null) {
   if (hasPostgres) {
+    if (viewer?.role === "division") {
+      const districts = divisionDistricts(viewer.district);
+      if (!districts.length) return [];
+      const placeholders = districts.map((_, index) => `$${index + 1}`).join(", ");
+      const result = await pool.query(
+        `select * from taluk_team_requests
+         where district in (${placeholders})
+         order by case status when 'Pending' then 0 else 1 end, created_at desc`,
+        districts
+      );
+      return result.rows.map(toTeamRequest);
+    }
     const result = await pool.query("select * from taluk_team_requests order by case status when 'Pending' then 0 else 1 end, created_at desc");
     return result.rows.map(toTeamRequest);
   }
   const db = await readJsonDb();
   db.talukTeamRequests ||= [];
-  return [...db.talukTeamRequests].sort((a, b) => {
+  const sorted = [...db.talukTeamRequests].sort((a, b) => {
     if (a.status === "Pending" && b.status !== "Pending") return -1;
     if (a.status !== "Pending" && b.status === "Pending") return 1;
     return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
   });
+  return visibleTeamRequestsFor(viewer, sorted);
 }
 
 async function getTeamRequest(id) {

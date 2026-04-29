@@ -95,6 +95,18 @@ function canViewUsers(user) {
   return user && ["admin", "state_president", "division", "district"].includes(user.role);
 }
 
+function canReviewTeamRequests(user) {
+  return user && ["admin", "division"].includes(user.role);
+}
+
+function canSeeTeamRequest(user, request) {
+  if (user?.role === "admin") return true;
+  if (user?.role === "division") {
+    return divisionDistricts(user.district).includes(canonicalDistrict(request.district));
+  }
+  return false;
+}
+
 function canCreateMembers(user) {
   return user && (user.role === "admin" || user.role === "taluk");
 }
@@ -737,18 +749,20 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/taluk-team-requests" && req.method === "GET") {
-    requireAdmin(user);
-    return json(res, 200, { requests: await store.listTeamRequests() });
+    if (!canReviewTeamRequests(user)) return json(res, 403, { error: "Taluk team approval access required" });
+    return json(res, 200, { requests: await store.listTeamRequests(user) });
   }
 
   const teamRequestMatch = pathname.match(/^\/api\/taluk-team-requests\/([^/]+)$/);
   if (teamRequestMatch && req.method === "PUT") {
-    requireAdmin(user);
+    if (!canReviewTeamRequests(user)) return json(res, 403, { error: "Taluk team approval access required" });
     const target = await store.getTeamRequest(teamRequestMatch[1]);
     if (!target) return json(res, 404, { error: "Request not found" });
+    if (!canSeeTeamRequest(user, target)) return json(res, 403, { error: "This request is outside your division" });
     const body = await parseBody(req);
     const status = String(body.status || "").trim();
     const remarks = String(body.remarks || "").trim();
+    const reviewer = user.role === "division" ? "division team" : "admin";
     if (status === "Approved") {
       if (await store.usernameExists(target.requestedUsername)) return json(res, 409, { error: "This User ID is already used" });
       const newUser = await store.createUser({
@@ -762,7 +776,7 @@ async function api(req, res, pathname) {
       });
       const request = await store.updateTeamRequest(target.id, {
         status: "Approved",
-        remarks: remarks || "Login activated by admin",
+        remarks: remarks || `Login activated by ${reviewer}`,
         userId: newUser.id
       });
       return json(res, 200, { request, user: publicUser(newUser) });
@@ -771,7 +785,7 @@ async function api(req, res, pathname) {
       return json(res, 200, {
         request: await store.updateTeamRequest(target.id, {
           status: "Rejected",
-          remarks: remarks || "Rejected by admin"
+          remarks: remarks || `Rejected by ${reviewer}`
         })
       });
     }
