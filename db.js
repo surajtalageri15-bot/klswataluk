@@ -1098,7 +1098,7 @@ async function updateMember(id, member) {
   return existing;
 }
 
-async function listTalukCorrections({ page = 1, size = 50, district = "", search = "" } = {}) {
+async function listTalukCorrections({ page = 1, size = 50, district = "", search = "", user = null } = {}) {
   const rows = hasPostgres
     ? (await pool.query("select * from members order by district, taluk, name")).rows.map(toMember)
     : (await readJsonDb()).members;
@@ -1118,6 +1118,14 @@ async function listTalukCorrections({ page = 1, size = 50, district = "", search
     .filter((member) => !isMasterTaluk(member.suggestedDistrict, member.rawTaluk));
 
   if (district) unmatched = unmatched.filter((member) => member.suggestedDistrict === district);
+  if (user?.role === "division") {
+    const districts = divisionDistricts(user.district);
+    unmatched = unmatched.filter((member) => districts.includes(canonicalDistrict(member.suggestedDistrict || member.rawDistrict)));
+  }
+  if (user?.role === "district") {
+    const userDistrict = canonicalDistrict(user.district);
+    unmatched = unmatched.filter((member) => canonicalDistrict(member.suggestedDistrict || member.rawDistrict) === userDistrict);
+  }
   if (search) {
     const needle = search.toLowerCase();
     unmatched = unmatched.filter((member) => [
@@ -1137,12 +1145,9 @@ async function exportTalukCorrections(user, filters = {}) {
     page: 1,
     size: Number.MAX_SAFE_INTEGER,
     district,
-    search: filters.search || ""
+    search: filters.search || "",
+    user
   });
-  if (user.role === "division") {
-    const districts = divisionDistricts(user.district);
-    return result.rows.filter((row) => districts.includes(canonicalDistrict(row.suggestedDistrict || row.rawDistrict)));
-  }
   return result.rows;
 }
 
