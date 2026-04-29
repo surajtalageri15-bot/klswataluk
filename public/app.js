@@ -1420,20 +1420,38 @@ function renderUsers() {
 function bindTeamRequestActions() {
   document.querySelectorAll("[data-team-request]").forEach((button) => {
     button.addEventListener("click", async () => {
+      const message = document.querySelector("#teamRequestMessage");
+      if (message) {
+        message.textContent = "";
+        message.classList.remove("success");
+      }
       const status = button.dataset.status;
       const item = state.teamRequests.find((request) => request.id === button.dataset.teamRequest);
+      if (!item) return;
       let remarks = "";
       if (status === "Rejected") {
         const note = prompt("Reason for rejection:", item.remarks || "");
         if (note === null) return;
         remarks = note;
       }
-      await request(`/api/taluk-team-requests/${item.id}`, {
-        method: "PUT",
-        body: JSON.stringify({ status, remarks })
-      });
-      await loadUsers();
-      renderApp();
+      button.disabled = true;
+      try {
+        await request(`/api/taluk-team-requests/${item.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ status, remarks })
+        });
+        if (message) {
+          message.textContent = status === "Approved" ? "Login approved successfully." : "Request rejected.";
+          message.classList.add("success");
+        }
+        await loadUsers();
+        renderApp();
+      } catch (error) {
+        if (message) message.textContent = error.message;
+        else alert(error.message);
+      } finally {
+        button.disabled = false;
+      }
     });
   });
   document.querySelectorAll("[data-copy-login-message]").forEach((button) => {
@@ -1456,6 +1474,7 @@ function renderTeamRequests() {
         <h2>Taluk team join requests</h2>
         <span class="badge">${state.teamRequests.filter((item) => item.status === "Pending").length} Pending</span>
       </div>
+      <div class="message" id="teamRequestMessage"></div>
       <div class="table-wrap">
         <table>
           <thead>
