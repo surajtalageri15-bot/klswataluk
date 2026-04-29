@@ -733,13 +733,39 @@ textarea {
   margin: 14px 0;
   max-height: 520px;
   overflow: auto;
+  user-select: none;
 }
 
 .chat-message {
+  position: relative;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   background: #fbfcf8;
+}
+
+.secure-chat {
+  position: relative;
+}
+
+.secure-chat::before {
+  content: attr(data-watermark);
+  position: absolute;
+  inset: 72px 20px auto auto;
+  max-width: 70%;
+  color: rgba(130, 45, 45, 0.14);
+  font-size: clamp(18px, 4vw, 34px);
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: right;
+  transform: rotate(-12deg);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.secure-chat > * {
+  position: relative;
+  z-index: 2;
 }
 
 .chat-message p {
@@ -757,6 +783,12 @@ textarea {
 .chat-form {
   border-top: 1px solid var(--line);
   padding-top: 14px;
+}
+
+@media print {
+  .secure-chat {
+    display: none !important;
+  }
 }
 
 .account-meta {

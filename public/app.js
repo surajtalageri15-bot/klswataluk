@@ -537,16 +537,21 @@ function chatScopeLabel(message) {
   return "State";
 }
 
+function chatWatermark() {
+  return `${state.user.name || state.user.username} - ${userScopeLabel()}`;
+}
+
 function renderTeamChat() {
   document.querySelector("#view").innerHTML = `
-    <section class="box section">
+    <section class="box section secure-chat" data-watermark="${escapeHtml(chatWatermark())}">
       <div class="section-head">
         <div>
           <h2>Taluk team group chat</h2>
-          <p class="muted">Messages are visible according to your login scope.</p>
+          <p class="muted">Private team communication. Copy, right-click and print are disabled; screenshots/screen recording cannot be fully blocked by a web browser.</p>
         </div>
         <button class="secondary" id="refreshTeamChat">Refresh</button>
       </div>
+      <div class="notice">Confidential chat. Do not screenshot, screen record, forward, or share outside KLSWA authorized team.</div>
       <div class="chat-list">
         ${state.teamChatMessages.map((message) => `
           <article class="chat-message">
@@ -572,6 +577,18 @@ function renderTeamChat() {
     </section>
   `;
 
+  const secureChat = document.querySelector(".secure-chat");
+  ["copy", "cut", "contextmenu", "dragstart"].forEach((eventName) => {
+    secureChat.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      const message = document.querySelector("#teamChatMessage");
+      if (message) message.textContent = "Copying or saving chat content is not allowed.";
+    });
+  });
+  secureChat.addEventListener("selectstart", (event) => {
+    if (event.target.closest("textarea, input")) return;
+    event.preventDefault();
+  });
   document.querySelector("#refreshTeamChat").addEventListener("click", async () => {
     await loadTeamChat();
     renderTeamChat();
