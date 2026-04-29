@@ -2,7 +2,7 @@ const MASTER_TALUKS = {
   "Bagalkot": ["Bagalkote", "Jamkhandi", "Mudhola", "Badami", "Bilagi", "Hunagunda", "Ilkal", "Rabkavi Banhatti", "Guledgudda"],
   "Ballari": ["Ballari", "Kurugodu", "Kampli", "Sanduru", "Siraguppa"],
   "Belagavi": ["Belagavi", "Athani", "Bailhongal", "Chikkodi", "Gokak", "Khanapura", "Mudalgi", "Nippani", "Rayabaga", "Savadatti", "Ramadurga", "Kagawada", "Hukkeri", "Kitturu", "Yargatti"],
-  "Bengaluru Urban": ["Bengaluru", "Kengeri", "Krishnarajapura", "Anekal", "Yelahanka"],
+  "Bengaluru Urban": ["Bengaluru", "Bengaluru North", "Bengaluru South", "Kengeri", "Krishnarajapura", "Anekal", "Yelahanka"],
   "Bengaluru Rural": ["Nelamangala", "Doddaballapura", "Devanahalli", "Hosakote"],
   "Bidar": ["Aurad", "Basavakalyana", "Bhalki", "Bidar", "Chitgoppa", "Hulsuru", "Humnabad", "Kamalanagara"],
   "Chamarajanagar": ["Chamarajanagara", "Gundlupete", "Kollegala", "Yelanduru", "Hanuru"],
@@ -76,6 +76,12 @@ const STATE_DIVISIONS = {
 
 const DISTRICT_ALIASES = {
   bagalkote: "Bagalkot",
+  "bangalore urban": "Bengaluru Urban",
+  "bangaluru urban": "Bengaluru Urban",
+  "bengaluru urban": "Bengaluru Urban",
+  "bangalore rural": "Bengaluru Rural",
+  "bangaluru rural": "Bengaluru Rural",
+  "bengaluru rural": "Bengaluru Rural",
   chamarajanagara: "Chamarajanagar",
   chikkmagaluru: "Chikkamagaluru",
   koppala: "Koppal",
@@ -153,7 +159,13 @@ const TALUK_ALIASES = {
   vadgera: "Vadagera",
   hospet: "Hosapete",
   hadagali: "Hoovina Hadagali",
-  "hoovina hadagali": "Hoovina Hadagali"
+  "hoovina hadagali": "Hoovina Hadagali",
+  "bangalore north": "Bengaluru North",
+  "bengaluru north": "Bengaluru North",
+  "bangaluru north": "Bengaluru North",
+  "bangalore south": "Bengaluru South",
+  "bengaluru south": "Bengaluru South",
+  "bangaluru south": "Bengaluru South"
 };
 
 function canonicalDistrict(district) {
