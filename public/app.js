@@ -16,7 +16,12 @@ const state = {
   userFilters: { search: "", role: "", district: "" },
   auditFilters: { search: "", editor: "", action: "", from: "", to: "", memberId: "" },
   duplicateFilters: { search: "", type: "" },
-  dataCorrectionFilters: { search: "" }
+  dataCorrectionFilters: { search: "" },
+  messageDraft: {
+    audience: "all_members",
+    subject: "State President Notice",
+    body: ""
+  }
 };
 
 let latestJoinLink = "";
@@ -243,6 +248,7 @@ function renderApp() {
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
+          ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
@@ -269,6 +275,10 @@ function renderApp() {
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "dataCorrections") await loadDataCorrectionRequests();
       if (state.tab === "missingData") await loadMissingData();
+      if (state.tab === "messages") {
+        await loadDashboard();
+        await loadUsers();
+      }
       if (state.tab === "users") await loadUsers();
       if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
@@ -289,6 +299,7 @@ function renderApp() {
   if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "dataCorrections") renderDataCorrectionRequests();
   if (state.tab === "missingData") renderMissingData();
+  if (state.tab === "messages") renderMessages();
   if (state.tab === "users") renderUsers();
   if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
@@ -302,6 +313,7 @@ function pageTitle() {
   if (state.tab === "membership") return "Membership Form";
   if (state.tab === "dataCorrections") return "Correction Requests";
   if (state.tab === "missingData") return "Missing Data Report";
+  if (state.tab === "messages") return "State President Messages";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
@@ -315,6 +327,156 @@ function userScopeLabel() {
   if (state.user.role === "division") return `${escapeHtml(state.user.district)} Division`;
   if (state.user.role === "district") return `${escapeHtml(state.user.district)} District President`;
   return `${escapeHtml(state.user.taluk)} Taluk`;
+}
+
+const messageAudienceLabels = {
+  all_members: "All Members",
+  active_members: "Active Members",
+  pending_members: "Pending Verification Members",
+  correction_members: "Needs Correction Members",
+  all_teams: "All Office Teams"
+};
+
+const messageTemplateLabels = {
+  general: "General Notice",
+  meeting: "Meeting Notice",
+  correction: "Data Correction Reminder",
+  membership: "Membership Update"
+};
+
+function audienceCount(audience) {
+  const summary = state.dashboard?.summary || {};
+  const statusCounts = summary.statusCounts || {};
+  if (audience === "active_members") return statusCounts.Active || 0;
+  if (audience === "pending_members") return statusCounts["Pending verification"] || 0;
+  if (audience === "correction_members") return statusCounts["Needs correction"] || 0;
+  if (audience === "all_teams") return state.users.length || "office";
+  return summary.total || 0;
+}
+
+function audienceExportParams(audience) {
+  if (audience === "active_members") return { status: "Active" };
+  if (audience === "pending_members") return { status: "Pending verification" };
+  if (audience === "correction_members") return { status: "Needs correction" };
+  return {};
+}
+
+function messageTemplate(type, audience) {
+  const audienceLabel = messageAudienceLabels[audience] || "Members";
+  if (type === "meeting") {
+    return [
+      "Dear KLSWA member,",
+      "",
+      "A state-level meeting notice has been issued by the State President.",
+      "Audience: " + audienceLabel,
+      "Please attend as per the official schedule shared by the association.",
+      "",
+      "Regards,",
+      "State President, KLSWA"
+    ].join("\n");
+  }
+  if (type === "correction") {
+    return [
+      "Dear KLSWA member,",
+      "",
+      "Your membership data verification or correction is important.",
+      "Please check your submitted details and complete any pending corrections at the earliest.",
+      "",
+      "Status check: https://klswa.in/status.html",
+      "",
+      "Regards,",
+      "State President, KLSWA"
+    ].join("\n");
+  }
+  if (type === "membership") {
+    return [
+      "Dear KLSWA member,",
+      "",
+      "Please complete or verify your official membership information using the KLSWA public links.",
+      "",
+      "Public links: https://klswa.in/links.html",
+      "",
+      "Regards,",
+      "State President, KLSWA"
+    ].join("\n");
+  }
+  return [
+    "Dear KLSWA member,",
+    "",
+    "This is an official notice from the State President.",
+    "Audience: " + audienceLabel,
+    "",
+    "Regards,",
+    "State President, KLSWA"
+  ].join("\n");
+}
+
+function renderMessages() {
+  if (state.user.role !== "state_president") {
+    document.querySelector("#view").innerHTML = `<section class="box section"><p>State President access required.</p></section>`;
+    return;
+  }
+  const draft = state.messageDraft;
+  const count = audienceCount(draft.audience);
+  const exportParams = audienceExportParams(draft.audience);
+  const isMemberAudience = draft.audience !== "all_teams";
+  document.querySelector("#view").innerHTML = `
+    <div class="split message-layout">
+      <section class="box section">
+        <div class="section-head">
+          <h2>Prepare message</h2>
+          <span class="badge">${escapeHtml(count)} recipients</span>
+        </div>
+        <div class="form-grid">
+          ${selectField("messageAudience", "Audience", Object.keys(messageAudienceLabels), draft.audience, false, messageAudienceLabels)}
+          ${selectField("messageTemplate", "Template", Object.keys(messageTemplateLabels), "general", false, messageTemplateLabels)}
+          <label>Subject <input id="messageSubject" value="${escapeHtml(draft.subject)}"></label>
+          <label>Message
+            <textarea id="messageBody" rows="10">${escapeHtml(draft.body || messageTemplate("general", draft.audience))}</textarea>
+          </label>
+          <div class="actions">
+            <button class="primary" id="copyBroadcastMessage">Copy message</button>
+            ${isMemberAudience ? `<a class="secondary" href="${exportUrl("/api/exports/members", exportParams)}">Download member CSV</a>` : ""}
+          </div>
+          <div class="message success" id="broadcastMessageStatus"></div>
+        </div>
+      </section>
+      <section class="box section">
+        <h2>Message tools</h2>
+        <div class="list">
+          <div class="list-row"><span>All Members</span><span class="badge">${state.dashboard.summary.total || 0}</span></div>
+          <div class="list-row"><span>Active Members</span><span class="badge">${state.dashboard.summary.statusCounts?.Active || 0}</span></div>
+          <div class="list-row"><span>Pending Verification</span><span class="badge">${state.dashboard.summary.statusCounts?.["Pending verification"] || 0}</span></div>
+          <div class="list-row"><span>Needs Correction</span><span class="badge">${state.dashboard.summary.statusCounts?.["Needs correction"] || 0}</span></div>
+        </div>
+        <p class="muted">Use copy message for WhatsApp groups or download member CSV for phone/contact list.</p>
+      </section>
+    </div>
+  `;
+
+  const audience = document.querySelector('select[name="messageAudience"]');
+  const template = document.querySelector('select[name="messageTemplate"]');
+  const subject = document.querySelector("#messageSubject");
+  const body = document.querySelector("#messageBody");
+  audience.addEventListener("change", () => {
+    state.messageDraft.audience = audience.value;
+    state.messageDraft.body = messageTemplate(template.value, audience.value);
+    renderMessages();
+  });
+  template.addEventListener("change", () => {
+    state.messageDraft.body = messageTemplate(template.value, audience.value);
+    renderMessages();
+  });
+  subject.addEventListener("input", () => {
+    state.messageDraft.subject = subject.value;
+  });
+  body.addEventListener("input", () => {
+    state.messageDraft.body = body.value;
+  });
+  document.querySelector("#copyBroadcastMessage").addEventListener("click", async () => {
+    await copyText(`${subject.value}\n\n${body.value}`);
+    document.querySelector("#broadcastMessageStatus").textContent = "Message copied. Paste in WhatsApp/SMS group.";
+  });
 }
 
 function renderDashboard() {
