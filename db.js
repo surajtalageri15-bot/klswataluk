@@ -2113,6 +2113,126 @@ function listsFromMembers(members) {
   return masterLists();
 }
 
+const backupTables = [
+  "app_meta",
+  "users",
+  "members",
+  "taluk_team_requests",
+  "member_audit_logs",
+  "data_correction_requests",
+  "president_messages",
+  "team_chat_messages",
+  "member_notes"
+];
+
+const jsonBackupKeys = {
+  app_meta: "appMeta",
+  users: "users",
+  members: "members",
+  taluk_team_requests: "talukTeamRequests",
+  member_audit_logs: "auditLogs",
+  data_correction_requests: "dataCorrectionRequests",
+  president_messages: "presidentMessages",
+  team_chat_messages: "teamChatMessages",
+  member_notes: "memberNotes"
+};
+
+async function createBackup(createdBy = {}) {
+  const backup = {
+    type: "klswa-postgres-app-backup",
+    version: 1,
+    createdAt: new Date().toISOString(),
+    createdBy: {
+      id: createdBy.id || "",
+      username: createdBy.username || "",
+      name: createdBy.name || "",
+      role: createdBy.role || ""
+    },
+    database: hasPostgres ? "postgresql" : "json",
+    tables: {}
+  };
+
+  if (hasPostgres) {
+    for (const table of backupTables) {
+      const result = await pool.query(`select * from ${table}`);
+      backup.tables[table] = result.rows;
+    }
+    return backup;
+  }
+
+  const db = await readJsonDb();
+  backup.tables.app_meta = Object.entries(db.meta || {}).map(([key, value]) => ({ key, value: String(value ?? "") }));
+  for (const [table, key] of Object.entries(jsonBackupKeys)) {
+    if (table === "app_meta") continue;
+    backup.tables[table] = Array.isArray(db[key]) ? db[key] : [];
+  }
+  return backup;
+}
+
+async function insertBackupRows(client, table, rows) {
+  if (!rows.length) return;
+  const columns = Object.keys(rows[0]);
+  const values = [];
+  const placeholders = rows.map((row, rowIndex) => {
+    const rowValues = columns.map((column) => row[column] ?? null);
+    values.push(...rowValues);
+    const offset = rowIndex * columns.length;
+    return `(${columns.map((_, index) => `$${offset + index + 1}`).join(", ")})`;
+  }).join(", ");
+  await client.query(
+    `insert into ${table} (${columns.map((column) => `"${column}"`).join(", ")}) values ${placeholders}`,
+    values
+  );
+}
+
+async function restoreBackup(backup, restoredBy = {}) {
+  if (!backup || backup.type !== "klswa-postgres-app-backup" || !backup.tables || typeof backup.tables !== "object") {
+    const error = new Error("Invalid backup file");
+    error.status = 400;
+    throw error;
+  }
+
+  if (hasPostgres) {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      for (const table of [...backupTables].reverse()) {
+        await client.query(`delete from ${table}`);
+      }
+      for (const table of backupTables) {
+        await insertBackupRows(client, table, Array.isArray(backup.tables[table]) ? backup.tables[table] : []);
+      }
+      await client.query("commit");
+      await touchMeta();
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } else {
+    const nextDb = {
+      meta: Object.fromEntries((backup.tables.app_meta || []).map((row) => [row.key, row.value])),
+      users: backup.tables.users || [],
+      members: backup.tables.members || [],
+      talukTeamRequests: backup.tables.taluk_team_requests || [],
+      auditLogs: backup.tables.member_audit_logs || [],
+      dataCorrectionRequests: backup.tables.data_correction_requests || [],
+      presidentMessages: backup.tables.president_messages || [],
+      teamChatMessages: backup.tables.team_chat_messages || [],
+      memberNotes: backup.tables.member_notes || []
+    };
+    nextDb.meta.updatedAt = new Date().toISOString();
+    await writeJsonDb(nextDb);
+  }
+
+  return {
+    restoredAt: new Date().toISOString(),
+    restoredBy: restoredBy.username || restoredBy.name || "admin",
+    counts: Object.fromEntries(backupTables.map((table) => [table, Array.isArray(backup.tables[table]) ? backup.tables[table].length : 0]))
+  };
+}
+
 async function touchMeta() {
   if (!hasPostgres) return;
   await pool.query(`
@@ -2181,5 +2301,7 @@ module.exports = {
   createTeamRequest,
   listTeamRequests,
   getTeamRequest,
-  updateTeamRequest
+  updateTeamRequest,
+  createBackup,
+  restoreBackup
 };

@@ -476,6 +476,27 @@ async function api(req, res, pathname) {
     return json(res, 200, await store.getDashboard(user));
   }
 
+  if (pathname === "/api/admin/backup" && req.method === "GET") {
+    requireAdmin(user);
+    const backup = await store.createBackup(user);
+    const date = new Date().toISOString().slice(0, 10);
+    return send(res, 200, JSON.stringify(backup, null, 2), {
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Disposition": `attachment; filename="klswa-backup-${date}.json"`
+    });
+  }
+
+  if (pathname === "/api/admin/restore" && req.method === "POST") {
+    requireAdmin(user);
+    const body = asObject(await parseBody(req));
+    if (String(body.adminPassword || "") !== String(user.password || "")) {
+      return json(res, 403, { error: "Admin password confirmation failed" });
+    }
+    const backup = asObject(body.backup);
+    const result = await store.restoreBackup(backup, user);
+    return json(res, 200, { ok: true, result });
+  }
+
   if (pathname === "/api/president-messages" && req.method === "GET") {
     if (!["admin", "state_president"].includes(user.role)) return json(res, 403, { error: "State President message access required" });
     return json(res, 200, { messages: await store.listPresidentMessages() });

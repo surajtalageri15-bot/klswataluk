@@ -20,6 +20,7 @@ const state = {
   duplicateFilters: { search: "", type: "" },
   dataCorrectionFilters: { search: "" },
   memberNotes: { member: null, notes: [] },
+  restorePreview: null,
   messageDraft: {
     audience: "all_members",
     subject: "State President Notice",
@@ -284,6 +285,7 @@ function renderApp() {
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${["admin", "division"].includes(state.user.role) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
+          ${state.user.role === "admin" ? `<button data-tab="backupRestore" class="${state.tab === "backupRestore" ? "active" : ""}">Backup & Restore</button>` : ""}
         </nav>
         <button class="secondary" id="logoutBtn">Logout</button>
       </aside>
@@ -341,6 +343,7 @@ function renderApp() {
   if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
   if (state.tab === "audit") renderAuditLogs();
+  if (state.tab === "backupRestore") renderBackupRestore();
 }
 
 function pageTitle() {
@@ -356,6 +359,7 @@ function pageTitle() {
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
   if (state.tab === "audit") return state.user.role === "taluk" ? "Taluk Activity Log" : "Audit History";
+  if (state.tab === "backupRestore") return "Backup & Restore";
   return "Dashboard";
 }
 
@@ -2197,6 +2201,123 @@ function renderDuplicates() {
     await loadDuplicates();
     renderApp();
   });
+}
+
+function renderBackupRestore() {
+  if (state.user.role !== "admin") {
+    document.querySelector("#view").innerHTML = `<section class="box section"><p>Admin access required.</p></section>`;
+    return;
+  }
+  const preview = state.restorePreview;
+  document.querySelector("#view").innerHTML = `
+    <div class="split">
+      <section class="box section">
+        <div class="section-head">
+          <div>
+            <h2>One-click PostgreSQL backup</h2>
+            <p class="muted">Download all KLSWA app data: users, members, audit history, correction requests, messages, chat and notes.</p>
+          </div>
+        </div>
+        <div class="backup-card">
+          <strong>Backup file format</strong>
+          <span class="muted">JSON app-data backup for PostgreSQL restore. Keep this file private because it includes login data.</span>
+          <a class="primary" href="/api/admin/backup">Download backup</a>
+        </div>
+      </section>
+      <section class="box section">
+        <div class="section-head">
+          <div>
+            <h2>Restore from backup</h2>
+            <p class="muted">Restore replaces current database data. Admin password confirmation is required.</p>
+          </div>
+        </div>
+        <form id="restoreForm" class="form-grid">
+          <label>Backup JSON file
+            <input id="restoreFile" type="file" accept="application/json,.json" ${preview ? "" : "required"}>
+          </label>
+          ${preview ? restorePreviewCard(preview) : `<div class="notice">Select a backup file to preview table counts before restore.</div>`}
+          <label>Type RESTORE to confirm
+            <input name="confirmText" placeholder="RESTORE" required>
+          </label>
+          <label>Current admin password
+            <input name="adminPassword" type="password" autocomplete="current-password" required>
+          </label>
+          <div class="message" id="restoreMessage"></div>
+          <div class="actions">
+            <button class="danger" type="submit" ${preview ? "" : "disabled"}>Restore backup</button>
+            <button class="secondary" type="button" id="clearRestore">Clear</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  `;
+
+  document.querySelector("#restoreFile").addEventListener("change", async (event) => {
+    const file = event.currentTarget.files?.[0];
+    const message = document.querySelector("#restoreMessage");
+    message.textContent = "";
+    state.restorePreview = null;
+    if (!file) {
+      renderBackupRestore();
+      return;
+    }
+    try {
+      const backup = JSON.parse(await file.text());
+      if (backup.type !== "klswa-postgres-app-backup" || !backup.tables) throw new Error("Invalid KLSWA backup file");
+      state.restorePreview = backup;
+      renderBackupRestore();
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
+  document.querySelector("#clearRestore").addEventListener("click", () => {
+    state.restorePreview = null;
+    renderBackupRestore();
+  });
+  document.querySelector("#restoreForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#restoreMessage");
+    const form = new FormData(event.currentTarget);
+    message.textContent = "";
+    message.classList.remove("success");
+    if (!state.restorePreview) {
+      message.textContent = "Select a valid backup file first.";
+      return;
+    }
+    if (String(form.get("confirmText") || "").trim() !== "RESTORE") {
+      message.textContent = "Type RESTORE to confirm.";
+      return;
+    }
+    if (!confirm("Restore will replace current database data. Continue?")) return;
+    try {
+      const result = await request("/api/admin/restore", {
+        method: "POST",
+        body: JSON.stringify({
+          adminPassword: form.get("adminPassword"),
+          backup: state.restorePreview
+        })
+      });
+      state.restorePreview = null;
+      alert(`Restore completed at ${new Date(result.result.restoredAt).toLocaleString()}. Please login again if your session was restored from backup.`);
+      window.location.reload();
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
+}
+
+function restorePreviewCard(backup) {
+  const tables = backup.tables || {};
+  const counts = Object.entries(tables).map(([name, rows]) => [name, Array.isArray(rows) ? rows.length : 0]);
+  return `
+    <div class="backup-preview">
+      <strong>${escapeHtml(backup.type)} v${escapeHtml(backup.version || 1)}</strong>
+      <span class="muted">Created: ${escapeHtml(backup.createdAt || "-")} / Source: ${escapeHtml(backup.database || "-")}</span>
+      <div class="backup-counts">
+        ${counts.map(([name, count]) => `<div><span>${escapeHtml(name)}</span><strong>${count}</strong></div>`).join("")}
+      </div>
+    </div>
+  `;
 }
 
 function renderMissingData() {

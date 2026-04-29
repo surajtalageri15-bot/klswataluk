@@ -728,6 +728,41 @@ textarea {
   color: var(--green-dark);
 }
 
+.backup-card,
+.backup-preview {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbf7 100%);
+}
+
+.backup-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.backup-counts div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.backup-counts span,
+.backup-counts strong {
+  display: block;
+}
+
+.backup-counts strong {
+  margin-top: 3px;
+  color: var(--green-dark);
+  font-size: 20px;
+}
+
 .compact-table table {
   font-size: 13px;
 }
