@@ -1561,17 +1561,49 @@ async function usernameExists(username) {
   return db.users.some((item) => item.username === username);
 }
 
-async function findTeamRequestDuplicate({ phoneNumber = "", requestedUsername = "" }) {
+async function talukLoginExists(district, taluk, excludeUserId = "") {
+  const canonical = canonicalDistrict(district);
+  const normalized = normalizedTaluk(canonical, taluk);
+  const exclude = String(excludeUserId || "");
+  if (!canonical || !normalized) return false;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select 1 from users
+       where role = 'taluk'
+         and district = $1
+         and lower(coalesce(taluk, '')) = lower($2)
+         and ($3 = '' or id <> $3)
+       limit 1`,
+      [canonical, normalized, exclude]
+    );
+    return result.rowCount > 0;
+  }
+
+  const db = await readJsonDb();
+  return db.users.some((item) => item.role === "taluk"
+    && item.id !== exclude
+    && canonicalDistrict(item.district) === canonical
+    && normalizedTaluk(canonical, item.taluk) === normalized);
+}
+
+async function findTeamRequestDuplicate({ phoneNumber = "", requestedUsername = "", district = "", taluk = "" }) {
   const phone = String(phoneNumber || "").trim();
   const username = String(requestedUsername || "").trim().toLowerCase();
+  const canonical = canonicalDistrict(district);
+  const normalized = normalizedTaluk(canonical, taluk);
 
   if (hasPostgres) {
     const result = await pool.query(
       `select * from taluk_team_requests
        where status = 'Pending'
-         and (($1 <> '' and phone_number = $1) or ($2 <> '' and lower(requested_username) = $2))
+         and (
+          ($1 <> '' and phone_number = $1)
+          or ($2 <> '' and lower(requested_username) = $2)
+          or ($3 <> '' and $4 <> '' and district = $3 and lower(taluk) = lower($4))
+         )
        limit 1`,
-      [phone, username]
+      [phone, username, canonical, normalized]
     );
     return toTeamRequest(result.rows[0]) || null;
   }
@@ -1579,7 +1611,9 @@ async function findTeamRequestDuplicate({ phoneNumber = "", requestedUsername = 
   const db = await readJsonDb();
   db.talukTeamRequests ||= [];
   return db.talukTeamRequests.find((item) => item.status === "Pending"
-    && ((phone && item.phoneNumber === phone) || (username && String(item.requestedUsername || "").toLowerCase() === username))) || null;
+    && ((phone && item.phoneNumber === phone)
+      || (username && String(item.requestedUsername || "").toLowerCase() === username)
+      || (canonical && normalized && canonicalDistrict(item.district) === canonical && normalizedTaluk(canonical, item.taluk) === normalized))) || null;
 }
 
 async function createTeamRequest(request) {
@@ -1891,6 +1925,7 @@ module.exports = {
   deleteMember,
   listUsers,
   usernameExists,
+  talukLoginExists,
   createUser,
   upsertStatePresidentUser,
   upsertDistrictPresidentUsers,

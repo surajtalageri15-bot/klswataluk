@@ -311,9 +311,12 @@ async function api(req, res, pathname) {
     const requestBody = normalizeTeamRequest(asObject(await parseBody(req)));
     const validation = assertTeamRequest(requestBody);
     if (validation) return json(res, 400, { error: validation });
+    if (await store.talukLoginExists(requestBody.district, requestBody.taluk)) {
+      return json(res, 409, { error: "This taluk already has a technical team login" });
+    }
     if (await store.usernameExists(requestBody.requestedUsername)) return json(res, 409, { error: "This User ID is already used" });
     const duplicate = await store.findTeamRequestDuplicate(requestBody);
-    if (duplicate) return json(res, 409, { error: "A pending request already exists for this phone number or User ID" });
+    if (duplicate) return json(res, 409, { error: "A pending request already exists for this phone number, User ID, or taluk" });
     return json(res, 201, { ok: true, request: await store.createTeamRequest(requestBody) });
   }
 
@@ -784,6 +787,9 @@ async function api(req, res, pathname) {
     const reviewer = user.role === "division" ? "division team" : "admin";
     if (status === "Approved") {
       if (await store.usernameExists(target.requestedUsername)) return json(res, 409, { error: "This User ID is already used" });
+      if (await store.talukLoginExists(target.district, target.taluk)) {
+        return json(res, 409, { error: "This taluk already has a technical team login" });
+      }
       const newUser = await store.createUser({
         username: target.requestedUsername,
         password: target.requestedPassword,
@@ -852,6 +858,9 @@ async function api(req, res, pathname) {
     if (newUser.role === "taluk" && !newUser.taluk) return json(res, 400, { error: "Taluk user must be assigned a taluk" });
     if (newUser.role === "district" && !newUser.district) return json(res, 400, { error: "District President must be assigned a district" });
     if (newUser.role === "division" && !divisionDistricts(newUser.district).length) return json(res, 400, { error: "Division team must be assigned a valid division" });
+    if (newUser.role === "taluk" && await store.talukLoginExists(newUser.district, newUser.taluk)) {
+      return json(res, 409, { error: "This taluk already has a technical team login" });
+    }
     return json(res, 201, { user: publicUser(await store.createUser(newUser)) });
   }
 
@@ -869,6 +878,9 @@ async function api(req, res, pathname) {
       active: body.active !== false
     };
     if (next.role === "division" && !divisionDistricts(next.district).length) return json(res, 400, { error: "Division team must be assigned a valid division" });
+    if (next.role === "taluk" && await store.talukLoginExists(next.district, next.taluk, target.id)) {
+      return json(res, 409, { error: "This taluk already has a technical team login" });
+    }
     if (body.password) next.password = String(body.password);
     if (target.username === "admin") {
       next.role = "admin";
