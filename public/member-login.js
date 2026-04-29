@@ -5,6 +5,7 @@ const activateMessage = document.querySelector("#activateMessage");
 const loginMessage = document.querySelector("#loginMessage");
 const forgotMessage = document.querySelector("#forgotMessage");
 const dashboard = document.querySelector("#memberDashboard");
+const memberFormsGrid = document.querySelector(".public-member-grid");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -28,6 +29,10 @@ async function request(path, options = {}) {
 
 function formObject(form) {
   return Object.fromEntries(new FormData(form));
+}
+
+function setMemberDashboardMode(isLoggedIn) {
+  memberFormsGrid.classList.toggle("hidden", Boolean(isLoggedIn));
 }
 
 function statusText(status) {
@@ -198,6 +203,7 @@ function renderPresidentMessages(messages = []) {
 }
 
 function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null) {
+  setMemberDashboardMode(true);
   dashboard.innerHTML = `
     ${renderPresidentMessages(presidentMessages)}
     <section class="box status-card member-profile-card">
@@ -242,6 +248,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   document.querySelector("#memberLogout").addEventListener("click", async () => {
     await request("/api/member-logout", { method: "POST" });
     dashboard.innerHTML = "";
+    setMemberDashboardMode(false);
   });
 
   document.querySelector("#copyTalukSupport").addEventListener("click", async () => {
@@ -297,6 +304,7 @@ async function loadMemberSession() {
     renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null);
   } catch {
     dashboard.innerHTML = "";
+    setMemberDashboardMode(false);
   }
 }
 
