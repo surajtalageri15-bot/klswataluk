@@ -1427,6 +1427,10 @@ async function listDataCorrectionRequests(user, filters = {}) {
   }
 
   if (user.role === "taluk") rows = rows.filter((row) => row.requestedById === user.id);
+  if (["division", "district"].includes(user.role)) {
+    const visibleMemberIds = new Set((await exportMembers(user, {})).map((member) => member.id));
+    rows = rows.filter((row) => visibleMemberIds.has(row.memberId));
+  }
   if (search) {
     rows = rows.filter((row) => [
       row.memberName, row.reason, row.status, row.requestedByName, row.adminRemarks,

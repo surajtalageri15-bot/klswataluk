@@ -245,7 +245,7 @@ async function loadDuplicates() {
 }
 
 async function loadDataCorrectionRequests() {
-  if (!["admin", "state_president", "taluk"].includes(state.user.role)) return;
+  if (!["admin", "state_president", "division", "taluk"].includes(state.user.role)) return;
   const params = new URLSearchParams({ search: state.dataCorrectionFilters.search });
   const data = await request(`/api/data-correction-requests?${params.toString()}`);
   state.dataCorrectionRequests = data.requests;
@@ -277,7 +277,7 @@ function renderApp() {
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
           ${["admin", "state_president", "division", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
           ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
-          ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
+          ${["admin", "state_president", "division", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
@@ -2391,10 +2391,11 @@ function renderMissingData() {
 
 function renderDataCorrectionRequests() {
   const pendingCount = state.dataCorrectionRequests.filter((item) => item.status === "Pending").length;
+  const canReviewCorrections = ["admin", "division"].includes(state.user.role);
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
-        <h2>${["admin", "state_president"].includes(state.user.role) ? "Pending data corrections" : "My correction requests"}</h2>
+          <h2>${canReviewCorrections || state.user.role === "state_president" ? "Pending data corrections" : "My correction requests"}</h2>
         <span class="badge">${pendingCount} Pending</span>
       </div>
       <div class="toolbar">
@@ -2424,9 +2425,9 @@ function renderDataCorrectionRequests() {
                 <td>${escapeHtml(item.requestedByName || "-")}</td>
                 <td><span class="badge">${escapeHtml(item.status)}</span></td>
                 <td class="actions">
-                  ${state.user.role === "admin" && item.status === "Pending" ? `
-                    <button class="primary" data-review-correction="${item.id}" data-status="Approved">Approve</button>
-                    <button class="danger" data-review-correction="${item.id}" data-status="Rejected">Reject</button>
+                    ${canReviewCorrections && item.status === "Pending" ? `
+                      <button class="primary" data-review-correction="${item.id}" data-status="Approved">Approve</button>
+                      <button class="danger" data-review-correction="${item.id}" data-status="Rejected">Reject</button>
                   ` : escapeHtml(item.adminRemarks || "-")}
                 </td>
               </tr>

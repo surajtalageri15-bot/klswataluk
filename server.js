@@ -750,7 +750,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/data-correction-requests" && req.method === "GET") {
-    if (!["admin", "state_president", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
+    if (!["admin", "state_president", "division", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, {
       requests: await store.listDataCorrectionRequests(user, {
@@ -784,16 +784,17 @@ async function api(req, res, pathname) {
 
   const dataCorrectionMatch = pathname.match(/^\/api\/data-correction-requests\/([^/]+)$/);
   if (dataCorrectionMatch && req.method === "PUT") {
-    requireAdmin(user);
+    if (!["admin", "division"].includes(user.role)) return json(res, 403, { error: "Admin or division approval access required" });
     const target = await store.getDataCorrectionRequest(dataCorrectionMatch[1]);
     if (!target) return json(res, 404, { error: "Request not found" });
     if (target.status !== "Pending") return json(res, 400, { error: "Request is already reviewed" });
+    const member = await store.getMember(target.memberId);
+    if (!member) return json(res, 404, { error: "Member not found" });
+    if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This correction request is outside your division" });
     const body = asObject(await parseBody(req));
     const status = String(body.status || "").trim();
     const adminRemarks = String(body.adminRemarks || "").trim();
     if (status === "Approved") {
-      const member = await store.getMember(target.memberId);
-      if (!member) return json(res, 404, { error: "Member not found" });
       const next = normalizeMember({ ...member, ...asObject(target.requestedChanges) }, member);
       const validation = assertMember(next);
       if (validation) return json(res, 400, { error: validation });
@@ -802,7 +803,7 @@ async function api(req, res, pathname) {
       return json(res, 200, {
         request: await store.updateDataCorrectionRequest(target.id, {
           status: "Approved",
-          adminRemarks: adminRemarks || "Approved by admin",
+          adminRemarks: adminRemarks || `Approved by ${user.role === "division" ? "division team" : "admin"}`,
           reviewedById: user.id,
           reviewedByName: user.name
         }),
@@ -813,7 +814,7 @@ async function api(req, res, pathname) {
       return json(res, 200, {
         request: await store.updateDataCorrectionRequest(target.id, {
           status: "Rejected",
-          adminRemarks: adminRemarks || "Rejected by admin",
+          adminRemarks: adminRemarks || `Rejected by ${user.role === "division" ? "division team" : "admin"}`,
           reviewedById: user.id,
           reviewedByName: user.name
         })
