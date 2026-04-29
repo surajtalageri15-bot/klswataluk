@@ -595,14 +595,16 @@ function renderTeamChat() {
   });
   document.querySelector("#teamChatForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(form));
     const message = document.querySelector("#teamChatMessage");
     message.textContent = "";
     try {
       await request("/api/team-chat", {
         method: "POST",
-        body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget)))
+        body: JSON.stringify(payload)
       });
-      event.currentTarget.reset();
+      form.reset();
       await loadTeamChat();
       renderTeamChat();
     } catch (error) {
