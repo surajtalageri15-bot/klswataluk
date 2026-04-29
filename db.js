@@ -1747,6 +1747,59 @@ async function listUsers(viewer = null) {
   return db.users;
 }
 
+async function findTalukTeamContactForMember(member) {
+  const district = canonicalDistrict(member?.district || "");
+  const taluk = normalizedTaluk(district, member?.taluk || "");
+  if (!district || !taluk) return null;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select u.id, u.username, u.name, u.role, u.district, u.taluk, u.active,
+              r.phone_number as phone_number
+       from users u
+       left join taluk_team_requests r
+         on r.status = 'Approved'
+        and (r.user_id = u.id or lower(r.requested_username) = lower(u.username))
+       where u.role = 'taluk'
+         and u.active = true
+         and u.district = $1
+         and lower(coalesce(u.taluk, '')) = lower($2)
+       order by u.updated_at desc
+       limit 1`,
+      [district, taluk]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      username: row.username,
+      name: row.name,
+      role: row.role,
+      district: row.district || "",
+      taluk: row.taluk || "",
+      phoneNumber: row.phone_number || ""
+    };
+  }
+
+  const db = await readJsonDb();
+  const user = db.users.find((item) => item.role === "taluk"
+    && item.active === true
+    && canonicalDistrict(item.district) === district
+    && normalizedTaluk(district, item.taluk) === taluk);
+  if (!user) return null;
+  const request = (db.talukTeamRequests || []).find((item) => item.status === "Approved"
+    && (item.userId === user.id || String(item.requestedUsername || "").toLowerCase() === String(user.username || "").toLowerCase()));
+  return {
+    id: user.id,
+    username: user.username,
+    name: user.name,
+    role: user.role,
+    district: user.district || "",
+    taluk: user.taluk || "",
+    phoneNumber: request?.phoneNumber || ""
+  };
+}
+
 async function upsertStatePresidentUser(password) {
   const user = {
     id: crypto.randomUUID(),
@@ -2278,6 +2331,7 @@ module.exports = {
   correctMemberTaluk,
   deleteMember,
   listUsers,
+  findTalukTeamContactForMember,
   usernameExists,
   talukLoginExists,
   createUser,

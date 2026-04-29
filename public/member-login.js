@@ -106,6 +106,76 @@ function changePasswordForm() {
   `;
 }
 
+function memberSupportMessage(member, talukTeam) {
+  return [
+    `Dear ${talukTeam?.name || "Taluk Technical Team"},`,
+    "",
+    "I need support for my KLSWA member record.",
+    `Name: ${member.name || "-"}`,
+    `LS Number: ${member.lsNumber || "-"}`,
+    `District: ${member.district || "-"}`,
+    `Taluk: ${member.taluk || "-"}`,
+    `Current Status: ${member.status || "-"}`,
+    "",
+    "Please guide me."
+  ].join("\n");
+}
+
+function whatsappLink(phoneNumber, text) {
+  const phone = String(phoneNumber || "").replace(/\D/g, "");
+  if (!phone) return "";
+  return `https://wa.me/91${encodeURIComponent(phone)}?text=${encodeURIComponent(text)}`;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function renderTalukTeamContact(member, talukTeam) {
+  const message = memberSupportMessage(member, talukTeam);
+  const whatsapp = whatsappLink(talukTeam?.phoneNumber, message);
+  return `
+    <section class="box public-form-card">
+      <div class="section-head">
+        <div>
+          <h2>Contact Taluk Team</h2>
+          <p class="muted">Use this for member record support, correction help, or login help.</p>
+        </div>
+        <span class="badge">${escapeHtml(member.taluk || "Taluk")}</span>
+      </div>
+      ${talukTeam ? `
+        <div class="status-grid">
+          <div><span class="muted">Team Name</span><strong>${escapeHtml(talukTeam.name || "-")}</strong></div>
+          <div><span class="muted">User ID</span><strong>${escapeHtml(talukTeam.username || "-")}</strong></div>
+          <div><span class="muted">District</span><strong>${escapeHtml(talukTeam.district || member.district || "-")}</strong></div>
+          <div><span class="muted">Phone</span><strong>${escapeHtml(talukTeam.phoneNumber || "Not available")}</strong></div>
+        </div>
+      ` : `
+        <p class="notice">Taluk technical team login is not active yet for this taluk. Please contact district/state admin.</p>
+      `}
+      <label>Support message
+        <textarea id="talukSupportMessage" rows="8" readonly>${escapeHtml(message)}</textarea>
+      </label>
+      <div class="actions">
+        <button class="secondary" type="button" id="copyTalukSupport">Copy message</button>
+        ${whatsapp ? `<a class="primary" href="${whatsapp}" target="_blank">Open WhatsApp</a>` : ""}
+      </div>
+      <div class="message success" id="talukSupportStatus"></div>
+    </section>
+  `;
+}
+
 function renderPresidentMessages(messages = []) {
   if (!messages.length) return "";
   return `
@@ -127,7 +197,7 @@ function renderPresidentMessages(messages = []) {
   `;
 }
 
-function renderDashboard(member, auditLogs = [], presidentMessages = []) {
+function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null) {
   dashboard.innerHTML = `
     ${renderPresidentMessages(presidentMessages)}
     <section class="box status-card">
@@ -148,6 +218,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = []) {
         <button class="secondary" id="memberLogout" type="button">Logout</button>
       </div>
     </section>
+    ${renderTalukTeamContact(member, talukTeam)}
     ${changePasswordForm()}
     ${correctionForm(member)}
     <section class="box public-form-card">
@@ -170,6 +241,13 @@ function renderDashboard(member, auditLogs = [], presidentMessages = []) {
   document.querySelector("#memberLogout").addEventListener("click", async () => {
     await request("/api/member-logout", { method: "POST" });
     dashboard.innerHTML = "";
+  });
+
+  document.querySelector("#copyTalukSupport").addEventListener("click", async () => {
+    await copyText(document.querySelector("#talukSupportMessage").value);
+    const status = document.querySelector("#talukSupportStatus");
+    status.textContent = "Support message copied. Paste it in WhatsApp/SMS.";
+    setTimeout(() => { status.textContent = ""; }, 1800);
   });
 
   const correction = document.querySelector("#memberCorrectionForm");
@@ -215,7 +293,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = []) {
 async function loadMemberSession() {
   try {
     const data = await request("/api/member-me");
-    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || []);
+    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null);
   } catch {
     dashboard.innerHTML = "";
   }
@@ -246,7 +324,7 @@ loginForm.addEventListener("submit", async (event) => {
     });
     loginForm.reset();
     const session = await request("/api/member-me");
-    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || []);
+    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null);
   } catch (error) {
     loginMessage.textContent = error.message;
   }

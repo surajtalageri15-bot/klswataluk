@@ -412,7 +412,8 @@ async function api(req, res, pathname) {
       limit: 100
     });
     const presidentMessages = await store.listPresidentMessagesForMember(member);
-    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages });
+    const talukTeam = await store.findTalukTeamContactForMember(member);
+    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages, talukTeam });
   }
 
   if (pathname === "/api/member-correction-request" && req.method === "POST") {
