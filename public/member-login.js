@@ -70,6 +70,72 @@ function memberRows(member) {
   `).join("");
 }
 
+const missingMemberFields = {
+  phoneNumber: "Phone",
+  dateOfBirth: "Date of Birth",
+  gender: "Gender",
+  maritalStatus: "Marital Status",
+  kalyanaKarnataka: "Kalyana Karnataka",
+  category: "Category",
+  caste: "Caste",
+  religion: "Religion",
+  disability: "Disability",
+  loginId: "Mojini Login ID",
+  batchYear: "Batch Year",
+  qualification: "Education",
+  address: "Address"
+};
+
+function missingFieldKeys(member) {
+  return Object.keys(missingMemberFields).filter((field) => !String(member[field] ?? "").trim());
+}
+
+function missingInput(field, member) {
+  const value = escapeHtml(member[field] || "");
+  if (field === "address") {
+    return `<label>${missingMemberFields[field]} * <textarea name="${field}" rows="3" required>${value}</textarea></label>`;
+  }
+  if (field === "gender") {
+    return `<label>${missingMemberFields[field]} * <select name="${field}" required><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select></label>`;
+  }
+  if (field === "maritalStatus") {
+    return `<label>${missingMemberFields[field]} * <select name="${field}" required><option value="">Select</option><option>Married</option><option>Unmarried</option><option>Widowed</option></select></label>`;
+  }
+  if (field === "kalyanaKarnataka") {
+    return `<label>${missingMemberFields[field]} * <select name="${field}" required><option value="">Select</option><option>Yes</option><option>No</option></select></label>`;
+  }
+  if (field === "category") {
+    return `<label>${missingMemberFields[field]} * <select name="${field}" required><option value="">Select</option><option>GM</option><option>SC</option><option>ST</option><option>Cat-1</option><option>2A</option><option>2B</option><option>3A</option><option>3B</option></select></label>`;
+  }
+  if (field === "disability") {
+    return `<label>${missingMemberFields[field]} * <select name="${field}" required><option value="">Select</option><option>None</option><option>Yes</option></select></label>`;
+  }
+  const type = field === "dateOfBirth" ? "date" : ["batchYear"].includes(field) ? "number" : "text";
+  return `<label>${missingMemberFields[field]} * <input name="${field}" type="${type}" value="${value}" required></label>`;
+}
+
+function missingDataForm(member) {
+  const fields = missingFieldKeys(member);
+  if (!fields.length) return "";
+  return `
+    <form id="memberMissingDataForm" class="box public-form-card member-dashboard-card correction-card">
+      <div class="section-head">
+        <div>
+          <h2>Fill Missing Data</h2>
+          <p class="muted">Submit blank fields for admin/division approval. Approved changes will update your member record.</p>
+        </div>
+        <span class="badge">${fields.length} Missing</span>
+      </div>
+      <p class="notice">Missing: ${escapeHtml(fields.map((field) => missingMemberFields[field]).join(", "))}</p>
+      <div class="two">
+        ${fields.map((field) => missingInput(field, member)).join("")}
+      </div>
+      <div class="message" id="missingDataMessage"></div>
+      <button class="primary" type="submit">Submit missing data</button>
+    </form>
+  `;
+}
+
 function correctionForm(member) {
   if (member.status !== "Needs correction") return "";
   return `
@@ -279,6 +345,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     ${memberProblemForm()}
     ${renderMyProblems(problems)}
     ${changePasswordForm()}
+    ${missingDataForm(member)}
     ${correctionForm(member)}
     <section class="box public-form-card member-dashboard-card audit-card">
       <h2>My audit timeline</h2>
@@ -328,6 +395,28 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
         document.querySelector("#correctionMessage").textContent = "Correction request sent to admin.";
       } catch (error) {
         document.querySelector("#correctionMessage").textContent = error.message;
+      }
+    });
+  }
+
+  const missingData = document.querySelector("#memberMissingDataForm");
+  if (missingData) {
+    missingData.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const changes = {};
+      for (const field of missingFieldKeys(member)) changes[field] = form.get(field);
+      try {
+        await request("/api/member-correction-request", {
+          method: "POST",
+          body: JSON.stringify({
+            reason: "Member filled missing profile data",
+            changes
+          })
+        });
+        document.querySelector("#missingDataMessage").textContent = "Missing data sent for admin approval.";
+      } catch (error) {
+        document.querySelector("#missingDataMessage").textContent = error.message;
       }
     });
   }

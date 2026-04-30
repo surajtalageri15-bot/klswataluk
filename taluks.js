@@ -2,7 +2,7 @@ const MASTER_TALUKS = {
   "Bagalkot": ["Bagalkote", "Jamkhandi", "Mudhola", "Badami", "Bilagi", "Hunagunda", "Ilkal", "Rabkavi Banhatti", "Guledgudda"],
   "Ballari": ["Ballari", "Kurugodu", "Kampli", "Sanduru", "Siraguppa"],
   "Belagavi": ["Belagavi", "Athani", "Bailhongal", "Chikkodi", "Gokak", "Khanapura", "Mudalgi", "Nippani", "Rayabaga", "Savadatti", "Ramadurga", "Kagawada", "Hukkeri", "Kitturu", "Yargatti"],
-  "Bengaluru Urban": ["Bengaluru", "Bengaluru North", "Bengaluru South", "Kengeri", "Krishnarajapura", "Anekal", "Yelahanka"],
+  "Bengaluru Urban": ["Bengaluru", "Bengaluru North", "Bengaluru South", "Bengaluru East", "Kengeri", "Krishnarajapura", "Anekal", "Yelahanka"],
   "Bengaluru Rural": ["Nelamangala", "Doddaballapura", "Devanahalli", "Hosakote"],
   "Bidar": ["Aurad", "Basavakalyana", "Bhalki", "Bidar", "Chitgoppa", "Hulsuru", "Humnabad", "Kamalanagara"],
   "Chamarajanagar": ["Chamarajanagara", "Gundlupete", "Kollegala", "Yelanduru", "Hanuru"],
@@ -165,7 +165,10 @@ const TALUK_ALIASES = {
   "bangaluru north": "Bengaluru North",
   "bangalore south": "Bengaluru South",
   "bengaluru south": "Bengaluru South",
-  "bangaluru south": "Bengaluru South"
+  "bangaluru south": "Bengaluru South",
+  "bangalore east": "Bengaluru East",
+  "bengaluru east": "Bengaluru East",
+  "bangaluru east": "Bengaluru East"
 };
 
 function canonicalDistrict(district) {
