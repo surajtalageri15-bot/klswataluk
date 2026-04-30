@@ -655,7 +655,7 @@ function teamWhatsAppMessage(link) {
 }
 
 function renderTeamWhatsAppCard() {
-  if (!["admin", "state_president", "division", "district", "taluk"].includes(state.user.role)) return "";
+  if (!["admin", "division", "taluk"].includes(state.user.role)) return "";
   const link = state.dashboard?.meta?.teamWhatsAppLink || state.teamWhatsAppLink || "https://chat.whatsapp.com/FiFDrzqoKAU1y1479O9xn9";
   state.teamWhatsAppLink = link;
   return `
