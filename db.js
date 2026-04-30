@@ -670,6 +670,28 @@ async function getDashboard(user) {
   return { summary, charts, meta: db.meta, lists: masterLists(user), performance: await districtPerformance(user, members) };
 }
 
+async function updateAppSetting(key, value) {
+  const safeKey = String(key || "").trim();
+  if (!safeKey) {
+    const error = new Error("Setting key is required");
+    error.status = 400;
+    throw error;
+  }
+  const safeValue = String(value || "").trim();
+  if (hasPostgres) {
+    await pool.query(`
+      insert into app_meta (key, value) values ($1, $2)
+      on conflict (key) do update set value = excluded.value
+    `, [safeKey, safeValue]);
+    return { key: safeKey, value: safeValue };
+  }
+  const db = await readJsonDb();
+  db.meta ||= {};
+  db.meta[safeKey] = safeValue;
+  await writeJsonDb(db);
+  return { key: safeKey, value: safeValue };
+}
+
 async function getPublicSummary() {
   let members = [];
   let updatedAt = new Date().toISOString();
@@ -2722,6 +2744,7 @@ module.exports = {
   findUserByLogin,
   getUserById,
   getDashboard,
+  updateAppSetting,
   getPublicSummary,
   listMembers,
   getMember,

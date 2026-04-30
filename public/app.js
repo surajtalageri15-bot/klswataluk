@@ -25,6 +25,7 @@ const state = {
   dataCorrectionFilters: { search: "" },
   memberNotes: { member: null, notes: [] },
   restorePreview: null,
+  teamWhatsAppLink: "",
   messageDraft: {
     audience: "all_members",
     subject: "State President Notice",
@@ -643,6 +644,76 @@ function unreadChatCount() {
   return state.teamChatMessages.filter((message) => new Date(message.createdAt).getTime() > lastRead).length;
 }
 
+function teamWhatsAppMessage(link) {
+  return [
+    "KLSWA Taluk Technical Team WhatsApp Group",
+    `Join link: ${link}`,
+    "",
+    "Please join using your registered mobile number.",
+    "Do not share member data, screenshots, or screen recordings outside the approved team."
+  ].join("\n");
+}
+
+function renderTeamWhatsAppCard() {
+  if (!["admin", "state_president", "division", "district", "taluk"].includes(state.user.role)) return "";
+  const link = state.dashboard?.meta?.teamWhatsAppLink || state.teamWhatsAppLink || "https://chat.whatsapp.com/FiFDrzqoKAU1y1479O9xn9";
+  state.teamWhatsAppLink = link;
+  return `
+    <section class="box section whatsapp-card">
+      <div class="section-head">
+        <div>
+          <h2>Technical Team WhatsApp Group</h2>
+          <p class="muted">Visible only for technical/admin logins. Not shown to public members.</p>
+        </div>
+        <span class="badge">Team only</span>
+      </div>
+      <p class="notice">Confidential: do not share screenshots, screen recordings, or member data outside the approved team.</p>
+      <div class="toolbar">
+        <a class="primary" href="${escapeHtml(link)}" target="_blank" rel="noopener">Open WhatsApp Group</a>
+        <button class="secondary" id="copyTeamWhatsApp" type="button">Copy invite message</button>
+      </div>
+      ${state.user.role === "admin" ? `
+        <form id="teamWhatsAppForm" class="toolbar">
+          <input name="link" value="${escapeHtml(link)}" placeholder="https://chat.whatsapp.com/...">
+          <button class="secondary" type="submit">Save group link</button>
+        </form>
+      ` : ""}
+      <div class="message success" id="teamWhatsAppMessage"></div>
+    </section>
+  `;
+}
+
+function bindTeamWhatsAppCard() {
+  const copy = document.querySelector("#copyTeamWhatsApp");
+  if (copy) {
+    copy.addEventListener("click", async () => {
+      await copyText(teamWhatsAppMessage(state.teamWhatsAppLink));
+      const message = document.querySelector("#teamWhatsAppMessage");
+      message.textContent = "WhatsApp invite message copied.";
+      setTimeout(() => { message.textContent = ""; }, 1800);
+    });
+  }
+  const form = document.querySelector("#teamWhatsAppForm");
+  if (form) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const link = String(new FormData(form).get("link") || "").trim();
+      const message = document.querySelector("#teamWhatsAppMessage");
+      try {
+        await request("/api/team-whatsapp-link", {
+          method: "PUT",
+          body: JSON.stringify({ link })
+        });
+        await loadDashboard();
+        state.teamWhatsAppLink = link;
+        message.textContent = "WhatsApp group link saved.";
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    });
+  }
+}
+
 function markTeamChatRead() {
   localStorage.setItem(chatStorageKey(), String(Date.now()));
 }
@@ -973,6 +1044,7 @@ function renderDashboard() {
         <div class="box stat"><span class="muted">Female</span><strong>${summary.gender.Female || 0}</strong></div>
       `}
     </div>
+    ${renderTeamWhatsAppCard()}
     ${renderTalukWorkDashboard()}
     <div class="chart-grid">
       <section class="box section">
@@ -1010,6 +1082,7 @@ function renderDashboard() {
   `;
   const pdfButton = document.querySelector("#districtPerformancePdf");
   if (pdfButton) pdfButton.addEventListener("click", () => exportDistrictPerformancePdf(performance));
+  bindTeamWhatsAppCard();
   document.querySelectorAll("[data-open-work-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.tab = button.dataset.openWorkTab;

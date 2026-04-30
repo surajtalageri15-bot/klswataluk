@@ -518,6 +518,16 @@ async function api(req, res, pathname) {
     return json(res, 200, await store.getDashboard(user));
   }
 
+  if (pathname === "/api/team-whatsapp-link" && req.method === "PUT") {
+    requireAdmin(user);
+    const body = asObject(await parseBody(req));
+    const link = String(body.link || "").trim();
+    if (link && !/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+$/.test(link)) {
+      return json(res, 400, { error: "Enter a valid WhatsApp group invite link" });
+    }
+    return json(res, 200, { setting: await store.updateAppSetting("teamWhatsAppLink", link) });
+  }
+
   if (pathname === "/api/session-analytics" && req.method === "GET") {
     if (!canViewSessionAnalytics(user)) return json(res, 403, { error: "Team time analytics access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
