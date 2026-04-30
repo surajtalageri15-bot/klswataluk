@@ -115,7 +115,8 @@ function approvedApplicationHtml(member) {
     .declaration { border: 1px solid #d9e2dc; background: #f8fbf7; padding: 14px; margin-top: 12px; line-height: 1.55; }
     .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 42px; }
     .line { border-top: 1px solid #809088; padding-top: 8px; }
-    @media print { body { margin: 18mm; } }
+    @page { size: A4; margin: 16mm; }
+    @media print { body { margin: 0; } }
   </style>
 </head>
 <body>
@@ -145,16 +146,16 @@ function approvedApplicationHtml(member) {
 }
 
 function downloadApprovedApplication(member) {
-  const safeName = String(member.name || "member").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "member";
-  const blob = new Blob([approvedApplicationHtml(member)], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `klswa-approved-application-${safeName}.html`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("Please allow popups to download the PDF application.");
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(approvedApplicationHtml(member));
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 350);
 }
 
 const missingMemberFields = {
@@ -447,7 +448,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       ${member.remarks ? `<p class="notice">${escapeHtml(member.remarks)}</p>` : ""}
       <div class="detail-grid">${memberRows(member)}</div>
       <div class="modal-actions">
-        ${member.status === "Active" ? `<button class="primary" id="downloadApprovedApplication" type="button">Download approved application</button>` : ""}
+        ${member.status === "Active" ? `<button class="primary" id="downloadApprovedApplication" type="button">Download approved application PDF</button>` : ""}
         <button class="secondary" id="memberLogout" type="button">Logout</button>
       </div>
     </section>
