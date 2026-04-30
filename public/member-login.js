@@ -70,6 +70,93 @@ function memberRows(member) {
   `).join("");
 }
 
+function applicationFields(member) {
+  return [
+    ["Full Name", member.name],
+    ["Current Mobile Number", member.phoneNumber],
+    ["Date of Birth", member.dateOfBirth],
+    ["Age", member.age],
+    ["Gender", member.gender],
+    ["Marital Status", member.maritalStatus],
+    ["Kalyana Karnataka", member.kalyanaKarnataka],
+    ["Category", member.category],
+    ["Caste", member.caste],
+    ["Religion", member.religion],
+    ["Disability", member.disability],
+    ["License Number", member.lsNumber],
+    ["Mojini Login ID", member.loginId],
+    ["Batch Year", member.batchYear],
+    ["Education", member.qualification],
+    ["Work District", member.district],
+    ["Taluk", member.taluk],
+    ["Other Taluks", member.otherTaluks],
+    ["Permanent Address", member.address],
+    ["Application Status", member.status]
+  ];
+}
+
+function approvedApplicationHtml(member) {
+  const generatedAt = new Date().toLocaleString();
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>KLSWA Approved Application - ${escapeHtml(member.name)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #1f2a24; }
+    .header { border-bottom: 3px solid #116047; padding-bottom: 14px; margin-bottom: 18px; }
+    h1 { margin: 0 0 6px; color: #116047; font-size: 24px; }
+    h2 { margin: 22px 0 10px; color: #116047; font-size: 18px; }
+    .muted { color: #607064; }
+    .status { display: inline-block; padding: 6px 12px; border-radius: 999px; background: #e8f3ec; color: #116047; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    td { border: 1px solid #d9e2dc; padding: 10px; vertical-align: top; }
+    td:first-child { width: 32%; font-weight: 700; background: #f6faf7; }
+    .declaration { border: 1px solid #d9e2dc; background: #f8fbf7; padding: 14px; margin-top: 12px; line-height: 1.55; }
+    .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 42px; }
+    .line { border-top: 1px solid #809088; padding-top: 8px; }
+    @media print { body { margin: 18mm; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>AKSPBS / KLSWA Approved Membership Application</h1>
+    <div class="muted">All Karnataka State Government Licensed Surveyors Union</div>
+    <p><span class="status">${escapeHtml(member.status)}</span></p>
+  </div>
+  <h2>Member Details</h2>
+  <table>
+    ${applicationFields(member).map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value || "-")}</td></tr>`).join("")}
+  </table>
+  <h2>Declaration</h2>
+  <div class="declaration">
+    I declare that all information provided in this application is true and correct to the best of my knowledge.
+    I shall be fully responsible for any action taken by the organization if any information is found to be incorrect or concealed.
+    <br><br>
+    Declaration accepted: ${member.declarationAccepted ? "Yes" : "No"}
+  </div>
+  <div class="sign">
+    <div class="line">Member Signature</div>
+    <div class="line">Authorized Verification</div>
+  </div>
+  <p class="muted">Generated on ${escapeHtml(generatedAt)} from member login.</p>
+</body>
+</html>`;
+}
+
+function downloadApprovedApplication(member) {
+  const safeName = String(member.name || "member").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "member";
+  const blob = new Blob([approvedApplicationHtml(member)], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `klswa-approved-application-${safeName}.html`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 const missingMemberFields = {
   phoneNumber: "Phone",
   dateOfBirth: "Date of Birth",
@@ -360,6 +447,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       ${member.remarks ? `<p class="notice">${escapeHtml(member.remarks)}</p>` : ""}
       <div class="detail-grid">${memberRows(member)}</div>
       <div class="modal-actions">
+        ${member.status === "Active" ? `<button class="primary" id="downloadApprovedApplication" type="button">Download approved application</button>` : ""}
         <button class="secondary" id="memberLogout" type="button">Logout</button>
       </div>
     </section>
@@ -391,6 +479,11 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     dashboard.innerHTML = "";
     setMemberDashboardMode(false);
   });
+
+  const downloadApplication = document.querySelector("#downloadApprovedApplication");
+  if (downloadApplication) {
+    downloadApplication.addEventListener("click", () => downloadApprovedApplication(member));
+  }
 
   document.querySelector("#copyTalukSupport").addEventListener("click", async () => {
     await copyText(document.querySelector("#talukSupportMessage").value);
