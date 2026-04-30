@@ -1551,6 +1551,23 @@ async function listDataCorrectionRequests(user, filters = {}) {
   return rows;
 }
 
+async function listMemberDataCorrectionRequests(memberId, limit = 20) {
+  const safeLimit = Math.min(100, Math.max(1, Number(limit || 20)));
+  if (hasPostgres) {
+    const result = await pool.query(
+      "select * from data_correction_requests where member_id = $1 order by created_at desc limit $2",
+      [memberId, safeLimit]
+    );
+    return result.rows.map(toDataCorrectionRequest);
+  }
+  const db = await readJsonDb();
+  db.dataCorrectionRequests ||= [];
+  return db.dataCorrectionRequests
+    .filter((item) => item.memberId === memberId)
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")))
+    .slice(0, safeLimit);
+}
+
 async function getDataCorrectionRequest(id) {
   if (hasPostgres) {
     const result = await pool.query("select * from data_correction_requests where id = $1", [id]);
@@ -2782,6 +2799,7 @@ module.exports = {
   listDuplicateGroups,
   createDataCorrectionRequest,
   listDataCorrectionRequests,
+  listMemberDataCorrectionRequests,
   getDataCorrectionRequest,
   updateDataCorrectionRequest,
   createPresidentMessage,

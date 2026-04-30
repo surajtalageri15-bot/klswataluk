@@ -425,7 +425,8 @@ async function api(req, res, pathname) {
     const presidentMessages = await store.listPresidentMessagesForMember(member);
     const talukTeam = await store.findTalukTeamContactForMember(member);
     const problems = await store.listMemberProblems({ ...member, role: "member" }, { limit: 100 });
-    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages, talukTeam, problems });
+    const correctionRequests = await store.listMemberDataCorrectionRequests(member.id, 20);
+    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages, talukTeam, problems, correctionRequests });
   }
 
   if (pathname === "/api/member-problems" && req.method === "POST") {
@@ -459,6 +460,10 @@ async function api(req, res, pathname) {
     }
     if (!reason) return json(res, 400, { error: "Reason is required" });
     if (!Object.keys(requestedChanges).length) return json(res, 400, { error: "Change at least one field before submitting" });
+    const existingRequests = await store.listMemberDataCorrectionRequests(member.id, 20);
+    if (existingRequests.some((request) => request.status === "Pending")) {
+      return json(res, 400, { error: "Your previous request is waiting for admin approval" });
+    }
     return json(res, 201, {
       request: await store.createDataCorrectionRequest({
         memberId: member.id,

@@ -114,9 +114,30 @@ function missingInput(field, member) {
   return `<label>${missingMemberFields[field]} * <input name="${field}" type="${type}" value="${value}" required></label>`;
 }
 
-function missingDataForm(member) {
+function correctionRequestSummary(request) {
+  const fields = Object.keys(request?.requestedChanges || {}).map((field) => missingMemberFields[field] || field);
+  return fields.length ? fields.join(", ") : "Profile data";
+}
+
+function missingDataForm(member, correctionRequests = []) {
   const fields = missingFieldKeys(member);
   if (!fields.length) return "";
+  const pending = correctionRequests.find((request) => request.status === "Pending");
+  if (pending) {
+    return `
+      <section class="box public-form-card member-dashboard-card correction-card">
+        <div class="section-head">
+          <div>
+            <h2>Missing Data Submitted</h2>
+            <p class="muted">Waiting for admin/division approval. You can edit again after approval or rejection.</p>
+          </div>
+          <span class="badge">Pending approval</span>
+        </div>
+        <p class="notice">Submitted fields: ${escapeHtml(correctionRequestSummary(pending))}</p>
+      </section>
+    `;
+  }
+  const latestRejected = correctionRequests.find((request) => request.status === "Rejected");
   return `
     <form id="memberMissingDataForm" class="box public-form-card member-dashboard-card correction-card">
       <div class="section-head">
@@ -126,6 +147,7 @@ function missingDataForm(member) {
         </div>
         <span class="badge">${fields.length} Missing</span>
       </div>
+      ${latestRejected?.adminRemarks ? `<p class="notice">Previous request rejected: ${escapeHtml(latestRejected.adminRemarks)}</p>` : ""}
       <p class="notice">Missing: ${escapeHtml(fields.map((field) => missingMemberFields[field]).join(", "))}</p>
       <div class="two">
         ${fields.map((field) => missingInput(field, member)).join("")}
@@ -318,7 +340,7 @@ function renderPresidentMessages(messages = []) {
   `;
 }
 
-function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = []) {
+function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = [], correctionRequests = []) {
   setMemberDashboardMode(true);
   dashboard.innerHTML = `
     ${renderPresidentMessages(presidentMessages)}
@@ -345,7 +367,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     ${memberProblemForm()}
     ${renderMyProblems(problems)}
     ${changePasswordForm()}
-    ${missingDataForm(member)}
+    ${missingDataForm(member, correctionRequests)}
     ${correctionForm(member)}
     <section class="box public-form-card member-dashboard-card audit-card">
       <h2>My audit timeline</h2>
@@ -414,7 +436,8 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
             changes
           })
         });
-        document.querySelector("#missingDataMessage").textContent = "Missing data sent for admin approval.";
+        const session = await request("/api/member-me");
+        renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
       } catch (error) {
         document.querySelector("#missingDataMessage").textContent = error.message;
       }
@@ -434,7 +457,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       problemForm.reset();
       message.textContent = "Problem submitted to leadership.";
       const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || []);
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
     } catch (error) {
       message.textContent = error.message;
     }
@@ -461,7 +484,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
 async function loadMemberSession() {
   try {
     const data = await request("/api/member-me");
-    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null, data.problems || []);
+    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null, data.problems || [], data.correctionRequests || []);
   } catch {
     dashboard.innerHTML = "";
     setMemberDashboardMode(false);
@@ -493,7 +516,7 @@ loginForm.addEventListener("submit", async (event) => {
     });
     loginForm.reset();
     const session = await request("/api/member-me");
-    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || []);
+    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
   } catch (error) {
     loginMessage.textContent = error.message;
   }
