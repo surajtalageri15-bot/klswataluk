@@ -73,7 +73,13 @@ async function currentUser(req) {
   const token = getCookie(req, "session");
   if (!token || !sessions.has(token)) return null;
   const session = sessions.get(token);
-  return await store.getUserById(session.userId);
+  const user = await store.getUserById(session.userId);
+  if (!user?.active) {
+    sessions.delete(token);
+    if (session.userSessionId) await store.endUserSession(session.userSessionId);
+    return null;
+  }
+  return user;
 }
 
 function currentLoginSession(req) {

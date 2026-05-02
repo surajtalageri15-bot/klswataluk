@@ -2173,6 +2173,27 @@ function renderUsers() {
       openPasswordModal(target);
     });
   });
+  document.querySelectorAll("[data-toggle-user-active]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const target = state.users.find((user) => user.id === button.dataset.toggleUserActive);
+      if (!target) return;
+      const nextActive = !target.active;
+      const action = nextActive ? "activate" : "mark inactive";
+      if (!confirm(`${action.charAt(0).toUpperCase()}${action.slice(1)} this taluk login?\n\n${target.name || target.username} - ${target.district} / ${target.taluk}`)) return;
+      button.disabled = true;
+      try {
+        await request(`/api/users/${target.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ ...target, active: nextActive })
+        });
+        await loadUsers();
+        renderApp();
+      } catch (error) {
+        alert(error.message);
+        button.disabled = false;
+      }
+    });
+  });
   bindTeamRequestActions();
 }
 
@@ -2350,6 +2371,7 @@ function accountCard(user, canManageUsers) {
       <p class="muted">${scope}</p>
       <div class="actions">
         ${canManageUsers && user.username !== "admin" ? `<button class="secondary" data-reset-user="${user.id}">Password</button>` : ""}
+        ${canManageUsers && user.role === "taluk" ? `<button class="${user.active ? "danger" : "primary"}" data-toggle-user-active="${user.id}">${user.active ? "Mark inactive" : "Activate"}</button>` : ""}
         ${canManageUsers && user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
       </div>
     </article>
