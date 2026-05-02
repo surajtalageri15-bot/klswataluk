@@ -732,8 +732,8 @@ async function api(req, res, pathname) {
     const body = await parseBody(req);
     const status = String(body.status || "").trim();
     const remarks = String(body.remarks || "").trim();
-    if (["Rejected", "Needs correction"].includes(status) && !remarks) {
-      return json(res, 400, { error: "Reason is required for rejection or correction" });
+    if (["Rejected", "Needs correction", "Inactive"].includes(status) && !remarks) {
+      return json(res, 400, { error: "Reason is required for rejection, correction, or inactive status" });
     }
     const updated = await store.updateMemberStatus(member.id, status, remarks);
     if (!updated) return json(res, 404, { error: "Member not found" });

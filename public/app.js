@@ -62,6 +62,10 @@ const roleLabels = {
   taluk: "Taluk Technical Team"
 };
 
+const memberStatusOptions = ["Active", "Pending verification", "Inactive", "Needs correction", "Rejected"];
+const editableMemberStatusOptions = ["Active", "Inactive", "Pending verification", "Needs correction", "Rejected"];
+const inactiveMemberRemark = "Member submitted application but is currently inactive. Kept in records for admin follow-up.";
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -559,6 +563,7 @@ function renderMessages() {
         <div class="list">
           <div class="list-row"><span>All Members</span><span class="badge">${state.dashboard.summary.total || 0}</span></div>
           <div class="list-row"><span>Active Members</span><span class="badge">${state.dashboard.summary.statusCounts?.Active || 0}</span></div>
+          <div class="list-row"><span>Inactive Members</span><span class="badge">${state.dashboard.summary.statusCounts?.Inactive || 0}</span></div>
           <div class="list-row"><span>Pending Verification</span><span class="badge">${state.dashboard.summary.statusCounts?.["Pending verification"] || 0}</span></div>
           <div class="list-row"><span>Needs Correction</span><span class="badge">${state.dashboard.summary.statusCounts?.["Needs correction"] || 0}</span></div>
         </div>
@@ -1381,7 +1386,7 @@ function renderMembers() {
         <label>Search <input id="searchInput" value="${escapeHtml(state.filters.search)}" placeholder="Name, LS, phone, caste, village"></label>
         <label>District <select id="districtFilter"><option value="">All districts</option>${optionList(lists.districts, state.filters.district)}</select></label>
         <label>Taluk <select id="talukFilter"><option value="">${state.filters.district ? "All taluks in district" : "All taluks"}</option>${optionList(talukOptions, state.filters.taluk)}</select></label>
-        <label>Status <select id="statusFilter"><option value="">All status</option>${optionList(["Active", "Pending verification", "Needs correction", "Rejected", "Inactive"], state.filters.status || "")}</select></label>
+        <label>Status <select id="statusFilter"><option value="">All status</option>${optionList(memberStatusOptions, state.filters.status || "")}</select></label>
         <label>Gender <select id="genderFilter"><option value="">All gender</option>${optionList(["Male", "Female", "Other"], state.filters.gender || "")}</select></label>
         <label>Batch <input id="batchFilter" type="number" min="1998" max="2026" value="${escapeHtml(state.filters.batchYear || "")}" placeholder="1998-2026"></label>
         <label class="check filter-check"><input id="missingOnlyFilter" type="checkbox" ${state.filters.missingOnly ? "checked" : ""}> Missing only</label>
@@ -1504,6 +1509,7 @@ function renderPendingQueue() {
                 <td class="actions">
                   <button class="secondary" data-view-pending="${member.id}">View</button>
                   <button class="primary" data-review-status="Active" data-member="${member.id}">Approve</button>
+                  <button class="secondary" data-review-status="Inactive" data-member="${member.id}">Mark inactive</button>
                   <button class="secondary" data-review-status="Needs correction" data-member="${member.id}">Needs correction</button>
                   <button class="secondary" data-copy-followup="${member.id}">Copy msg</button>
                   ${member.phoneNumber ? `<a class="secondary" href="${whatsAppLink(member)}" target="_blank">WhatsApp</a>` : ""}
@@ -1601,6 +1607,7 @@ function openPendingApplicationModal(member) {
         <div class="modal-actions">
           <button class="secondary" type="button" data-close>Close</button>
           <button class="primary" type="button" data-modal-status="Active">Approve</button>
+          <button class="secondary" type="button" data-modal-status="Inactive">Mark inactive</button>
           <button class="secondary" type="button" data-modal-status="Needs correction">Needs correction</button>
           <button class="danger" type="button" data-modal-status="Rejected">Reject</button>
         </div>
@@ -1623,9 +1630,17 @@ function openPendingStatusModal(member, status) {
   const needsReason = status !== "Active";
   const actionLabels = {
     Active: "Approve application",
+    Inactive: "Mark member inactive",
     "Needs correction": "Send for correction",
     Rejected: "Reject application"
   };
+  const statusHelp = {
+    Active: "This member will move from pending queue to active members.",
+    Inactive: "This member will be kept in records as inactive and excluded from active member count.",
+    "Needs correction": "This reason will be saved in remarks and shown to the member/team.",
+    Rejected: "This rejection reason will be saved in remarks."
+  };
+  const existingRemarks = status === "Inactive" && !member.remarks ? inactiveMemberRemark : member.remarks;
   document.body.insertAdjacentHTML("beforeend", `
     <div class="modal-backdrop">
       <form class="box modal" id="pendingStatusForm">
@@ -1638,10 +1653,10 @@ function openPendingStatusModal(member, status) {
         </div>
         <div class="status-review-card">
           <strong>${escapeHtml(status)}</strong>
-          <span>${status === "Active" ? "This member will move from pending queue to active members." : "This reason will be saved in remarks and shown to the team/admin."}</span>
+          <span>${escapeHtml(statusHelp[status] || "This status change will be saved in member records.")}</span>
         </div>
         <label>Reason ${needsReason ? "*" : ""}
-          <textarea name="remarks" rows="4" ${needsReason ? "required" : ""} placeholder="${needsReason ? "Enter clear reason" : "Optional approval note"}">${escapeHtml(member.remarks)}</textarea>
+          <textarea name="remarks" rows="4" ${needsReason ? "required" : ""} placeholder="${needsReason ? "Enter clear reason" : "Optional approval note"}">${escapeHtml(existingRemarks)}</textarea>
         </label>
         <div class="message" id="pendingStatusMessage"></div>
         <div class="modal-actions">
@@ -1708,7 +1723,7 @@ function openMemberModal(member = {}) {
           ${field("batchYear", "Batch Year", member.batchYear, "number")}
         </div>
         <div class="two">
-          ${selectField("status", "Status", ["Active", "Inactive", "Pending verification"], member.status || "Active")}
+          ${selectField("status", "Status", editableMemberStatusOptions, member.status || "Active")}
           <label>Remarks <textarea name="remarks" rows="2">${escapeHtml(member.remarks)}</textarea></label>
         </div>
         <div class="message" id="memberMessage"></div>
@@ -1968,7 +1983,7 @@ function renderMembershipForm() {
           ${field("batchYear", "Batch Year", "", "number")}
         </div>
         <div class="two">
-          ${selectField("status", "Status", ["Active", "Inactive", "Pending verification"], "Active")}
+          ${selectField("status", "Status", editableMemberStatusOptions, "Active")}
           <label>Remarks <textarea name="remarks" rows="2"></textarea></label>
         </div>
         <div class="message" id="membershipMessage"></div>
