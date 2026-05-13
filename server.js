@@ -284,6 +284,39 @@ async function api(req, res, pathname) {
     return json(res, 200, await store.getPublicSummary());
   }
 
+  if (pathname === "/api/public-strike-suggestion" && req.method === "POST") {
+    const body = asObject(await parseBody(req));
+    const name = String(body.name || "").trim();
+    const batchYear = String(body.batchYear || "").trim();
+    const district = canonicalDistrict(body.district || "");
+    const suggestion = String(body.suggestion || "").trim();
+    if (!name) return json(res, 400, { error: "Name is required" });
+    if (!/^\d{4}$/.test(batchYear) || Number(batchYear) < 1998 || Number(batchYear) > 2026) {
+      return json(res, 400, { error: "Select valid batch year" });
+    }
+    if (!district) return json(res, 400, { error: "District is required" });
+    if (!suggestion) return json(res, 400, { error: "Suggestion is required" });
+    const problem = await store.createMemberProblem({
+      id: `public-strike-${crypto.randomUUID()}`,
+      name,
+      lsNumber: `Batch ${batchYear}`,
+      phoneNumber: "",
+      district,
+      taluk: ""
+    }, {
+      category: "Strike suggestion",
+      subject: `Strike suggestion - ${name}`,
+      description: [
+        `Name: ${name}`,
+        `Batch: ${batchYear}`,
+        `District: ${district}`,
+        "",
+        suggestion
+      ].join("\n")
+    });
+    return json(res, 201, { ok: true, suggestion: problem });
+  }
+
   if (pathname === "/api/login" && req.method === "POST") {
     const body = await parseBody(req);
     const found = await store.findUserByLogin(body.username, body.password);
@@ -1123,6 +1156,7 @@ const server = http.createServer(async (req, res) => {
     if ([
       "/api/public-membership",
       "/api/public-status",
+      "/api/public-strike-suggestion",
       "/api/member-activate",
       "/api/member-login",
       "/api/member-me",
