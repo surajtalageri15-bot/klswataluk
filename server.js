@@ -1104,6 +1104,7 @@ async function api(req, res, pathname) {
         role: "taluk",
         district: target.district,
         taluk: target.taluk,
+        phoneNumber: target.phoneNumber,
         active: true
       });
       const request = await store.updateTeamRequest(target.id, {
@@ -1171,6 +1172,7 @@ async function api(req, res, pathname) {
       role,
       district: role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
       taluk: role === "taluk" ? String(body.taluk || "").trim() : "",
+      phoneNumber: String(body.phoneNumber || "").trim(),
       active: body.active !== false,
       permissions: role === "taluk" ? normalizeTalukPermissions(body.permissions) : {}
     };
@@ -1195,6 +1197,7 @@ async function api(req, res, pathname) {
       role,
       district: role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
       taluk: role === "taluk" ? String(body.taluk || "").trim() : "",
+      phoneNumber: String(body.phoneNumber ?? target.phoneNumber ?? "").trim(),
       active: body.active !== false,
       permissions: role === "taluk" ? normalizeTalukPermissions(body.permissions ?? target.permissions) : {}
     };

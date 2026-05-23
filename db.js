@@ -2162,24 +2162,35 @@ async function listUserSessionStats(user, filters = {}) {
 
 async function listUsers(viewer = null) {
   if (hasPostgres) {
+    const selectUsers = `select u.id, u.username, u.password, u.name, u.role, u.district, u.taluk,
+        u.active, u.permissions, u.created_at, u.updated_at,
+        coalesce(nullif(u.phone_number, ''), (
+          select r.phone_number
+          from taluk_team_requests r
+          where r.status = 'Approved'
+            and (r.user_id = u.id or lower(r.requested_username) = lower(u.username))
+          order by r.updated_at desc
+          limit 1
+        )) as phone_number
+      from users u`;
     if (viewer?.role === "division") {
       const districts = divisionDistricts(viewer.district);
       if (!districts.length) return [];
       const placeholders = districts.map((_, index) => `$${index + 1}`).join(", ");
       const result = await pool.query(
-        `select * from users where role in ('district', 'taluk') and district in (${placeholders}) order by role, district, taluk, username`,
+        `${selectUsers} where u.role in ('district', 'taluk') and u.district in (${placeholders}) order by u.role, u.district, u.taluk, u.username`,
         districts
       );
       return result.rows.map(toCamel);
     }
     if (viewer?.role === "district") {
       const result = await pool.query(
-        "select * from users where role = 'taluk' and district = $1 order by taluk, username",
+        `${selectUsers} where u.role = 'taluk' and u.district = $1 order by u.taluk, u.username`,
         [canonicalDistrict(viewer.district)]
       );
       return result.rows.map(toCamel);
     }
-    const result = await pool.query("select * from users order by role, username");
+    const result = await pool.query(`${selectUsers} order by u.role, u.username`);
     return result.rows.map(toCamel);
   }
   const db = await readJsonDb();
@@ -2452,12 +2463,13 @@ async function updateTeamRequest(id, changes) {
 async function createUser(user) {
   user.id = crypto.randomUUID();
   user.createdAt = new Date().toISOString();
+  user.phoneNumber = String(user.phoneNumber || "").trim();
 
   if (hasPostgres) {
     const result = await pool.query(
-      `insert into users (id, username, password, name, role, district, taluk, active, permissions, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10) returning *`,
-      [user.id, user.username, user.password, user.name, user.role, user.district, user.taluk, user.active, JSON.stringify(user.permissions || {}), user.createdAt]
+      `insert into users (id, username, password, name, role, district, taluk, active, permissions, phone_number, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $11) returning *`,
+      [user.id, user.username, user.password, user.name, user.role, user.district, user.taluk, user.active, JSON.stringify(user.permissions || {}), user.phoneNumber, user.createdAt]
     );
     return toCamel(result.rows[0]);
   }
@@ -2575,8 +2587,8 @@ async function updateUser(id, user) {
     const password = user.password || current.password;
     const result = await pool.query(
       `update users set name = $2, password = $3, role = $4, district = $5, taluk = $6,
-       active = $7, permissions = $8::jsonb, updated_at = now() where id = $1 returning *`,
-      [id, user.name, password, user.role, user.district, user.taluk, user.active, JSON.stringify(user.permissions || {})]
+       active = $7, permissions = $8::jsonb, phone_number = $9, updated_at = now() where id = $1 returning *`,
+      [id, user.name, password, user.role, user.district, user.taluk, user.active, JSON.stringify(user.permissions || {}), String(user.phoneNumber ?? current.phoneNumber ?? "").trim()]
     );
     return toCamel(result.rows[0]);
   }
