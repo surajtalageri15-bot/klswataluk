@@ -29,16 +29,37 @@
           <a class="secondary" href="/status.html">Check Status</a>
         </div>
       </div>
-      <section class="box home-summary-card">
-        <span class="badge">Live public summary</span>
-        <div class="home-summary" id="homeSummary">
-          <div><span class="muted">Members</span><strong>...</strong></div>
-          <div><span class="muted">Districts</span><strong>...</strong></div>
-          <div><span class="muted">Taluks</span><strong>...</strong></div>
-          <div><span class="muted">Pending</span><strong>...</strong></div>
-        </div>
-        <p class="muted" id="summaryUpdated">Loading latest status...</p>
-      </section>
+      <div class="home-visual-stack">
+        <section class="home-slider" aria-label="KLSWA photo highlights">
+          <div class="home-slide-frame">
+            <img id="homeSlideImage" src="/uploads/slider/slide-1.jpg" alt="KLSWA association highlight">
+            <div class="home-slide-fallback" id="homeSlideFallback">
+              <strong>KLSWA</strong>
+              <span>Upload official event photos as slide-1.jpg, slide-2.jpg, slide-3.jpg</span>
+            </div>
+            <div class="home-slide-caption">
+              <span class="badge" id="homeSlideTag">Association</span>
+              <strong id="homeSlideTitle">KLSWA State Meeting</strong>
+              <p id="homeSlideText">Official updates, member coordination, and licensed surveyor welfare programs.</p>
+            </div>
+          </div>
+          <div class="home-slider-controls">
+            <button class="secondary" id="prevSlide" type="button" aria-label="Previous photo">Prev</button>
+            <div class="home-slider-dots" id="homeSliderDots"></div>
+            <button class="secondary" id="nextSlide" type="button" aria-label="Next photo">Next</button>
+          </div>
+        </section>
+        <section class="box home-summary-card">
+          <span class="badge">Live public summary</span>
+          <div class="home-summary" id="homeSummary">
+            <div><span class="muted">Members</span><strong>...</strong></div>
+            <div><span class="muted">Districts</span><strong>...</strong></div>
+            <div><span class="muted">Taluks</span><strong>...</strong></div>
+            <div><span class="muted">Pending</span><strong>...</strong></div>
+          </div>
+          <p class="muted" id="summaryUpdated">Loading latest status...</p>
+        </section>
+      </div>
     </section>
 
     <section class="home-section">
