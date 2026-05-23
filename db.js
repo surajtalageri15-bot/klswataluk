@@ -437,6 +437,7 @@ async function initDb() {
     alter table users drop constraint if exists users_role_check;
     alter table users add constraint users_role_check check (role in ('admin', 'state_president', 'division', 'district', 'taluk'));
     alter table users add column if not exists permissions jsonb not null default '{}'::jsonb;
+    alter table users add column if not exists phone_number text;
   `);
 
   await pool.query(`
