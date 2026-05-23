@@ -230,6 +230,31 @@ async function loadMembers(page = 1) {
   state.members = await request(`/api/members?${params.toString()}`);
 }
 
+async function loadAllMembersForExport(filters = state.filters) {
+  const size = 100;
+  let page = 1;
+  let rows = [];
+  let total = 0;
+  do {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+      search: filters.search || "",
+      district: filters.district || "",
+      taluk: filters.taluk || "",
+      status: filters.status || "",
+      gender: filters.gender || "",
+      batchYear: filters.batchYear || "",
+      missingOnly: filters.missingOnly ? "true" : ""
+    });
+    const data = await request(`/api/members?${params.toString()}`);
+    rows = rows.concat(data.rows || []);
+    total = data.total || rows.length;
+    page += 1;
+  } while (rows.length < total);
+  return rows;
+}
+
 async function loadPending(page = 1) {
   state.pending.page = page;
   const params = new URLSearchParams({
@@ -1499,6 +1524,7 @@ function renderMembers() {
         <span class="actions">
           <button class="secondary" id="applyFilters">Apply</button>
           ${canExport ? `<a class="secondary" id="memberExportLink" href="${exportUrl("/api/exports/members", state.filters)}">Export CSV</a>` : ""}
+          ${canExport ? `<button class="secondary" id="memberDistrictPdf">District-wise PDF</button>` : ""}
           ${state.user.role === "taluk" && canExport ? `
             <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Pending verification" })}">Pending CSV</a>
             <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Needs correction" })}">Needs correction CSV</a>
@@ -1552,6 +1578,7 @@ function renderMembers() {
     await loadMembers(1);
     renderApp();
   });
+  document.querySelector("#memberDistrictPdf")?.addEventListener("click", exportMemberDistrictPdf);
   document.querySelector("#prevPage").addEventListener("click", async () => {
     await loadMembers(state.members.page - 1);
     renderApp();
@@ -1581,6 +1608,143 @@ function renderMembers() {
       renderApp();
     });
   });
+}
+
+async function exportMemberDistrictPdf() {
+  const button = document.querySelector("#memberDistrictPdf");
+  const originalText = button?.textContent || "District-wise PDF";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Preparing PDF...";
+  }
+  const popup = window.open("", "_blank");
+  if (!popup) {
+    alert("Popup blocked. Allow popups and try District-wise PDF again.");
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+    return;
+  }
+  popup.document.open();
+  popup.document.write("<p style=\"font-family:Arial,sans-serif;padding:24px;\">Preparing district-wise member PDF...</p>");
+  popup.document.close();
+  try {
+    const members = await loadAllMembersForExport(state.filters);
+    const lists = state.dashboard.lists || {};
+    const districts = [...new Set([
+      ...(state.filters.district ? [state.filters.district] : []),
+      ...members.map((member) => member.district).filter(Boolean),
+      ...(!state.filters.district && ["admin", "state_president"].includes(state.user.role) ? (lists.districts || []) : [])
+    ])].sort();
+    const membersByDistrict = Object.groupBy
+      ? Object.groupBy(members, (member) => member.district || "Not assigned")
+      : members.reduce((groups, member) => {
+        const key = member.district || "Not assigned";
+        groups[key] ||= [];
+        groups[key].push(member);
+        return groups;
+      }, {});
+    const statusCounts = members.reduce((counts, member) => {
+      const key = member.status || "Blank";
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    const genderCounts = members.reduce((counts, member) => {
+      const key = member.gender || "Blank";
+      counts[key] = (counts[key] || 0) + 1;
+      return counts;
+    }, {});
+    const missingCount = members.filter((member) => missingFields(member).length).length;
+    const generatedAt = new Date().toLocaleString();
+    popup.document.open();
+    popup.document.write(`<!doctype html>
+      <html>
+      <head>
+        <title>KLSWA Member District-wise Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #18231c; margin: 24px; }
+          h1 { color: #0d4f38; margin: 0 0 6px; }
+          h2 { color: #0d4f38; margin: 24px 0 8px; page-break-after: avoid; }
+          .muted { color: #647064; }
+          .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+          .summary div { border: 1px solid #dce5dc; border-radius: 8px; padding: 10px; background: #f8fbf7; }
+          .summary span, .summary strong { display: block; }
+          .summary strong { margin-top: 4px; font-size: 22px; color: #0d4f38; }
+          .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 16px; }
+          .chip { border: 1px solid #d8ded6; border-radius: 999px; padding: 5px 9px; background: #f8fbf7; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin: 8px 0 18px; font-size: 10.5px; page-break-inside: auto; }
+          tr { page-break-inside: avoid; page-break-after: auto; }
+          th, td { border: 1px solid #d8ded6; padding: 5px; text-align: left; vertical-align: top; }
+          th { background: #eef5ee; color: #104f3a; }
+          .district-summary { font-weight: 700; color: #334139; margin-bottom: 6px; }
+          @media print { body { margin: 14px; } .summary { grid-template-columns: repeat(4, 1fr); } }
+        </style>
+      </head>
+      <body>
+        <h1>KLSWA Member District-wise Report</h1>
+        <p class="muted">Generated by ${escapeHtml(state.user.name)} (${escapeHtml(userScopeLabel())}) on ${escapeHtml(generatedAt)}</p>
+        <p class="muted">Filters: District ${escapeHtml(state.filters.district || "All")}, Taluk ${escapeHtml(state.filters.taluk || "All")}, Status ${escapeHtml(state.filters.status || "All")}, Gender ${escapeHtml(state.filters.gender || "All")}, Batch ${escapeHtml(state.filters.batchYear || "All")}</p>
+        <div class="summary">
+          <div><span>Total members</span><strong>${members.length}</strong></div>
+          <div><span>Districts</span><strong>${districts.filter((district) => (membersByDistrict[district] || []).length).length}</strong></div>
+          <div><span>Missing data</span><strong>${missingCount}</strong></div>
+          <div><span>Pending / correction</span><strong>${(statusCounts["Pending verification"] || 0) + (statusCounts["Needs correction"] || 0)}</strong></div>
+        </div>
+        <div class="chips">
+          ${Object.entries(statusCounts).sort().map(([label, value]) => `<span class="chip">${escapeHtml(label)}: ${value}</span>`).join("")}
+        </div>
+        <div class="chips">
+          ${Object.entries(genderCounts).sort().map(([label, value]) => `<span class="chip">${escapeHtml(label)}: ${value}</span>`).join("")}
+        </div>
+        ${districts.map((district) => {
+          const rows = (membersByDistrict[district] || []).sort((a, b) => `${a.taluk || ""}${a.name || ""}`.localeCompare(`${b.taluk || ""}${b.name || ""}`));
+          if (!rows.length) return "";
+          const districtStatuses = rows.reduce((counts, member) => {
+            const key = member.status || "Blank";
+            counts[key] = (counts[key] || 0) + 1;
+            return counts;
+          }, {});
+          return `
+            <h2>${escapeHtml(district)}</h2>
+            <div class="district-summary">
+              Total: ${rows.length}
+              ${Object.entries(districtStatuses).sort().map(([label, value]) => ` | ${escapeHtml(label)}: ${value}`).join("")}
+            </div>
+            <table>
+              <thead>
+                <tr><th>Taluk</th><th>Name</th><th>LS Number</th><th>Phone</th><th>Gender</th><th>Batch</th><th>Status</th><th>Missing Fields</th></tr>
+              </thead>
+              <tbody>
+                ${rows.map((member) => {
+                  const missing = missingFields(member);
+                  return `<tr>
+                    <td>${escapeHtml(member.taluk || "-")}</td>
+                    <td>${escapeHtml(member.name || "-")}</td>
+                    <td>${escapeHtml(member.lsNumber || "-")}</td>
+                    <td>${escapeHtml(member.phoneNumber || "-")}</td>
+                    <td>${escapeHtml(member.gender || "-")}</td>
+                    <td>${escapeHtml(member.batchYear || "-")}</td>
+                    <td>${escapeHtml(member.status || "-")}</td>
+                    <td>${missing.length ? escapeHtml(missing.join(", ")) : "-"}</td>
+                  </tr>`;
+                }).join("")}
+              </tbody>
+            </table>
+          `;
+        }).join("") || `<p>No member records found for the selected filters.</p>`}
+        <script>window.addEventListener("load", () => window.print());</script>
+      </body>
+      </html>`);
+    popup.document.close();
+  } catch (error) {
+    alert(error.message || "Could not create district-wise PDF");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
 function renderPendingQueue() {
