@@ -60,6 +60,32 @@ function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+const talukPermissionDefaults = {
+  createMembership: true,
+  approveMembership: true,
+  submitCorrection: true,
+  approveCorrection: true,
+  teamChat: true,
+  exportReports: true
+};
+
+function normalizeTalukPermissions(input = {}) {
+  const source = asObject(input);
+  return Object.fromEntries(
+    Object.keys(talukPermissionDefaults).map((key) => [key, source[key] !== false])
+  );
+}
+
+function talukPermissions(user) {
+  return { ...talukPermissionDefaults, ...asObject(user?.permissions) };
+}
+
+function hasTalukPermission(user, permission) {
+  if (!user) return false;
+  if (user.role !== "taluk") return true;
+  return talukPermissions(user)[permission] !== false;
+}
+
 function getCookie(req, name) {
   const header = req.headers.cookie || "";
   return header
@@ -120,7 +146,9 @@ function canCorrectTaluks(user) {
 }
 
 function canUseTeamChat(user) {
-  return user && ["admin", "state_president", "division", "district", "taluk"].includes(user.role);
+  if (!user) return false;
+  if (user.role === "taluk") return hasTalukPermission(user, "teamChat");
+  return ["admin", "state_president", "division", "district"].includes(user.role);
 }
 
 function canSeeTeamRequest(user, request) {
@@ -132,11 +160,25 @@ function canSeeTeamRequest(user, request) {
 }
 
 function canCreateMembers(user) {
-  return user && (user.role === "admin" || user.role === "taluk");
+  return Boolean(user && (user.role === "admin" || (user.role === "taluk" && hasTalukPermission(user, "createMembership"))));
 }
 
 function canReviewMembers(user) {
-  return user && ["admin", "state_president", "division", "taluk"].includes(user.role);
+  if (!user) return false;
+  if (user.role === "taluk") return hasTalukPermission(user, "approveMembership");
+  return ["admin", "state_president", "division"].includes(user.role);
+}
+
+function canReviewCorrections(user) {
+  if (!user) return false;
+  if (user.role === "taluk") return hasTalukPermission(user, "approveCorrection");
+  return ["admin", "division"].includes(user.role);
+}
+
+function canExportReports(user) {
+  if (!user) return false;
+  if (user.role === "taluk") return hasTalukPermission(user, "exportReports");
+  return ["admin", "state_president", "division", "district"].includes(user.role);
 }
 
 function normalizeMember(input, existing = {}) {
@@ -673,6 +715,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/exports/members" && req.method === "GET") {
+    if (!canExportReports(user)) return json(res, 403, { error: "Export report access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     const rows = await store.exportMembers(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -851,7 +894,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/exports/audit-logs" && req.method === "GET") {
-    if (!["admin", "state_president", "taluk"].includes(user.role)) return json(res, 403, { error: "Activity log export access required" });
+    if (!["admin", "state_president", "taluk"].includes(user.role) || !hasTalukPermission(user, "exportReports")) return json(res, 403, { error: "Activity log export access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     const rows = await store.listAuditLogs(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -879,6 +922,7 @@ async function api(req, res, pathname) {
 
   if (pathname === "/api/data-correction-requests" && req.method === "GET") {
     if (!["admin", "state_president", "division", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
+    if (user.role === "taluk" && !hasTalukPermission(user, "submitCorrection") && !hasTalukPermission(user, "approveCorrection")) return json(res, 403, { error: "Correction request permission required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, {
       requests: await store.listDataCorrectionRequests(user, {
@@ -888,7 +932,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/data-correction-requests" && req.method === "POST") {
-    if (user.role !== "taluk") return json(res, 403, { error: "Taluk team can submit correction requests" });
+    if (user.role !== "taluk" || !hasTalukPermission(user, "submitCorrection")) return json(res, 403, { error: "Taluk correction request permission required" });
     const body = asObject(await parseBody(req));
     const member = await store.getMember(String(body.memberId || ""));
     if (!member) return json(res, 404, { error: "Member not found" });
@@ -912,7 +956,7 @@ async function api(req, res, pathname) {
 
   const dataCorrectionMatch = pathname.match(/^\/api\/data-correction-requests\/([^/]+)$/);
   if (dataCorrectionMatch && req.method === "PUT") {
-    if (!["admin", "division", "taluk"].includes(user.role)) return json(res, 403, { error: "Admin, division, or taluk approval access required" });
+    if (!canReviewCorrections(user)) return json(res, 403, { error: "Correction approval permission required" });
     const target = await store.getDataCorrectionRequest(dataCorrectionMatch[1]);
     if (!target) return json(res, 404, { error: "Request not found" });
     if (target.status !== "Pending") return json(res, 400, { error: "Request is already reviewed" });
@@ -1058,14 +1102,16 @@ async function api(req, res, pathname) {
     const password = String(body.password || "").trim();
     if (!username || !password) return json(res, 400, { error: "Username and password are required" });
     if (await store.usernameExists(username)) return json(res, 409, { error: "Username already exists" });
+    const role = ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk";
     const newUser = {
       username,
       password,
       name: String(body.name || username).trim(),
-      role: ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
-      district: body.role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
-      taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
-      active: body.active !== false
+      role,
+      district: role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
+      taluk: role === "taluk" ? String(body.taluk || "").trim() : "",
+      active: body.active !== false,
+      permissions: role === "taluk" ? normalizeTalukPermissions(body.permissions) : {}
     };
     if (newUser.role === "taluk" && !newUser.taluk) return json(res, 400, { error: "Taluk user must be assigned a taluk" });
     if (newUser.role === "district" && !newUser.district) return json(res, 400, { error: "District President must be assigned a district" });
@@ -1082,12 +1128,14 @@ async function api(req, res, pathname) {
     const target = await store.getUserById(userMatch[1]);
     if (!target) return json(res, 404, { error: "User not found" });
     const body = await parseBody(req);
+    const role = ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : target.role;
     const next = {
       name: String(body.name || target.name).trim(),
-      role: ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk",
-      district: body.role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
-      taluk: body.role === "taluk" ? String(body.taluk || "").trim() : "",
-      active: body.active !== false
+      role,
+      district: role === "division" ? canonicalDivision(body.district || "") : String(body.district || "").trim(),
+      taluk: role === "taluk" ? String(body.taluk || "").trim() : "",
+      active: body.active !== false,
+      permissions: role === "taluk" ? normalizeTalukPermissions(body.permissions ?? target.permissions) : {}
     };
     if (next.role === "division" && !divisionDistricts(next.district).length) return json(res, 400, { error: "Division team must be assigned a valid division" });
     if (next.role === "taluk" && await store.talukLoginExists(next.district, next.taluk, target.id)) {
@@ -1097,6 +1145,7 @@ async function api(req, res, pathname) {
     if (target.username === "admin") {
       next.role = "admin";
       next.active = true;
+      next.permissions = {};
     }
     return json(res, 200, { user: publicUser(await store.updateUser(target.id, next)) });
   }

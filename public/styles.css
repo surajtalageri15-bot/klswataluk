@@ -910,6 +910,28 @@ textarea {
   font-size: 16px;
 }
 
+.profile-summary,
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.profile-summary > div,
+.permission-grid label {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdf9;
+  padding: 12px;
+}
+
+.profile-summary span {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
 .join-link-panel {
   margin-top: 18px;
   padding-top: 14px;

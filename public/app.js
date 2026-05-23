@@ -62,6 +62,27 @@ const roleLabels = {
   taluk: "Taluk Technical Team"
 };
 
+const talukPermissionLabels = {
+  createMembership: "Create membership entries",
+  approveMembership: "Approve / reject membership",
+  submitCorrection: "Submit correction requests",
+  approveCorrection: "Approve / reject corrections",
+  teamChat: "Team chat",
+  exportReports: "Export reports"
+};
+
+const talukPermissionDefaults = Object.fromEntries(Object.keys(talukPermissionLabels).map((key) => [key, true]));
+
+function talukPermissions(user = state.user) {
+  return { ...talukPermissionDefaults, ...((user && typeof user.permissions === "object" && user.permissions) || {}) };
+}
+
+function canTaluk(permission, user = state.user) {
+  if (!user) return false;
+  if (user.role !== "taluk") return true;
+  return talukPermissions(user)[permission] !== false;
+}
+
 const memberStatusOptions = ["Active", "Pending verification", "Inactive", "Needs correction", "Rejected"];
 const editableMemberStatusOptions = ["Active", "Inactive", "Pending verification", "Needs correction", "Rejected"];
 const inactiveMemberRemark = "Member submitted application but is currently inactive. Kept in records for admin follow-up.";
@@ -289,6 +310,7 @@ async function loadDuplicates() {
 
 async function loadDataCorrectionRequests() {
   if (!["admin", "state_president", "division", "taluk"].includes(state.user.role)) return;
+  if (state.user.role === "taluk" && !canTaluk("submitCorrection") && !canTaluk("approveCorrection")) return;
   const params = new URLSearchParams({ search: state.dataCorrectionFilters.search });
   const data = await request(`/api/data-correction-requests?${params.toString()}`);
   state.dataCorrectionRequests = data.requests;
@@ -301,6 +323,7 @@ async function loadPresidentMessages() {
 }
 
 async function loadTeamChat() {
+  if (state.user?.role === "taluk" && !canTaluk("teamChat")) return;
   const data = await request("/api/team-chat?limit=100");
   state.teamChatMessages = data.messages || [];
 }
@@ -340,14 +363,14 @@ function renderApp() {
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
-          ${["admin", "state_president", "division", "taluk"].includes(state.user.role) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
-          ${["admin", "taluk"].includes(state.user.role) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
-          ${["admin", "state_president", "division", "taluk"].includes(state.user.role) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
+          ${["admin", "state_president", "division"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveMembership")) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
+          ${state.user.role === "admin" || (state.user.role === "taluk" && canTaluk("createMembership")) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
+          ${["admin", "state_president", "division"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="sessionAnalytics" class="${state.tab === "sessionAnalytics" ? "active" : ""}">Team Time</button>` : ""}
-          ${["admin", "state_president", "division", "district", "taluk"].includes(state.user.role) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
+          ${["admin", "state_president", "division", "district"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">Member Problems</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${["admin", "division"].includes(state.user.role) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
@@ -359,7 +382,7 @@ function renderApp() {
       <section class="content">
         <div class="topbar">
           <h1>${pageTitle()}</h1>
-          ${state.tab === "members" && ["admin", "taluk"].includes(state.user.role) ? `<button class="primary" id="addMemberBtn">+ Add member</button>` : ""}
+          ${state.tab === "members" && (state.user.role === "admin" || (state.user.role === "taluk" && canTaluk("createMembership"))) ? `<button class="primary" id="addMemberBtn">+ Add member</button>` : ""}
         </div>
         <div id="view"></div>
       </section>
@@ -1449,6 +1472,8 @@ function exportTalukProgressPdf() {
 function renderMembers() {
   const lists = state.dashboard.lists;
   const talukOptions = taluksForDistrict(lists, state.filters.district);
+  const canExport = state.user.role !== "taluk" || canTaluk("exportReports");
+  const canRequestCorrection = state.user.role === "taluk" && canTaluk("submitCorrection");
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="toolbar">
@@ -1461,8 +1486,8 @@ function renderMembers() {
         <label class="check filter-check"><input id="missingOnlyFilter" type="checkbox" ${state.filters.missingOnly ? "checked" : ""}> Missing only</label>
         <span class="actions">
           <button class="secondary" id="applyFilters">Apply</button>
-          <a class="secondary" id="memberExportLink" href="${exportUrl("/api/exports/members", state.filters)}">Export CSV</a>
-          ${state.user.role === "taluk" ? `
+          ${canExport ? `<a class="secondary" id="memberExportLink" href="${exportUrl("/api/exports/members", state.filters)}">Export CSV</a>` : ""}
+          ${state.user.role === "taluk" && canExport ? `
             <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Pending verification" })}">Pending CSV</a>
             <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Needs correction" })}">Needs correction CSV</a>
             <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, missingOnly: "true" })}">Missing data CSV</a>
@@ -1479,7 +1504,7 @@ function renderMembers() {
                 <td class="actions">
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Edit" data-edit="${member.id}">E</button>` : ""}
                   ${state.user.role === "admin" ? `<button class="secondary" data-login-control="${member.id}">Login</button>` : ""}
-                  ${state.user.role === "taluk" ? `<button class="secondary" data-request-correction="${member.id}">Request</button>` : ""}
+                  ${canRequestCorrection ? `<button class="secondary" data-request-correction="${member.id}">Request</button>` : ""}
                   <button class="secondary" data-member-notes="${member.id}">Notes</button>
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Delete" data-delete="${member.id}">D</button>` : ""}
                 </td>
@@ -2242,6 +2267,12 @@ function renderUsers() {
       openPasswordModal(target);
     });
   });
+  document.querySelectorAll("[data-taluk-profile]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = state.users.find((user) => user.id === button.dataset.talukProfile);
+      openTalukProfileModal(target);
+    });
+  });
   document.querySelectorAll("[data-toggle-user-active]").forEach((button) => {
     button.addEventListener("click", async () => {
       const target = state.users.find((user) => user.id === button.dataset.toggleUserActive);
@@ -2427,6 +2458,8 @@ function accountCard(user, canManageUsers) {
   const scope = user.role === "division"
     ? `${user.district || "State"} Division`
     : `${user.district ? escapeHtml(user.district) : "All districts"}${user.taluk ? ` / ${escapeHtml(user.taluk)}` : ""}`;
+  const permissionValues = user.role === "taluk" ? talukPermissions(user) : {};
+  const disabledPermissions = Object.entries(permissionValues).filter(([, enabled]) => enabled === false).length;
   return `
     <article class="account-card">
       <div>
@@ -2438,7 +2471,9 @@ function accountCard(user, canManageUsers) {
         <span class="badge">${user.active ? "Active" : "Inactive"}</span>
       </div>
       <p class="muted">${scope}</p>
+      ${user.role === "taluk" ? `<p class="muted">${disabledPermissions ? `${disabledPermissions} permission${disabledPermissions === 1 ? "" : "s"} disabled` : "All taluk permissions enabled"}</p>` : ""}
       <div class="actions">
+        ${canManageUsers && user.role === "taluk" ? `<button class="secondary" data-taluk-profile="${user.id}">Profile</button>` : ""}
         ${canManageUsers && user.username !== "admin" ? `<button class="secondary" data-reset-user="${user.id}">Password</button>` : ""}
         ${canManageUsers && user.role === "taluk" ? `<button class="${user.active ? "danger" : "primary"}" data-toggle-user-active="${user.id}">${user.active ? "Mark inactive" : "Activate"}</button>` : ""}
         ${canManageUsers && user.username !== "admin" && user.id !== state.user.id ? `<button class="danger" data-delete-user="${user.id}">Delete</button>` : ""}
@@ -2484,6 +2519,67 @@ function openPasswordModal(user) {
       renderApp();
     } catch (error) {
       backdrop.querySelector("#passwordMessage").textContent = error.message;
+    }
+  });
+}
+
+function openTalukProfileModal(user) {
+  if (!user) return;
+  const permissions = talukPermissions(user);
+  const permissionFields = Object.entries(talukPermissionLabels).map(([key, label]) => `
+    <label class="check">
+      <input type="checkbox" name="${key}" ${permissions[key] !== false ? "checked" : ""}>
+      ${escapeHtml(label)}
+    </label>
+  `).join("");
+  document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal-backdrop">
+      <form class="box modal" id="talukProfileForm">
+        <div class="modal-head">
+          <h2>Taluk team profile</h2>
+          <button class="icon-btn" type="button" data-close title="Close">X</button>
+        </div>
+        <div class="profile-summary">
+          <div><span class="muted">User ID</span><strong>${escapeHtml(user.username)}</strong></div>
+          <div><span class="muted">District</span><strong>${escapeHtml(user.district || "-")}</strong></div>
+          <div><span class="muted">Taluk</span><strong>${escapeHtml(user.taluk || "-")}</strong></div>
+        </div>
+        ${field("name", "Profile name", user.name || user.username)}
+        <label class="check"><input type="checkbox" name="active" ${user.active ? "checked" : ""}> Login active</label>
+        <h3>Permission control</h3>
+        <div class="permission-grid">
+          ${permissionFields}
+        </div>
+        <div class="message" id="talukProfileMessage"></div>
+        <div class="modal-actions">
+          <button class="secondary" type="button" data-close>Cancel</button>
+          <button class="primary" type="submit">Save profile</button>
+        </div>
+      </form>
+    </div>
+  `);
+  const backdrop = document.querySelector(".modal-backdrop");
+  backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
+  backdrop.querySelector("#talukProfileForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const nextPermissions = Object.fromEntries(Object.keys(talukPermissionLabels).map((key) => [key, formData.get(key) === "on"]));
+    try {
+      await request(`/api/users/${user.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ...user,
+          name: String(formData.get("name") || user.name || user.username).trim(),
+          active: formData.get("active") === "on",
+          permissions: nextPermissions
+        })
+      });
+      backdrop.remove();
+      await loadUsers();
+      renderApp();
+    } catch (error) {
+      backdrop.querySelector("#talukProfileMessage").textContent = error.message;
     }
   });
 }
@@ -2796,7 +2892,7 @@ function renderMissingData() {
 
 function renderDataCorrectionRequests() {
   const pendingCount = state.dataCorrectionRequests.filter((item) => item.status === "Pending").length;
-  const canReviewCorrections = ["admin", "division", "taluk"].includes(state.user.role);
+  const canReviewCorrections = ["admin", "division"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveCorrection"));
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
@@ -2912,6 +3008,7 @@ function duplicateGroup(group) {
 function renderAuditLogs() {
   const actions = [...new Set(["Created", "Updated", "Status changed", "Deleted", "Correction approved", ...state.auditLogs.map((log) => log.action).filter(Boolean)])].sort();
   const suspicious = suspiciousAuditItems(state.auditLogs);
+  const canExport = state.user.role !== "taluk" || canTaluk("exportReports");
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="toolbar">
@@ -2927,7 +3024,7 @@ function renderAuditLogs() {
         <label>To <input id="auditTo" type="date" value="${escapeHtml(state.auditFilters.to)}"></label>
         <button class="secondary" id="applyAuditSearch">Apply</button>
         <button class="secondary" id="clearAuditSearch">Clear</button>
-        <a class="secondary" href="${exportUrl("/api/exports/audit-logs", state.auditFilters)}">Export CSV</a>
+        ${canExport ? `<a class="secondary" href="${exportUrl("/api/exports/audit-logs", state.auditFilters)}">Export CSV</a>` : ""}
       </div>
       ${suspicious.length ? `
         <div class="audit-alerts">
@@ -3053,7 +3150,7 @@ async function openAuditTimeline(memberId) {
         </div>
         <div class="modal-actions">
           <button class="secondary" type="button" data-close>Close</button>
-          <a class="secondary" href="${exportUrl("/api/exports/audit-logs", { memberId })}">Export member CSV</a>
+          ${state.user.role !== "taluk" || canTaluk("exportReports") ? `<a class="secondary" href="${exportUrl("/api/exports/audit-logs", { memberId })}">Export member CSV</a>` : ""}
         </div>
       </section>
     </div>

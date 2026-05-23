@@ -39,6 +39,7 @@ function toCamel(row) {
     district: row.district || "",
     taluk: row.taluk || "",
     active: row.active,
+    permissions: row.permissions && typeof row.permissions === "object" ? row.permissions : {},
     sourceRow: row.source_row,
     lsNumber: row.ls_number,
     loginId: row.login_id,
@@ -435,6 +436,7 @@ async function initDb() {
   await pool.query(`
     alter table users drop constraint if exists users_role_check;
     alter table users add constraint users_role_check check (role in ('admin', 'state_president', 'division', 'district', 'taluk'));
+    alter table users add column if not exists permissions jsonb not null default '{}'::jsonb;
   `);
 
   await pool.query(`
@@ -2453,9 +2455,9 @@ async function createUser(user) {
 
   if (hasPostgres) {
     const result = await pool.query(
-      `insert into users (id, username, password, name, role, district, taluk, active, created_at, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9) returning *`,
-      [user.id, user.username, user.password, user.name, user.role, user.district, user.taluk, user.active, user.createdAt]
+      `insert into users (id, username, password, name, role, district, taluk, active, permissions, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10) returning *`,
+      [user.id, user.username, user.password, user.name, user.role, user.district, user.taluk, user.active, JSON.stringify(user.permissions || {}), user.createdAt]
     );
     return toCamel(result.rows[0]);
   }
@@ -2573,8 +2575,8 @@ async function updateUser(id, user) {
     const password = user.password || current.password;
     const result = await pool.query(
       `update users set name = $2, password = $3, role = $4, district = $5, taluk = $6,
-       active = $7, updated_at = now() where id = $1 returning *`,
-      [id, user.name, password, user.role, user.district, user.taluk, user.active]
+       active = $7, permissions = $8::jsonb, updated_at = now() where id = $1 returning *`,
+      [id, user.name, password, user.role, user.district, user.taluk, user.active, JSON.stringify(user.permissions || {})]
     );
     return toCamel(result.rows[0]);
   }
