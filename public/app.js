@@ -25,6 +25,7 @@ const state = {
   dataCorrectionFilters: { search: "" },
   memberNotes: { member: null, notes: [] },
   restorePreview: null,
+  sliderPhotos: [],
   teamWhatsAppLink: "",
   messageDraft: {
     audience: "all_members",
@@ -350,6 +351,12 @@ async function loadSessionAnalytics() {
   state.sessionAnalytics = await request(`/api/session-analytics?${params.toString()}`);
 }
 
+async function loadSliderPhotos() {
+  if (state.user?.role !== "admin") return;
+  const data = await request("/api/admin/slider");
+  state.sliderPhotos = data.photos || [];
+}
+
 function renderApp() {
   const unreadChat = unreadChatCount();
   app.innerHTML = `
@@ -368,6 +375,7 @@ function renderApp() {
           ${["admin", "state_president", "division"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
+          ${state.user.role === "admin" ? `<button data-tab="homeSlider" class="${state.tab === "homeSlider" ? "active" : ""}">Home Slider</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) ? `<button data-tab="sessionAnalytics" class="${state.tab === "sessionAnalytics" ? "active" : ""}">Team Time</button>` : ""}
           ${["admin", "state_president", "division", "district"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
@@ -413,6 +421,8 @@ function renderApp() {
       if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
       if (state.tab === "audit") await loadAuditLogs();
+      if (state.tab === "backupRestore") await loadSliderPhotos();
+      if (state.tab === "homeSlider") await loadSliderPhotos();
       renderApp();
     });
   });
@@ -431,6 +441,7 @@ function renderApp() {
   if (state.tab === "dataCorrections") renderDataCorrectionRequests();
   if (state.tab === "missingData") renderMissingData();
   if (state.tab === "messages") renderMessages();
+  if (state.tab === "homeSlider") renderHomeSlider();
   if (state.tab === "users") renderUsers();
   if (state.tab === "sessionAnalytics") renderSessionAnalytics();
   if (state.tab === "teamChat") renderTeamChat();
@@ -449,6 +460,7 @@ function pageTitle() {
   if (state.tab === "dataCorrections") return "Correction Requests";
   if (state.tab === "missingData") return "Missing Data Report";
   if (state.tab === "messages") return "State President Messages";
+  if (state.tab === "homeSlider") return "Homepage Slider Photos";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "sessionAnalytics") return "Team Time Analytics";
   if (state.tab === "teamChat") return "Team Chat";
@@ -2728,6 +2740,18 @@ function renderBackupRestore() {
       <section class="box section">
         <div class="section-head">
           <div>
+            <h2>Homepage slider photos</h2>
+            <p class="muted">Upload JPG photos for the public homepage slider. Recommended landscape photo, under 4 MB.</p>
+          </div>
+        </div>
+        <div class="slider-upload-grid">
+          ${[1, 2, 3, 4].map((slot) => sliderUploadCard(slot)).join("")}
+        </div>
+        <div class="message" id="sliderUploadMessage"></div>
+      </section>
+      <section class="box section">
+        <div class="section-head">
+          <div>
             <h2>Restore from backup</h2>
             <p class="muted">Restore replaces current database data. Admin password confirmation is required.</p>
           </div>
@@ -2752,6 +2776,8 @@ function renderBackupRestore() {
       </section>
     </div>
   `;
+
+  bindSliderUploadControls(renderBackupRestore);
 
   document.querySelector("#restoreFile").addEventListener("change", async (event) => {
     const file = event.currentTarget.files?.[0];
@@ -2804,6 +2830,91 @@ function renderBackupRestore() {
     } catch (error) {
       message.textContent = error.message;
     }
+  });
+}
+
+function renderHomeSlider() {
+  if (state.user.role !== "admin") {
+    document.querySelector("#view").innerHTML = `<section class="box section"><p>Admin access required.</p></section>`;
+    return;
+  }
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <div>
+          <h2>Homepage slider photos</h2>
+          <p class="muted">Upload JPG photos for the public homepage slider. Recommended landscape photo, under 4 MB.</p>
+        </div>
+        <a class="secondary" href="/" target="_blank">View homepage</a>
+      </div>
+      <div class="slider-upload-grid">
+        ${[1, 2, 3, 4].map((slot) => sliderUploadCard(slot)).join("")}
+      </div>
+      <div class="message" id="sliderUploadMessage"></div>
+    </section>
+  `;
+  bindSliderUploadControls(renderHomeSlider);
+}
+
+function bindSliderUploadControls(afterUpload) {
+  document.querySelectorAll("[data-slider-file]").forEach((input) => {
+    input.addEventListener("change", async (event) => {
+      const slot = Number(event.currentTarget.dataset.sliderFile);
+      const file = event.currentTarget.files?.[0];
+      const message = document.querySelector("#sliderUploadMessage");
+      message.textContent = "";
+      message.classList.remove("success");
+      if (!file) return;
+      if (!/^image\/jpe?g$/.test(file.type)) {
+        message.textContent = "Please select a JPG/JPEG image.";
+        event.currentTarget.value = "";
+        return;
+      }
+      if (file.size > 4 * 1024 * 1024) {
+        message.textContent = "Image must be less than 4 MB.";
+        event.currentTarget.value = "";
+        return;
+      }
+      try {
+        const imageData = await fileToDataUrl(file);
+        await request("/api/admin/slider", {
+          method: "POST",
+          body: JSON.stringify({ slot, imageData })
+        });
+        message.textContent = `Slider photo ${slot} uploaded successfully.`;
+        message.classList.add("success");
+        await loadSliderPhotos();
+        afterUpload();
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    });
+  });
+}
+
+function sliderUploadCard(slot) {
+  const photo = state.sliderPhotos.find((item) => Number(item.slot) === slot);
+  return `
+    <article class="slider-upload-card">
+      <div class="slider-thumb">
+        ${photo?.exists ? `<img src="${escapeHtml(photo.url)}" alt="Slider photo ${slot}">` : `<span>Slide ${slot}</span>`}
+      </div>
+      <strong>Photo ${slot}</strong>
+      <span class="muted">${photo?.exists ? `Updated ${formatDateTime(photo.updatedAt)}` : "No photo uploaded"}</span>
+      <label class="secondary upload-button">
+        Upload JPG
+        <input type="file" accept="image/jpeg,.jpg,.jpeg" data-slider-file="${slot}">
+      </label>
+    </article>
+  `;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Could not read selected image"));
+    reader.readAsDataURL(file);
   });
 }
 

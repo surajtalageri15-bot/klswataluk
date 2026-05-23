@@ -9,6 +9,7 @@ const { canonicalDistrict, canonicalDivision, divisionDistricts, isMasterTaluk, 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
+const SLIDER_DIR = path.join(PUBLIC_DIR, "uploads", "slider");
 
 const sessions = new Map();
 const memberSessions = new Map();
@@ -58,6 +59,50 @@ async function parseBody(req) {
 
 function asObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function sliderFilePath(slot) {
+  return path.join(SLIDER_DIR, `slide-${slot}.jpg`);
+}
+
+async function sliderPhotos() {
+  await fs.mkdir(SLIDER_DIR, { recursive: true });
+  const slots = [1, 2, 3, 4];
+  return Promise.all(slots.map(async (slot) => {
+    const filePath = sliderFilePath(slot);
+    let exists = false;
+    let updatedAt = "";
+    try {
+      const stat = await fs.stat(filePath);
+      exists = stat.isFile();
+      updatedAt = stat.mtime.toISOString();
+    } catch {
+      exists = false;
+    }
+    return {
+      slot,
+      exists,
+      updatedAt,
+      url: exists ? `/uploads/slider/slide-${slot}.jpg?v=${encodeURIComponent(updatedAt)}` : `/uploads/slider/slide-${slot}.jpg`
+    };
+  }));
+}
+
+function parseSliderImage(body) {
+  const imageData = String(body.imageData || "");
+  const match = imageData.match(/^data:image\/jpe?g;base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    const error = new Error("Please upload a JPG/JPEG image");
+    error.status = 400;
+    throw error;
+  }
+  const buffer = Buffer.from(match[1], "base64");
+  if (!buffer.length || buffer.length > 4 * 1024 * 1024) {
+    const error = new Error("Image must be less than 4 MB");
+    error.status = 400;
+    throw error;
+  }
+  return buffer;
 }
 
 const talukPermissionDefaults = {
@@ -602,6 +647,22 @@ async function api(req, res, pathname) {
 
   if (pathname === "/api/dashboard" && req.method === "GET") {
     return json(res, 200, await store.getDashboard(user));
+  }
+
+  if (pathname === "/api/admin/slider" && req.method === "GET") {
+    requireAdmin(user);
+    return json(res, 200, { photos: await sliderPhotos() });
+  }
+
+  if (pathname === "/api/admin/slider" && req.method === "POST") {
+    requireAdmin(user);
+    const body = asObject(await parseBody(req));
+    const slot = Number(body.slot);
+    if (![1, 2, 3, 4].includes(slot)) return json(res, 400, { error: "Select slider photo 1 to 4" });
+    const buffer = parseSliderImage(body);
+    await fs.mkdir(SLIDER_DIR, { recursive: true });
+    await fs.writeFile(sliderFilePath(slot), buffer);
+    return json(res, 200, { ok: true, photo: (await sliderPhotos()).find((photo) => photo.slot === slot) });
   }
 
   if (pathname === "/api/team-whatsapp-link" && req.method === "PUT") {
@@ -1186,7 +1247,11 @@ async function staticFile(req, res, pathname) {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8"
+    ".json": "application/json; charset=utf-8",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp"
   }[ext] || "application/octet-stream";
   const body = await fs.readFile(resolved);
   send(res, 200, body, { "Content-Type": type });
