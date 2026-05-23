@@ -1,5 +1,6 @@
 const summary = document.querySelector("#homeSummary");
 const updated = document.querySelector("#summaryUpdated");
+const statsBand = document.querySelector("#homeStatsBand");
 const slideImage = document.querySelector("#homeSlideImage");
 const slideFallback = document.querySelector("#homeSlideFallback");
 const slideTag = document.querySelector("#homeSlideTag");
@@ -60,6 +61,14 @@ async function loadSummary() {
       <div><span class="muted">Taluks</span><strong>${number(data.taluks)} / ${number(data.masterTaluks)}</strong></div>
       <div><span class="muted">Pending</span><strong>${number(data.pending)}</strong></div>
     `;
+    if (statsBand) {
+      statsBand.innerHTML = `
+        <div><span>Registered Members</span><strong>${number(data.total)}</strong></div>
+        <div><span>District Coverage</span><strong>${number(data.districts)}</strong></div>
+        <div><span>Taluk Coverage</span><strong>${number(data.taluks)} / ${number(data.masterTaluks)}</strong></div>
+        <div><span>Pending Verification</span><strong>${number(data.pending)}</strong></div>
+      `;
+    }
     updated.textContent = `Last updated: ${dateText(data.updatedAt) || "Recently"}`;
   } catch (error) {
     updated.textContent = "Live summary is temporarily unavailable.";
