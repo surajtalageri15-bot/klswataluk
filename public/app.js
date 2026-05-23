@@ -2014,7 +2014,7 @@ function openCorrectionRequestModal(member) {
         body: JSON.stringify({ memberId: member.id, reason, changes })
       });
       backdrop.remove();
-      alert("Correction request sent to admin.");
+      alert("Correction request sent for approval.");
     } catch (error) {
       backdrop.querySelector("#correctionRequestMessage").textContent = error.message;
     }
@@ -2796,11 +2796,11 @@ function renderMissingData() {
 
 function renderDataCorrectionRequests() {
   const pendingCount = state.dataCorrectionRequests.filter((item) => item.status === "Pending").length;
-  const canReviewCorrections = ["admin", "division"].includes(state.user.role);
+  const canReviewCorrections = ["admin", "division", "taluk"].includes(state.user.role);
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
-          <h2>${canReviewCorrections || state.user.role === "state_president" ? "Pending data corrections" : "My correction requests"}</h2>
+          <h2>${canReviewCorrections || state.user.role === "state_president" ? "Data correction approvals" : "My correction requests"}</h2>
         <span class="badge">${pendingCount} Pending</span>
       </div>
       <div class="toolbar">

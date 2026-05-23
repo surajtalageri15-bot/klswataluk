@@ -912,13 +912,13 @@ async function api(req, res, pathname) {
 
   const dataCorrectionMatch = pathname.match(/^\/api\/data-correction-requests\/([^/]+)$/);
   if (dataCorrectionMatch && req.method === "PUT") {
-    if (!["admin", "division"].includes(user.role)) return json(res, 403, { error: "Admin or division approval access required" });
+    if (!["admin", "division", "taluk"].includes(user.role)) return json(res, 403, { error: "Admin, division, or taluk approval access required" });
     const target = await store.getDataCorrectionRequest(dataCorrectionMatch[1]);
     if (!target) return json(res, 404, { error: "Request not found" });
     if (target.status !== "Pending") return json(res, 400, { error: "Request is already reviewed" });
     const member = await store.getMember(target.memberId);
     if (!member) return json(res, 404, { error: "Member not found" });
-    if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This correction request is outside your division" });
+    if (!store.memberVisibleTo(user, member)) return json(res, 403, { error: "This correction request is outside your area" });
     const body = asObject(await parseBody(req));
     const status = String(body.status || "").trim();
     const adminRemarks = String(body.adminRemarks || "").trim();
@@ -931,7 +931,7 @@ async function api(req, res, pathname) {
       return json(res, 200, {
         request: await store.updateDataCorrectionRequest(target.id, {
           status: "Approved",
-          adminRemarks: adminRemarks || `Approved by ${user.role === "division" ? "division team" : "admin"}`,
+          adminRemarks: adminRemarks || `Approved by ${user.role === "division" ? "division team" : user.role === "taluk" ? "taluk technical team" : "admin"}`,
           reviewedById: user.id,
           reviewedByName: user.name
         }),
@@ -942,7 +942,7 @@ async function api(req, res, pathname) {
       return json(res, 200, {
         request: await store.updateDataCorrectionRequest(target.id, {
           status: "Rejected",
-          adminRemarks: adminRemarks || `Rejected by ${user.role === "division" ? "division team" : "admin"}`,
+          adminRemarks: adminRemarks || `Rejected by ${user.role === "division" ? "division team" : user.role === "taluk" ? "taluk technical team" : "admin"}`,
           reviewedById: user.id,
           reviewedByName: user.name
         })

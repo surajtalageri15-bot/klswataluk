@@ -1537,8 +1537,7 @@ async function listDataCorrectionRequests(user, filters = {}) {
     });
   }
 
-  if (user.role === "taluk") rows = rows.filter((row) => row.requestedById === user.id);
-  if (["division", "district"].includes(user.role)) {
+  if (["taluk", "division", "district"].includes(user.role)) {
     const visibleMemberIds = new Set((await exportMembers(user, {})).map((member) => member.id));
     rows = rows.filter((row) => visibleMemberIds.has(row.memberId));
   }
