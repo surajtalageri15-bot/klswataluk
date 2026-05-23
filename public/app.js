@@ -2505,14 +2505,14 @@ function exportTalukTeamDistrictPdf(users) {
         return `
           <h2>${escapeHtml(district)}</h2>
           <table>
-            <thead><tr><th>Taluk</th><th>Name</th><th>User ID</th><th>Status</th><th>Permissions Disabled</th></tr></thead>
+            <thead><tr><th>Taluk</th><th>Name</th><th>Phone Number</th><th>Status</th><th>Permissions Disabled</th></tr></thead>
             <tbody>
               ${rows.map((user) => {
                 const disabled = Object.entries(talukPermissions(user)).filter(([, enabled]) => enabled === false).map(([key]) => talukPermissionLabels[key] || key);
                 return `<tr>
                   <td>${escapeHtml(user.taluk || "-")}</td>
                   <td>${escapeHtml(user.name || "-")}</td>
-                  <td>${escapeHtml(user.username || "-")}</td>
+                  <td>${escapeHtml(user.phoneNumber || "-")}</td>
                   <td><span class="badge ${user.active ? "" : "inactive"}">${user.active ? "Active" : "Inactive"}</span></td>
                   <td>${disabled.length ? escapeHtml(disabled.join(", ")) : "None"}</td>
                 </tr>`;
