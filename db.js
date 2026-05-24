@@ -199,6 +199,14 @@ function toMemberProblem(row) {
     district: row.district || "",
     taluk: row.taluk || "",
     category: row.category || "General",
+    documentType: row.document_type || "",
+    documentUrl: row.document_url || "",
+    documentName: row.document_name || "",
+    noticeDate: row.notice_date
+      ? (row.notice_date instanceof Date ? row.notice_date.toISOString().slice(0, 10) : String(row.notice_date).slice(0, 10))
+      : "",
+    officeName: row.office_name || "",
+    village: row.village || "",
     subject: row.subject || "",
     description: row.description || "",
     status: row.status || "Submitted",
@@ -263,7 +271,7 @@ async function initDb() {
       username text unique not null,
       password text not null,
       name text not null,
-      role text not null check (role in ('admin', 'state_president', 'division', 'district', 'district_technical_head', 'taluk')),
+      role text not null check (role in ('admin', 'state_president', 'division', 'district', 'district_technical_head', 'legal_team_head', 'taluk')),
       district text,
       taluk text,
       active boolean not null default true,
@@ -392,6 +400,12 @@ async function initDb() {
       district text,
       taluk text,
       category text not null default 'General',
+      document_type text,
+      document_url text,
+      document_name text,
+      notice_date date,
+      office_name text,
+      village text,
       subject text not null,
       description text not null,
       status text not null default 'Submitted',
@@ -437,7 +451,7 @@ async function initDb() {
 
   await pool.query(`
     alter table users drop constraint if exists users_role_check;
-    alter table users add constraint users_role_check check (role in ('admin', 'state_president', 'division', 'district', 'district_technical_head', 'taluk'));
+    alter table users add constraint users_role_check check (role in ('admin', 'state_president', 'division', 'district', 'district_technical_head', 'legal_team_head', 'taluk'));
     alter table users add column if not exists permissions jsonb not null default '{}'::jsonb;
     alter table users add column if not exists phone_number text;
   `);
@@ -461,6 +475,12 @@ async function initDb() {
     alter table members add column if not exists member_password text;
     alter table members add column if not exists member_login_active boolean not null default false;
     alter table team_chat_messages add column if not exists pinned boolean not null default false;
+    alter table member_problems add column if not exists document_type text;
+    alter table member_problems add column if not exists document_url text;
+    alter table member_problems add column if not exists document_name text;
+    alter table member_problems add column if not exists notice_date date;
+    alter table member_problems add column if not exists office_name text;
+    alter table member_problems add column if not exists village text;
   `);
 
   await pool.query(`
@@ -472,6 +492,7 @@ async function initDb() {
 
 function visibleWhere(user, startIndex = 1) {
   if (["admin", "state_president"].includes(user.role)) return { clause: "true", values: [], next: startIndex };
+  if (user.role === "legal_team_head") return { clause: "false", values: [], next: startIndex };
   if (user.role === "division") {
     const values = divisionDistricts(user.district);
     if (!values.length) return { clause: "false", values: [], next: startIndex };
@@ -1951,6 +1972,12 @@ async function createMemberProblem(member, input = {}) {
   const subject = String(input.subject || "").trim();
   const description = String(input.description || "").trim();
   const category = String(input.category || "General").trim() || "General";
+  const documentType = String(input.documentType || "").trim();
+  const documentUrl = String(input.documentUrl || "").trim();
+  const documentName = String(input.documentName || "").trim();
+  const noticeDate = String(input.noticeDate || "").trim();
+  const officeName = String(input.officeName || "").trim();
+  const village = String(input.village || "").trim();
   if (!subject) {
     const error = new Error("Subject is required");
     error.status = 400;
@@ -1971,6 +1998,12 @@ async function createMemberProblem(member, input = {}) {
     district: normalized.district,
     taluk: normalized.taluk,
     category,
+    documentType,
+    documentUrl,
+    documentName,
+    noticeDate,
+    officeName,
+    village,
     subject,
     description,
     status: "Submitted",
@@ -1985,12 +2018,14 @@ async function createMemberProblem(member, input = {}) {
     const result = await pool.query(
       `insert into member_problems (
         id, member_id, member_name, ls_number, phone_number, district, taluk,
-        category, subject, description, status, response, reviewed_by_id, reviewed_by_name,
+        category, document_type, document_url, document_name, notice_date, office_name, village,
+        subject, description, status, response, reviewed_by_id, reviewed_by_name,
         created_at, updated_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Submitted', '', '', '', $11, $11) returning *`,
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, nullif($12, '')::date, $13, $14, $15, $16, 'Submitted', '', '', '', $17, $17) returning *`,
       [
         item.id, item.memberId, item.memberName, item.lsNumber, item.phoneNumber, item.district, item.taluk,
-        item.category, item.subject, item.description, item.createdAt
+        item.category, item.documentType, item.documentUrl, item.documentName, item.noticeDate, item.officeName, item.village,
+        item.subject, item.description, item.createdAt
       ]
     );
     return toMemberProblem(result.rows[0]);
@@ -2004,6 +2039,10 @@ async function createMemberProblem(member, input = {}) {
 }
 
 function problemVisibleTo(user, problem) {
+  if (user.role === "legal_team_head") {
+    return ["Legal / Office Notice", "Office Notice", "Akarband", "Swamitva", "Court / Legal Notice"].includes(problem.category)
+      || Boolean(problem.documentUrl);
+  }
   if (["admin", "state_president"].includes(user.role)) return true;
   const district = canonicalDistrict(problem.district || "");
   if (user.role === "division") return divisionDistricts(user.district).includes(district);
@@ -2045,9 +2084,9 @@ async function listMemberProblems(userOrMember, filters = {}) {
 async function updateMemberProblem(user, id, changes = {}) {
   const status = String(changes.status || "").trim();
   const response = String(changes.response || "").trim();
-  const allowed = ["Submitted", "In review", "Resolved", "Rejected"];
+  const allowed = ["Submitted", "In review", "Under Legal Review", "Need More Documents", "Forwarded to President", "Resolved", "Rejected"];
   if (!allowed.includes(status)) {
-    const error = new Error("Use Submitted, In review, Resolved or Rejected");
+    const error = new Error("Use a valid review status");
     error.status = 400;
     throw error;
   }

@@ -11,6 +11,7 @@ const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const SLIDER_DIR = path.join(PUBLIC_DIR, "uploads", "slider");
 const MEMBER_PHOTO_DIR = path.join(PUBLIC_DIR, "uploads", "members");
+const MEMBER_DOCUMENT_DIR = path.join(PUBLIC_DIR, "uploads", "member-documents");
 
 const sessions = new Map();
 const memberSessions = new Map();
@@ -132,6 +133,23 @@ function parseMemberProfileImage(body) {
   const buffer = Buffer.from(match[1], "base64");
   if (!buffer.length || buffer.length > 3 * 1024 * 1024) {
     const error = new Error("Photo must be less than 3 MB");
+    error.status = 400;
+    throw error;
+  }
+  return buffer;
+}
+
+function safeFileName(value) {
+  return String(value || "document").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || "document";
+}
+
+function parseMemberPdf(body) {
+  const pdfData = String(body.pdfData || "");
+  const match = pdfData.match(/^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return null;
+  const buffer = Buffer.from(match[1], "base64");
+  if (!buffer.length || buffer.length > 8 * 1024 * 1024) {
+    const error = new Error("PDF must be less than 8 MB");
     error.status = 400;
     throw error;
   }
@@ -666,7 +684,18 @@ async function api(req, res, pathname) {
     const member = await currentMember(req);
     if (!member) return json(res, 401, { error: "Member login required" });
     const body = asObject(await parseBody(req));
-    const problem = await store.createMemberProblem(member, body);
+    const pdfBuffer = parseMemberPdf(body);
+    let documentUrl = "";
+    let documentName = "";
+    if (pdfBuffer) {
+      await fs.mkdir(MEMBER_DOCUMENT_DIR, { recursive: true });
+      documentName = safeFileName(body.documentName || `notice-${Date.now()}.pdf`);
+      if (!documentName.toLowerCase().endsWith(".pdf")) documentName += ".pdf";
+      const fileName = `${member.id}-${Date.now()}-${documentName}`;
+      await fs.writeFile(path.join(MEMBER_DOCUMENT_DIR, fileName), pdfBuffer);
+      documentUrl = `/uploads/member-documents/${fileName}`;
+    }
+    const problem = await store.createMemberProblem(member, { ...body, documentUrl, documentName });
     await tryCreateAuditLogs([{
       memberId: member.id,
       memberName: member.name,
@@ -794,7 +823,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/member-problems" && req.method === "GET") {
-    if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)) return json(res, 403, { error: "Member problems access required" });
+    if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(user.role)) return json(res, 403, { error: "Member problems access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, {
       problems: await store.listMemberProblems(user, {
@@ -807,7 +836,7 @@ async function api(req, res, pathname) {
 
   const memberProblemMatch = pathname.match(/^\/api\/member-problems\/([^/]+)$/);
   if (memberProblemMatch && req.method === "PUT") {
-    if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)) return json(res, 403, { error: "Leadership access required" });
+    if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(user.role)) return json(res, 403, { error: "Leadership access required" });
     const body = asObject(await parseBody(req));
     const problem = await store.updateMemberProblem(user, memberProblemMatch[1], body);
     if (!problem) return json(res, 404, { error: "Problem not found or outside your area" });
@@ -1292,7 +1321,7 @@ async function api(req, res, pathname) {
     const password = String(body.password || "").trim();
     if (!username || !password) return json(res, 400, { error: "Username and password are required" });
     if (await store.usernameExists(username)) return json(res, 409, { error: "Username already exists" });
-    const role = ["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(body.role) ? body.role : "taluk";
+    const role = ["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head", "taluk"].includes(body.role) ? body.role : "taluk";
     const newUser = {
       username,
       password,
@@ -1320,7 +1349,7 @@ async function api(req, res, pathname) {
     const target = await store.getUserById(userMatch[1]);
     if (!target) return json(res, 404, { error: "User not found" });
     const body = await parseBody(req);
-    const role = ["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(body.role) ? body.role : target.role;
+    const role = ["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head", "taluk"].includes(body.role) ? body.role : target.role;
     const next = {
       name: String(body.name || target.name).trim(),
       role,
@@ -1384,7 +1413,8 @@ async function staticFile(req, res, pathname) {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png": "image/png",
-    ".webp": "image/webp"
+    ".webp": "image/webp",
+    ".pdf": "application/pdf"
   }[ext] || "application/octet-stream";
   const body = await fs.readFile(resolved);
   send(res, 200, body, { "Content-Type": type });
@@ -1408,6 +1438,7 @@ const server = http.createServer(async (req, res) => {
       "/api/member-login",
       "/api/member-me",
       "/api/member-photo",
+      "/api/member-problems",
       "/api/member-correction-request",
       "/api/member-forgot-password",
       "/api/member-change-password"

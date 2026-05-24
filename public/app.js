@@ -61,6 +61,7 @@ const roleLabels = {
   division: "State Division Technical Team",
   district: "District President",
   district_technical_head: "District Technical Head",
+  legal_team_head: "Legal Team Head",
   taluk: "Taluk Technical Team"
 };
 
@@ -442,7 +443,7 @@ function renderApp() {
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="sessionAnalytics" class="${state.tab === "sessionAnalytics" ? "active" : ""}">Team Time</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
-          ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">Member Problems</button>` : ""}
+          ${["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">${state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems"}</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${["admin", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveCorrection")) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
@@ -903,21 +904,25 @@ function renderTeamChat() {
 }
 
 function renderMemberProblems() {
-  const openCount = state.memberProblems.filter((item) => ["Submitted", "In review"].includes(item.status)).length;
+  const openCount = state.memberProblems.filter((item) => ["Submitted", "In review", "Under Legal Review", "Need More Documents", "Forwarded to President"].includes(item.status)).length;
   const strikeCount = state.memberProblems.filter((item) => item.category === "Strike suggestion").length;
-  const canUpdate = ["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role);
+  const canUpdate = ["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(state.user.role);
+  const isLegalHead = state.user.role === "legal_team_head";
+  const statusOptions = isLegalHead
+    ? ["Submitted", "Under Legal Review", "Need More Documents", "Forwarded to President", "Resolved", "Rejected"]
+    : ["Submitted", "In review", "Resolved", "Rejected"];
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
         <div>
-          <h2>Member problems to leadership</h2>
-          <p class="muted">Problems submitted from member login. Review and reply from here.</p>
+          <h2>${isLegalHead ? "Legal notices and office documents" : "Member problems to leadership"}</h2>
+          <p class="muted">${isLegalHead ? "Legal and office notice PDFs submitted by members. Review status and add legal remarks." : "Problems submitted from member login. Review and reply from here."}</p>
         </div>
         <span class="badge">${openCount} Open</span>
       </div>
       <div class="toolbar">
         <label>Search <input id="problemSearch" value="${escapeHtml(state.problemFilters.search)}" placeholder="Member, LS, subject, taluk"></label>
-        <label>Status <select id="problemStatus"><option value="">All status</option>${optionList(["Submitted", "In review", "Resolved", "Rejected"], state.problemFilters.status)}</select></label>
+        <label>Status <select id="problemStatus"><option value="">All status</option>${optionList(statusOptions, state.problemFilters.status)}</select></label>
         <span></span>
         <button class="secondary" id="applyProblemFilters">Apply</button>
         <button class="secondary" id="strikeSuggestionPdf" ${strikeCount ? "" : "disabled"}>Export strike PDF</button>
@@ -935,16 +940,21 @@ function renderMemberProblems() {
             <p>${escapeHtml(problem.description).replace(/\n/g, "<br>")}</p>
             <div class="mini-list">
               <span><strong>Category:</strong> ${escapeHtml(problem.category)}</span>
+              ${problem.documentType ? `<span><strong>Document:</strong> ${escapeHtml(problem.documentType)}</span>` : ""}
+              ${problem.officeName ? `<span><strong>Office:</strong> ${escapeHtml(problem.officeName)}</span>` : ""}
+              ${problem.village ? `<span><strong>Village/Hobli:</strong> ${escapeHtml(problem.village)}</span>` : ""}
+              ${problem.noticeDate ? `<span><strong>Notice date:</strong> ${escapeHtml(problem.noticeDate)}</span>` : ""}
               <span><strong>Phone:</strong> ${escapeHtml(problem.phoneNumber || "-")}</span>
               <span><strong>Submitted:</strong> ${escapeHtml(new Date(problem.createdAt).toLocaleString())}</span>
               ${problem.reviewedByName ? `<span><strong>Reviewed by:</strong> ${escapeHtml(problem.reviewedByName)}</span>` : ""}
             </div>
+            ${problem.documentUrl ? `<p><a class="secondary" href="${escapeHtml(problem.documentUrl)}" target="_blank">View uploaded PDF${problem.documentName ? ` - ${escapeHtml(problem.documentName)}` : ""}</a></p>` : ""}
             ${problem.response ? `<p class="notice">${escapeHtml(problem.response)}</p>` : ""}
             ${canUpdate ? `
               <div class="problem-review">
                 <label>Status
                   <select data-problem-status="${problem.id}">
-                    ${optionList(["Submitted", "In review", "Resolved", "Rejected"], problem.status)}
+                    ${optionList(statusOptions, problem.status)}
                   </select>
                 </label>
                 <label>Leadership response
@@ -2377,7 +2387,7 @@ function renderUsers() {
   const lists = state.dashboard.lists;
   const canManageUsers = state.user.role === "admin";
   const canReviewTeamRequests = ["admin", "division", "district_technical_head"].includes(state.user.role);
-  const roleOptions = ["admin", "state_president", "division", "district", "district_technical_head", "taluk"];
+  const roleOptions = ["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head", "taluk"];
   const filteredUsers = filterUsersForView(state.users);
   const counts = userCounts(state.users);
   document.querySelector("#view").innerHTML = `
@@ -2387,6 +2397,7 @@ function renderUsers() {
       <div class="box stat"><span class="muted">Division Teams</span><strong>${counts.division}</strong></div>
       <div class="box stat"><span class="muted">District Presidents</span><strong>${counts.district}</strong></div>
       <div class="box stat"><span class="muted">District Tech Heads</span><strong>${counts.district_technical_head}</strong></div>
+      <div class="box stat"><span class="muted">Legal Heads</span><strong>${counts.legal_team_head}</strong></div>
       <div class="box stat"><span class="muted">Taluk Teams</span><strong>${counts.taluk}</strong></div>
     </div>
     <div class="split">
@@ -2399,7 +2410,7 @@ function renderUsers() {
           </div>
           <div class="two">
             ${field("password", "Password", "", "password")}
-            ${selectField("role", "Role", ["taluk", "district_technical_head", "district", "division", "state_president", "admin"], "taluk", false, roleLabels)}
+            ${selectField("role", "Role", ["taluk", "district_technical_head", "legal_team_head", "district", "division", "state_president", "admin"], "taluk", false, roleLabels)}
           </div>
           <div class="two">
             ${selectField("district", "District / Division", lists.districts)}
@@ -2789,6 +2800,7 @@ function userCounts(users) {
     division: users.filter((user) => user.role === "division").length,
     district: users.filter((user) => user.role === "district").length,
     district_technical_head: users.filter((user) => user.role === "district_technical_head").length,
+    legal_team_head: users.filter((user) => user.role === "legal_team_head").length,
     taluk: users.filter((user) => user.role === "taluk").length
   };
 }

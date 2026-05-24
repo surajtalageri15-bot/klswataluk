@@ -327,6 +327,41 @@ function memberProblemForm() {
   `;
 }
 
+function memberDocumentForm() {
+  return `
+    <form id="memberDocumentForm" class="box public-form-card member-dashboard-card problem-card">
+      <div class="section-head">
+        <div>
+          <h2>Upload Office Notice / Legal Document</h2>
+          <p class="muted">Akarband, Swamitva, office notice, court/legal notice and other work PDFs will go to the legal/team review queue.</p>
+        </div>
+      </div>
+      <div class="two">
+        <label>Document Type *
+          <select name="documentType" required>
+            <option>Office Notice</option>
+            <option>Akarband</option>
+            <option>Swamitva</option>
+            <option>Court / Legal Notice</option>
+            <option>Department Order</option>
+            <option>Other Work</option>
+          </select>
+        </label>
+        <label>Notice Date <input name="noticeDate" type="date"></label>
+      </div>
+      <div class="two">
+        <label>Office / Department Name <input name="officeName" maxlength="160" placeholder="Tahsildar office, ADLR, etc."></label>
+        <label>Village / Hobli <input name="village" maxlength="160"></label>
+      </div>
+      <label>Subject * <input name="subject" required maxlength="160" placeholder="Short document subject"></label>
+      <label>Details / Remarks * <textarea name="description" rows="4" required placeholder="Explain why this notice/document is uploaded"></textarea></label>
+      <label>PDF Upload * <input name="pdfFile" type="file" accept="application/pdf" required></label>
+      <div class="message" id="memberDocumentMessage"></div>
+      <button class="primary" type="submit">Upload document</button>
+    </form>
+  `;
+}
+
 function renderMyProblems(problems = []) {
   return `
     <section class="box public-form-card member-dashboard-card problem-list-card">
@@ -341,6 +376,7 @@ function renderMyProblems(problems = []) {
             <span class="muted">${escapeHtml(problem.category)} / ${escapeHtml(new Date(problem.createdAt).toLocaleString())}</span>
             <strong>${escapeHtml(problem.subject)}</strong>
             <p>${escapeHtml(problem.description).replace(/\n/g, "<br>")}</p>
+            ${problem.documentUrl ? `<p><a class="secondary" href="${escapeHtml(problem.documentUrl)}" target="_blank">View uploaded PDF</a></p>` : ""}
             ${problem.response ? `<p class="notice">${escapeHtml(problem.response)}</p>` : ""}
           </div>
         `).join("") || `<p class="muted">No problems submitted yet.</p>`}
@@ -475,6 +511,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       </div>
     </section>
     ${renderTalukTeamContact(member, talukTeam)}
+    ${memberDocumentForm()}
     ${memberProblemForm()}
     ${renderMyProblems(problems)}
     ${changePasswordForm()}
@@ -603,6 +640,43 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       });
       problemForm.reset();
       message.textContent = "Problem submitted to leadership.";
+      const session = await request("/api/member-me");
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
+
+  const documentForm = document.querySelector("#memberDocumentForm");
+  documentForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#memberDocumentMessage");
+    message.textContent = "";
+    const file = documentForm.querySelector('input[name="pdfFile"]').files?.[0];
+    if (!file) {
+      message.textContent = "Upload PDF document.";
+      return;
+    }
+    if (file.type !== "application/pdf") {
+      message.textContent = "Only PDF upload is allowed.";
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      message.textContent = "PDF must be less than 8 MB.";
+      return;
+    }
+    try {
+      const data = formObject(documentForm);
+      delete data.pdfFile;
+      data.category = "Legal / Office Notice";
+      data.pdfData = await fileToDataUrl(file);
+      data.documentName = file.name;
+      await request("/api/member-problems", {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+      documentForm.reset();
+      message.textContent = "Document uploaded for legal/team review.";
       const session = await request("/api/member-me");
       renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
     } catch (error) {
