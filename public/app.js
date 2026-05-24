@@ -1077,7 +1077,10 @@ function renderSessionAnalytics() {
           <h2>Taluk Team Work Efficiency</h2>
           <p class="muted">Tracks login sessions and active website time from browser heartbeats.</p>
         </div>
-        <button class="secondary" id="refreshSessionAnalytics">Refresh</button>
+        <div class="actions">
+          <button class="secondary" id="workEfficiencyPdf">Export PDF</button>
+          <button class="secondary" id="refreshSessionAnalytics">Refresh</button>
+        </div>
       </div>
       <div class="stats">
         <div class="stat"><span>Tracked users</span><strong>${summary.users || 0}</strong></div>
@@ -1136,6 +1139,7 @@ function renderSessionAnalytics() {
     await loadSessionAnalytics();
     renderApp();
   });
+  document.querySelector("#workEfficiencyPdf").addEventListener("click", exportWorkEfficiencyPdf);
   document.querySelector("#sessionFilterBtn").addEventListener("click", async () => {
     state.sessionFilters.search = document.querySelector("#sessionSearch").value;
     state.sessionFilters.role = document.querySelector("#sessionRole").value;
@@ -1144,6 +1148,94 @@ function renderSessionAnalytics() {
     await loadSessionAnalytics();
     renderApp();
   });
+}
+
+function exportWorkEfficiencyPdf() {
+  const data = state.sessionAnalytics || {};
+  const summary = data.summary || {};
+  const rows = data.rows || [];
+  const popup = window.open("", "_blank");
+  if (!popup) {
+    alert("Popup blocked. Allow popups and try Export PDF again.");
+    return;
+  }
+  const generatedAt = new Date().toLocaleString();
+  const filterText = [
+    state.sessionFilters.role ? `Role: ${roleLabels[state.sessionFilters.role] || state.sessionFilters.role}` : "Role: All",
+    state.sessionFilters.search ? `Search: ${state.sessionFilters.search}` : "",
+    state.sessionFilters.from ? `From: ${state.sessionFilters.from}` : "",
+    state.sessionFilters.to ? `To: ${state.sessionFilters.to}` : ""
+  ].filter(Boolean).join(" / ");
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>KLSWA Taluk Team Work Efficiency</title>
+      <style>
+        body { font-family: Arial, sans-serif; color: #18231c; margin: 24px; }
+        h1 { color: #0d4f38; margin: 0 0 6px; }
+        h2 { color: #0d4f38; margin: 22px 0 8px; }
+        .muted { color: #647064; }
+        .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+        .summary div { border: 1px solid #dce5dc; border-radius: 8px; padding: 10px; background: #f8fbf7; }
+        .summary span, .summary strong { display: block; }
+        .summary strong { margin-top: 4px; font-size: 22px; color: #0d4f38; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 11px; }
+        th, td { border: 1px solid #d8ded6; padding: 6px; text-align: left; vertical-align: top; }
+        th { background: #eef5ee; color: #104f3a; }
+        .badge { display: inline-block; border-radius: 999px; padding: 3px 7px; background: #e8f3ec; color: #0d4f38; font-size: 11px; font-weight: 700; }
+        .offline { background: #f3f4f1; color: #607064; }
+        @media print { body { margin: 16px; } }
+      </style>
+    </head>
+    <body>
+      <h1>KLSWA Taluk Team Work Efficiency Report</h1>
+      <p class="muted">${escapeHtml(userScopeLabel())} / Generated ${escapeHtml(generatedAt)}</p>
+      <p class="muted">${escapeHtml(filterText)}</p>
+      <div class="summary">
+        <div><span>Tracked users</span><strong>${summary.users || 0}</strong></div>
+        <div><span>Total website time</span><strong>${escapeHtml(formatDuration(summary.totalSeconds || 0))}</strong></div>
+        <div><span>Today time</span><strong>${escapeHtml(formatDuration(summary.todaySeconds || 0))}</strong></div>
+        <div><span>Active now</span><strong>${summary.activeUsers || 0}</strong></div>
+      </div>
+      <h2>User Efficiency</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name / Username</th>
+            <th>Role</th>
+            <th>District</th>
+            <th>Taluk</th>
+            <th>Sessions</th>
+            <th>Total Time</th>
+            <th>Today</th>
+            <th>Last Seen</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row, index) => `
+            <tr>
+              <td>${index + 1}</td>
+              <td><strong>${escapeHtml(row.name || row.username || "-")}</strong><br><span class="muted">${escapeHtml(row.username || row.userId || "")}</span></td>
+              <td>${escapeHtml(roleLabels[row.role] || row.role || "-")}</td>
+              <td>${escapeHtml(row.district || "-")}</td>
+              <td>${escapeHtml(row.taluk || "-")}</td>
+              <td>${row.sessionCount || 0}</td>
+              <td><strong>${escapeHtml(formatDuration(row.totalSeconds || 0))}</strong></td>
+              <td>${escapeHtml(formatDuration(row.todaySeconds || 0))}</td>
+              <td>${escapeHtml(formatDateTime(row.lastSeenAt))}</td>
+              <td><span class="badge ${row.activeSessions ? "" : "offline"}">${row.activeSessions ? "Online" : "Offline"}</span></td>
+            </tr>
+          `).join("") || `<tr><td colspan="10">No session data available for selected filters.</td></tr>`}
+        </tbody>
+      </table>
+      <script>window.addEventListener("load", () => window.print());</script>
+    </body>
+    </html>`);
+  popup.document.close();
 }
 
 function renderTalukWorkDashboard() {
