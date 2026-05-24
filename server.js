@@ -4,7 +4,7 @@ const fssync = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const store = require("./db");
-const { canonicalDistrict, canonicalDivision, divisionDistricts, isMasterTaluk, masterLists } = require("./taluks");
+const { canonicalDistrict, canonicalDivision, divisionDistricts, isMasterTaluk, masterLists, normalizedTaluk } = require("./taluks");
 
 const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
@@ -227,7 +227,10 @@ function canReviewTeamRequests(user) {
 }
 
 function canCorrectTaluks(user) {
-  return user && ["admin", "division", "district_technical_head"].includes(user.role);
+  return user && (
+    ["admin", "division", "district_technical_head"].includes(user.role)
+    || (user.role === "taluk" && hasTalukPermission(user, "approveCorrection"))
+  );
 }
 
 function canUseTeamChat(user) {
@@ -909,7 +912,9 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/exports/corrections" && req.method === "GET") {
-    if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)) return json(res, 403, { error: "Export access required" });
+    const canExportCorrections = ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)
+      || (user.role === "taluk" && hasTalukPermission(user, "exportReports"));
+    if (!canExportCorrections) return json(res, 403, { error: "Export access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     const rows = await store.exportTalukCorrections(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -1257,6 +1262,21 @@ async function api(req, res, pathname) {
       const nextDistrict = canonicalDistrict(body.district || "");
       if (!districts.includes(currentDistrict) || !districts.includes(nextDistrict)) {
         return json(res, 403, { error: "This correction is outside your area" });
+      }
+    }
+    if (user.role === "taluk") {
+      const userDistrict = canonicalDistrict(user.district);
+      const userTaluk = normalizedTaluk(userDistrict, user.taluk || "");
+      const currentDistrict = canonicalDistrict(before.district);
+      const nextDistrict = canonicalDistrict(body.district || "");
+      const currentTaluk = normalizedTaluk(userDistrict, before.taluk || "");
+      const nextTaluk = normalizedTaluk(userDistrict, body.taluk || "");
+      if (
+        currentDistrict !== userDistrict
+        || nextDistrict !== userDistrict
+        || (currentTaluk !== userTaluk && nextTaluk !== userTaluk)
+      ) {
+        return json(res, 403, { error: "This correction is outside your taluk" });
       }
     }
     const member = await store.correctMemberTaluk(correctionMatch[1], body.district, body.taluk);

@@ -315,8 +315,11 @@ async function loadUsers() {
 }
 
 async function loadCorrections(page = 1) {
-  if (!["admin", "division", "district_technical_head"].includes(state.user.role)) return;
+  const canViewTalukCorrections = ["admin", "division", "district_technical_head"].includes(state.user.role)
+    || (state.user.role === "taluk" && canTaluk("approveCorrection"));
+  if (!canViewTalukCorrections) return;
   state.corrections.page = page;
+  if (state.user.role === "taluk") state.correctionFilters.district = state.user.district || "";
   const params = new URLSearchParams({
     page: String(page),
     size: String(state.corrections.size),
@@ -441,7 +444,7 @@ function renderApp() {
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">Member Problems</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
-          ${["admin", "division", "district_technical_head"].includes(state.user.role) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
+          ${["admin", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveCorrection")) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="backupRestore" class="${state.tab === "backupRestore" ? "active" : ""}">Backup & Restore</button>` : ""}
         </nav>
@@ -2933,15 +2936,18 @@ function openTalukProfileModal(user) {
 
 function renderCorrections() {
   const lists = state.dashboard.lists;
+  const isTalukScoped = state.user.role === "taluk";
+  const filterDistrict = isTalukScoped ? state.user.district || "" : state.correctionFilters.district;
+  if (isTalukScoped) state.correctionFilters.district = filterDistrict;
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="toolbar">
         <label>Search <input id="correctionSearch" value="${escapeHtml(state.correctionFilters.search)}" placeholder="Name, LS number, raw taluk"></label>
-        <label>District <select id="correctionDistrict"><option value="">All districts</option>${optionList(lists.districts, state.correctionFilters.district)}</select></label>
+        <label>District <select id="correctionDistrict" ${isTalukScoped ? "disabled" : ""}><option value="">All districts</option>${optionList(lists.districts, filterDistrict)}</select></label>
         <span></span>
         <span class="actions">
           <button class="secondary" id="applyCorrectionFilters">Apply</button>
-          <a class="secondary" href="${exportUrl("/api/exports/corrections", state.correctionFilters)}">Export CSV</a>
+          ${state.user.role !== "taluk" || canTaluk("exportReports") ? `<a class="secondary" href="${exportUrl("/api/exports/corrections", state.correctionFilters)}">Export CSV</a>` : ""}
         </span>
       </div>
       <div class="table-wrap">
@@ -2974,7 +2980,7 @@ function renderCorrections() {
 
   document.querySelector("#applyCorrectionFilters").addEventListener("click", async () => {
     state.correctionFilters.search = document.querySelector("#correctionSearch").value;
-    state.correctionFilters.district = document.querySelector("#correctionDistrict").value;
+    state.correctionFilters.district = isTalukScoped ? state.user.district || "" : document.querySelector("#correctionDistrict").value;
     await loadCorrections(1);
     renderApp();
   });
@@ -3622,19 +3628,26 @@ function formatDuration(seconds) {
 }
 
 function correctionRow(member, lists) {
-  const district = member.suggestedDistrict && lists.districts.includes(member.suggestedDistrict)
+  const isTalukScoped = state.user?.role === "taluk";
+  const ownDistrict = isTalukScoped ? state.user.district || "" : "";
+  const ownTaluk = isTalukScoped ? state.user.taluk || "" : "";
+  const district = isTalukScoped && lists.districts.includes(ownDistrict)
+    ? ownDistrict
+    : member.suggestedDistrict && lists.districts.includes(member.suggestedDistrict)
     ? member.suggestedDistrict
     : "";
-  const taluks = taluksForDistrict(lists, district);
-  const taluk = member.suggestedTaluk && taluks.includes(member.suggestedTaluk) ? member.suggestedTaluk : "";
+  const taluks = isTalukScoped && ownTaluk ? [ownTaluk] : taluksForDistrict(lists, district);
+  const taluk = isTalukScoped && ownTaluk
+    ? ownTaluk
+    : member.suggestedTaluk && taluks.includes(member.suggestedTaluk) ? member.suggestedTaluk : "";
   return `
     <tr>
       <td>${escapeHtml(member.name)}</td>
       <td>${escapeHtml(member.lsNumber)}</td>
       <td>${escapeHtml(member.rawDistrict)}</td>
       <td>${escapeHtml(member.rawTaluk)}</td>
-      <td><select data-correction-district="${member.id}"><option value="">Select</option>${optionList(lists.districts, district)}</select></td>
-      <td><select data-correction-taluk="${member.id}"><option value="">Select</option>${optionList(taluks, taluk)}</select></td>
+      <td><select data-correction-district="${member.id}" ${isTalukScoped ? "disabled" : ""}><option value="">Select</option>${optionList(lists.districts, district)}</select></td>
+      <td><select data-correction-taluk="${member.id}" ${isTalukScoped ? "disabled" : ""}><option value="">Select</option>${optionList(taluks, taluk)}</select></td>
       <td><button class="primary" data-save-correction="${member.id}">Save</button></td>
     </tr>
   `;

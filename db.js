@@ -1397,6 +1397,17 @@ async function listTalukCorrections({ page = 1, size = 50, district = "", search
     const userDistrict = canonicalDistrict(user.district);
     unmatched = unmatched.filter((member) => canonicalDistrict(member.suggestedDistrict || member.rawDistrict) === userDistrict);
   }
+  if (user?.role === "taluk") {
+    const userDistrict = canonicalDistrict(user.district);
+    const userTaluk = normalizedTaluk(userDistrict, user.taluk || "");
+    unmatched = unmatched.filter((member) => {
+      const memberDistrict = canonicalDistrict(member.suggestedDistrict || member.rawDistrict);
+      if (memberDistrict !== userDistrict) return false;
+      const rawTaluk = normalizedTaluk(userDistrict, member.rawTaluk || "");
+      const suggestedTaluk = normalizedTaluk(userDistrict, member.suggestedTaluk || "");
+      return rawTaluk === userTaluk || suggestedTaluk === userTaluk;
+    });
+  }
   if (search) {
     const needle = search.toLowerCase();
     unmatched = unmatched.filter((member) => [
@@ -1410,8 +1421,8 @@ async function listTalukCorrections({ page = 1, size = 50, district = "", search
 }
 
 async function exportTalukCorrections(user, filters = {}) {
-  if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)) return [];
-  const district = ["district", "district_technical_head"].includes(user.role) ? canonicalDistrict(user.district) : (filters.district || "");
+  if (!["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(user.role)) return [];
+  const district = ["district", "district_technical_head", "taluk"].includes(user.role) ? canonicalDistrict(user.district) : (filters.district || "");
   const result = await listTalukCorrections({
     page: 1,
     size: Number.MAX_SAFE_INTEGER,
