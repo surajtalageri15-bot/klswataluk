@@ -191,6 +191,18 @@ function renderLogin(message = "") {
             <div class="message">${escapeHtml(message)}</div>
           </div>
         </form>
+        <form class="box login-card" id="forgotLoginForm">
+          <h2>Forgot password</h2>
+          <p class="muted">Reset using your username and registered mobile number.</p>
+          <div class="form-grid">
+            <label>Username <input name="username" autocomplete="username"></label>
+            <label>Registered phone <input name="phoneNumber" inputmode="numeric" placeholder="10-digit phone"></label>
+            <label>New password <input name="password" type="password" minlength="6"></label>
+            <label>Confirm password <input name="confirmPassword" type="password" minlength="6"></label>
+            <button class="secondary" type="submit">Reset password</button>
+            <div class="message" id="forgotLoginMessage"></div>
+          </div>
+        </form>
       </div>
     </section>
   `;
@@ -208,6 +220,24 @@ function renderLogin(message = "") {
       renderApp();
     } catch (error) {
       renderLogin(error.message);
+    }
+  });
+  document.querySelector("#forgotLoginForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const messageEl = document.querySelector("#forgotLoginMessage");
+    messageEl.textContent = "";
+    messageEl.classList.remove("success");
+    const form = new FormData(event.currentTarget);
+    try {
+      await request("/api/forgot-login-password", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(form))
+      });
+      event.currentTarget.reset();
+      messageEl.textContent = "Password reset successful. Please sign in with new password.";
+      messageEl.classList.add("success");
+    } catch (error) {
+      messageEl.textContent = error.message;
     }
   });
 }

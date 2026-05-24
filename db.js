@@ -658,6 +658,49 @@ async function findUserByLogin(username, password) {
   return db.users.find((item) => item.username === username && item.password === password && item.active) || null;
 }
 
+async function findUserForPasswordReset(username, phoneNumber) {
+  const userName = String(username || "").trim();
+  const phone = normalizePhone(phoneNumber).slice(-10);
+  if (!userName || phone.length !== 10) return null;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select * from users
+       where lower(username) = lower($1)
+         and right(regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g'), 10) = $2
+         and active = true
+       limit 1`,
+      [userName, phone]
+    );
+    return toCamel(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  return db.users.find((item) => String(item.username || "").trim().toLowerCase() === userName.toLowerCase()
+    && normalizePhone(item.phoneNumber).slice(-10) === phone
+    && item.active) || null;
+}
+
+async function updateUserPassword(id, password) {
+  const nextPassword = String(password || "");
+  if (!nextPassword) return null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      "update users set password = $2, updated_at = now() where id = $1 returning *",
+      [id, nextPassword]
+    );
+    return toCamel(result.rows[0]) || null;
+  }
+
+  const db = await readJsonDb();
+  const user = db.users.find((item) => item.id === id);
+  if (!user) return null;
+  user.password = nextPassword;
+  user.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return user;
+}
+
 async function getDashboard(user) {
   if (hasPostgres) {
     const visible = visibleWhere(user);
@@ -2877,6 +2920,7 @@ module.exports = {
   initDb,
   closeDb,
   findUserByLogin,
+  findUserForPasswordReset,
   getUserById,
   getDashboard,
   updateAppSetting,
@@ -2910,6 +2954,7 @@ module.exports = {
   upsertDistrictPresidentUsers,
   upsertDistrictTechnicalHeadUsers,
   upsertDivisionTechnicalTeamUsers,
+  updateUserPassword,
   updateUser,
   deleteUser,
   memberVisibleTo,

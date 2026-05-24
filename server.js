@@ -444,6 +444,22 @@ async function api(req, res, pathname) {
     });
   }
 
+  if (pathname === "/api/forgot-login-password" && req.method === "POST") {
+    const body = asObject(await parseBody(req));
+    const username = String(body.username || "").trim();
+    const phoneNumber = String(body.phoneNumber || "").trim();
+    const password = String(body.password || "");
+    const confirmPassword = String(body.confirmPassword || "");
+    if (!username) return json(res, 400, { error: "Username is required" });
+    if (!/^\d{10}$/.test(phoneNumber.replace(/\D/g, "").slice(-10))) return json(res, 400, { error: "Enter registered 10-digit phone number" });
+    if (password.length < 6) return json(res, 400, { error: "Password must be at least 6 characters" });
+    if (password !== confirmPassword) return json(res, 400, { error: "Passwords do not match" });
+    const userForReset = await store.findUserForPasswordReset(username, phoneNumber);
+    if (!userForReset) return json(res, 404, { error: "Login not found with this username and registered phone number" });
+    const updated = await store.updateUserPassword(userForReset.id, password);
+    return json(res, 200, { ok: true, user: publicUser(updated) });
+  }
+
   if (pathname === "/api/public-membership" && req.method === "POST") {
     const body = asObject(await parseBody(req));
     const member = normalizeMember({
