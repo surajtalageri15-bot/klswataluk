@@ -530,8 +530,8 @@ async function api(req, res, pathname) {
       dateOfBirth: body.dateOfBirth
     });
     if (!member) return json(res, 404, { error: "Member not found. Check phone number, LS number and date of birth." });
-    if (!["Active", "Needs correction"].includes(member.status)) {
-      return json(res, 403, { error: `Member login opens after final approval or correction request. Current status: ${member.status || "Pending"}` });
+    if (["Rejected", "Inactive"].includes(member.status)) {
+      return json(res, 403, { error: `Member login is not available for ${member.status} records. Please contact KLSWA admin.` });
     }
     const activated = await store.activateMemberLogin(member.id, password);
     await tryCreateAuditLogs([{
@@ -558,8 +558,8 @@ async function api(req, res, pathname) {
       dateOfBirth: body.dateOfBirth
     });
     if (!member) return json(res, 404, { error: "Member not found. Check phone number, LS number and date of birth." });
-    if (!["Active", "Needs correction"].includes(member.status)) {
-      return json(res, 403, { error: `Password reset opens after final approval or correction request. Current status: ${member.status || "Pending"}` });
+    if (["Rejected", "Inactive"].includes(member.status)) {
+      return json(res, 403, { error: `Password reset is not available for ${member.status} records. Please contact KLSWA admin.` });
     }
     const updated = await store.updateMemberPassword(member.id, password);
     await tryCreateAuditLogs([{

@@ -57,11 +57,11 @@ form.addEventListener("submit", async (event) => {
           <div><span class="muted">Taluk</span><strong>${escapeHtml(member.taluk)}</strong></div>
         </div>
         ${member.remarks ? `<p class="notice">${escapeHtml(member.remarks)}</p>` : ""}
-        ${member.status === "Active" ? `
+        ${!["Rejected", "Inactive"].includes(member.status) ? `
           <div class="modal-actions">
             <a class="primary" href="/member-login.html">Activate / open member login</a>
           </div>
-        ` : `<p class="muted">Member login activation opens after Division final approval.</p>`}
+        ` : `<p class="muted">Member login is not available for this status. Please contact KLSWA admin.</p>`}
       </section>
     `;
   } catch (error) {
