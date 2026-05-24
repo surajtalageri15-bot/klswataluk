@@ -1083,32 +1083,48 @@ function normalizePhone(value) {
   return String(value || "").replace(/\D/g, "");
 }
 
+function normalizeLs(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function normalizedDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const indian = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (indian) return `${indian[3]}-${indian[2].padStart(2, "0")}-${indian[1].padStart(2, "0")}`;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? raw.slice(0, 10) : date.toISOString().slice(0, 10);
+}
+
 function sameDate(left, right) {
-  const a = String(left || "").slice(0, 10);
-  const b = String(right || "").slice(0, 10);
-  return a && b && a === b;
+  const a = normalizedDate(left);
+  const b = normalizedDate(right);
+  return !a || !b || a === b;
 }
 
 async function findMemberForActivation({ phoneNumber = "", lsNumber = "", dateOfBirth = "" }) {
   const phone = normalizePhone(phoneNumber);
-  const ls = String(lsNumber || "").trim().toLowerCase();
+  const phone10 = phone.slice(-10);
+  const ls = normalizeLs(lsNumber);
   if (!phone || !ls) return null;
 
   let member = null;
   if (hasPostgres) {
     const result = await pool.query(
       `select * from members
-       where regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g') = $1
-         and lower(ls_number) = $2
+       where right(regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g'), 10) = $1
+         and lower(regexp_replace(coalesce(ls_number, ''), '[^a-zA-Z0-9]', '', 'g')) = $2
        order by updated_at desc
        limit 1`,
-      [phone, ls]
+      [phone10, ls]
     );
-    member = toCamel(result.rows[0]) || null;
+    member = toMember(result.rows[0]) || null;
   } else {
     const db = await readJsonDb();
-    member = db.members.find((item) => normalizePhone(item.phoneNumber) === phone
-      && String(item.lsNumber || "").trim().toLowerCase() === ls) || null;
+    member = db.members.find((item) => normalizePhone(item.phoneNumber).slice(-10) === phone10
+      && normalizeLs(item.lsNumber) === ls) || null;
   }
 
   if (!member) return null;
