@@ -10,6 +10,7 @@ const PORT = Number(process.env.PORT || 3000);
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
 const SLIDER_DIR = path.join(PUBLIC_DIR, "uploads", "slider");
+const MEMBER_PHOTO_DIR = path.join(PUBLIC_DIR, "uploads", "members");
 
 const sessions = new Map();
 const memberSessions = new Map();
@@ -99,6 +100,38 @@ function parseSliderImage(body) {
   const buffer = Buffer.from(match[1], "base64");
   if (!buffer.length || buffer.length > 4 * 1024 * 1024) {
     const error = new Error("Image must be less than 4 MB");
+    error.status = 400;
+    throw error;
+  }
+  return buffer;
+}
+
+function memberPhotoFilePath(memberId) {
+  return path.join(MEMBER_PHOTO_DIR, `${String(memberId || "").replace(/[^a-zA-Z0-9_-]/g, "")}.jpg`);
+}
+
+async function memberPhotoUrl(memberId) {
+  const filePath = memberPhotoFilePath(memberId);
+  try {
+    const stat = await fs.stat(filePath);
+    if (!stat.isFile()) return "";
+    return `/uploads/members/${path.basename(filePath)}?v=${encodeURIComponent(stat.mtime.toISOString())}`;
+  } catch {
+    return "";
+  }
+}
+
+function parseMemberProfileImage(body) {
+  const imageData = String(body.imageData || "");
+  const match = imageData.match(/^data:image\/(?:jpe?g|png|webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    const error = new Error("Please upload JPG, PNG, or WEBP image");
+    error.status = 400;
+    throw error;
+  }
+  const buffer = Buffer.from(match[1], "base64");
+  if (!buffer.length || buffer.length > 3 * 1024 * 1024) {
+    const error = new Error("Photo must be less than 3 MB");
     error.status = 400;
     throw error;
   }
@@ -594,6 +627,8 @@ async function api(req, res, pathname) {
   if (pathname === "/api/member-me" && req.method === "GET") {
     const member = await currentMember(req);
     if (!member) return json(res, 401, { error: "Member login required" });
+    const safeMember = publicMember(member);
+    safeMember.profilePhotoUrl = await memberPhotoUrl(member.id);
     const auditLogs = await store.listAuditLogs({ id: member.id, role: "taluk", district: member.district, taluk: member.taluk }, {
       memberId: member.id,
       limit: 100
@@ -602,7 +637,26 @@ async function api(req, res, pathname) {
     const talukTeam = await store.findTalukTeamContactForMember(member);
     const problems = await store.listMemberProblems({ ...member, role: "member" }, { limit: 100 });
     const correctionRequests = await store.listMemberDataCorrectionRequests(member.id, 20);
-    return json(res, 200, { member: publicMember(member), auditLogs, presidentMessages, talukTeam, problems, correctionRequests });
+    return json(res, 200, { member: safeMember, auditLogs, presidentMessages, talukTeam, problems, correctionRequests });
+  }
+
+  if (pathname === "/api/member-photo" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    const body = asObject(await parseBody(req));
+    const buffer = parseMemberProfileImage(body);
+    await fs.mkdir(MEMBER_PHOTO_DIR, { recursive: true });
+    await fs.writeFile(memberPhotoFilePath(member.id), buffer);
+    await tryCreateAuditLogs([{
+      memberId: member.id,
+      memberName: member.name,
+      action: "Profile photo uploaded",
+      field: "profilePhoto",
+      oldValue: "",
+      newValue: "Updated by member",
+      ...auditActor({ id: member.id, name: member.name, role: "member" })
+    }]);
+    return json(res, 200, { ok: true, profilePhotoUrl: await memberPhotoUrl(member.id) });
   }
 
   if (pathname === "/api/member-problems" && req.method === "POST") {
@@ -1333,6 +1387,7 @@ const server = http.createServer(async (req, res) => {
       "/api/member-activate",
       "/api/member-login",
       "/api/member-me",
+      "/api/member-photo",
       "/api/member-correction-request",
       "/api/member-forgot-password",
       "/api/member-change-password"

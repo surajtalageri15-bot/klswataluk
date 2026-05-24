@@ -31,6 +31,15 @@ function formObject(form) {
   return Object.fromEntries(new FormData(form));
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function setMemberDashboardMode(isLoggedIn) {
   memberFormsGrid.classList.toggle("hidden", Boolean(isLoggedIn));
 }
@@ -437,6 +446,16 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     ${renderPresidentMessages(presidentMessages)}
     <section class="box status-card member-profile-card">
       <div class="section-head">
+        <div class="member-photo-panel">
+          <div class="member-photo">
+            ${member.profilePhotoUrl ? `<img src="${escapeHtml(member.profilePhotoUrl)}" alt="Profile photo">` : `<span>${escapeHtml((member.name || "M").trim().slice(0, 1).toUpperCase())}</span>`}
+          </div>
+          <label class="secondary member-photo-upload">
+            Upload photo
+            <input id="memberPhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
+          </label>
+          <div class="message" id="memberPhotoMessage"></div>
+        </div>
         <div>
           <p class="eyebrow">Member Dashboard</p>
           <h2>${escapeHtml(member.name)}</h2>
@@ -488,6 +507,37 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   if (downloadApplication) {
     downloadApplication.addEventListener("click", () => downloadApprovedApplication(member));
   }
+
+  const memberPhotoInput = document.querySelector("#memberPhotoInput");
+  memberPhotoInput.addEventListener("change", async (event) => {
+    const file = event.currentTarget.files?.[0];
+    const message = document.querySelector("#memberPhotoMessage");
+    message.textContent = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      message.textContent = "Upload JPG, PNG, or WEBP photo.";
+      event.currentTarget.value = "";
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      message.textContent = "Photo must be less than 3 MB.";
+      event.currentTarget.value = "";
+      return;
+    }
+    try {
+      const imageData = await fileToDataUrl(file);
+      await request("/api/member-photo", {
+        method: "POST",
+        body: JSON.stringify({ imageData })
+      });
+      const session = await request("/api/member-me");
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+    } catch (error) {
+      message.textContent = error.message;
+    } finally {
+      event.currentTarget.value = "";
+    }
+  });
 
   document.querySelector("#copyTalukSupport").addEventListener("click", async () => {
     await copyText(document.querySelector("#talukSupportMessage").value);

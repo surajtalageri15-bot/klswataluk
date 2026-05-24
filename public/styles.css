@@ -657,6 +657,54 @@ a.primary {
   color: #fff;
 }
 
+.member-photo-panel {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.member-photo {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.18);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.member-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-photo span {
+  color: #fff;
+  font-size: 34px;
+  font-weight: 800;
+}
+
+.member-photo-upload {
+  cursor: pointer;
+  color: var(--green-dark);
+  background: #fff;
+}
+
+.member-photo-upload input {
+  display: none;
+}
+
+.member-photo-panel .message {
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  max-width: 140px;
+}
+
 .member-login-shell .member-profile-card .section-head h2 {
   margin: 4px 0;
   color: #fff;
@@ -1796,6 +1844,10 @@ tr:last-child td {
   .member-login-shell .member-profile-card > .section-head {
     flex-direction: column;
     min-height: 170px;
+  }
+
+  .member-photo-panel {
+    justify-items: start;
   }
 
   .member-login-shell .member-profile-card > .status-grid,
