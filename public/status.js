@@ -21,7 +21,10 @@ async function request(path) {
 
 function statusText(status) {
   return {
-    "Pending verification": "Pending verification - Admin/Taluk team will review your application.",
+    "Pending verification": "Pending verification - Team will review your application.",
+    "Pending Taluk Review": "Pending Taluk Review - Taluk Technical Team will review your application.",
+    "Pending District Review": "Pending District Review - District Technical Head approval is pending.",
+    "Pending Division Final Approval": "Pending Division Final Approval - Division Technical Head final approval is pending.",
     Active: "Approved - Your membership record is active.",
     Rejected: "Rejected - Please contact the association office.",
     "Needs correction": "Needs correction - Please contact your taluk team.",
@@ -54,9 +57,11 @@ form.addEventListener("submit", async (event) => {
           <div><span class="muted">Taluk</span><strong>${escapeHtml(member.taluk)}</strong></div>
         </div>
         ${member.remarks ? `<p class="notice">${escapeHtml(member.remarks)}</p>` : ""}
-        <div class="modal-actions">
-          <a class="primary" href="/member-login.html">Activate / open member login</a>
-        </div>
+        ${member.status === "Active" ? `
+          <div class="modal-actions">
+            <a class="primary" href="/member-login.html">Activate / open member login</a>
+          </div>
+        ` : `<p class="muted">Member login activation opens after Division final approval.</p>`}
       </section>
     `;
   } catch (error) {

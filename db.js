@@ -13,6 +13,8 @@ const {
   normalizedTaluk
 } = require("./taluks");
 
+const PENDING_MEMBER_STATUSES = ["Pending verification", "Pending Taluk Review", "Pending District Review", "Pending Division Final Approval"];
+
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const JSON_DB_PATH = path.join(DATA_DIR, "db.json");
@@ -441,6 +443,12 @@ async function initDb() {
   `);
 
   await pool.query(`
+    update members
+    set status = 'Pending Taluk Review', updated_at = now()
+    where status = 'Pending verification'
+  `);
+
+  await pool.query(`
     alter table members add column if not exists marital_status text;
     alter table members add column if not exists kalyana_karnataka text;
     alter table members add column if not exists category text;
@@ -605,7 +613,7 @@ async function districtPerformance(user, members) {
     if (!row) continue;
     row.members += 1;
     if (member.status === "Active") row.active += 1;
-    else if (member.status === "Pending verification") row.pending += 1;
+    else if (PENDING_MEMBER_STATUSES.includes(member.status)) row.pending += 1;
     else if (member.status === "Rejected") row.rejected += 1;
     else if (member.status === "Needs correction") row.needsCorrection += 1;
   }
@@ -714,7 +722,7 @@ async function getPublicSummary() {
     districts: summary.districts,
     taluks: summary.taluks,
     masterTaluks: masterTalukCount({ role: "admin" }),
-    pending: summary.statusCounts["Pending verification"] || 0,
+    pending: PENDING_MEMBER_STATUSES.reduce((sum, status) => sum + (summary.statusCounts[status] || 0), 0),
     active: summary.statusCounts.Active || 0,
     needsCorrection: summary.statusCounts["Needs correction"] || 0,
     updatedAt
@@ -766,6 +774,7 @@ async function exportMembers(user, filters) {
     gender: filters.gender || "",
     batchYear: filters.batchYear || "",
     missingOnly: filters.missingOnly === true || filters.missingOnly === "true",
+    workflowPending: filters.workflowPending === true || filters.workflowPending === "true",
     page: 1,
     size: Number.MAX_SAFE_INTEGER
   });
@@ -795,7 +804,16 @@ function missingMemberFields(member) {
 }
 
 async function updateMemberStatus(id, status, remarks = "") {
-  const allowed = ["Pending verification", "Active", "Rejected", "Needs correction", "Inactive"];
+  const allowed = [
+    "Pending verification",
+    "Pending Taluk Review",
+    "Pending District Review",
+    "Pending Division Final Approval",
+    "Active",
+    "Rejected",
+    "Needs correction",
+    "Inactive"
+  ];
   if (!allowed.includes(status)) {
     const error = new Error("Invalid member status");
     error.status = 400;
@@ -804,7 +822,10 @@ async function updateMemberStatus(id, status, remarks = "") {
 
   if (hasPostgres) {
     const result = await pool.query(
-      `update members set status = $2, remarks = case when $3 = '' then remarks else $3 end, updated_at = now()
+      `update members set status = $2,
+       remarks = case when $3 = '' then remarks else $3 end,
+       member_login_active = case when $2 = 'Active' then member_login_active else false end,
+       updated_at = now()
        where id = $1 returning *`,
       [id, status, remarks]
     );
@@ -817,6 +838,7 @@ async function updateMemberStatus(id, status, remarks = "") {
   if (!member) return null;
   member.status = status;
   if (remarks) member.remarks = remarks;
+  if (status !== "Active") member.memberLoginActive = false;
   member.updatedAt = new Date().toISOString();
   await writeJsonDb(db);
   return member;
@@ -826,6 +848,9 @@ function filterMemberRows(rows, filters) {
   let filtered = rows;
   if (filters.district) filtered = filtered.filter((member) => member.district === filters.district);
   if (filters.taluk) filtered = filtered.filter((member) => member.taluk === filters.taluk);
+  if (filters.workflowPending) {
+    filtered = filtered.filter((member) => PENDING_MEMBER_STATUSES.includes(member.status));
+  }
   if (filters.status) filtered = filtered.filter((member) => member.status === filters.status);
   if (filters.gender) filtered = filtered.filter((member) => member.gender === filters.gender);
   if (filters.batchYear) filtered = filtered.filter((member) => String(member.batchYear || "") === String(filters.batchYear));
@@ -1628,7 +1653,7 @@ function normalizePresidentMessage(message) {
 function messageVisibleToMember(message, member) {
   if (!message.active || message.audience === "all_teams") return false;
   if (message.audience === "active_members") return member.status === "Active";
-  if (message.audience === "pending_members") return member.status === "Pending verification";
+  if (message.audience === "pending_members") return PENDING_MEMBER_STATUSES.includes(member.status);
   if (message.audience === "correction_members") return member.status === "Needs correction";
   return message.audience === "all_members";
 }

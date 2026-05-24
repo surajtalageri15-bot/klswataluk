@@ -85,8 +85,9 @@ function canTaluk(permission, user = state.user) {
   return talukPermissions(user)[permission] !== false;
 }
 
-const memberStatusOptions = ["Active", "Pending verification", "Inactive", "Needs correction", "Rejected"];
-const editableMemberStatusOptions = ["Active", "Inactive", "Pending verification", "Needs correction", "Rejected"];
+const workflowPendingStatuses = ["Pending Taluk Review", "Pending District Review", "Pending Division Final Approval", "Pending verification"];
+const memberStatusOptions = ["Active", ...workflowPendingStatuses, "Inactive", "Needs correction", "Rejected"];
+const editableMemberStatusOptions = ["Active", "Inactive", ...workflowPendingStatuses, "Needs correction", "Rejected"];
 const inactiveMemberRemark = "Member submitted application but is currently inactive. Kept in records for admin follow-up.";
 
 async function request(path, options = {}) {
@@ -246,7 +247,8 @@ async function loadAllMembersForExport(filters = state.filters) {
       status: filters.status || "",
       gender: filters.gender || "",
       batchYear: filters.batchYear || "",
-      missingOnly: filters.missingOnly ? "true" : ""
+      missingOnly: filters.missingOnly ? "true" : "",
+      workflowPending: filters.workflowPending ? "true" : ""
     });
     const data = await request(`/api/members?${params.toString()}`);
     rows = rows.concat(data.rows || []);
@@ -258,13 +260,15 @@ async function loadAllMembersForExport(filters = state.filters) {
 
 async function loadPending(page = 1) {
   state.pending.page = page;
+  const status = reviewQueueStatusForRole();
   const params = new URLSearchParams({
     page: String(page),
     size: "100",
     search: "",
     district: "",
     taluk: "",
-    status: "Pending verification"
+    status,
+    workflowPending: status ? "" : "true"
   });
   const data = await request(`/api/members?${params.toString()}`);
   state.pending = { ...data, size: 100 };
@@ -526,7 +530,7 @@ function audienceCount(audience) {
   const summary = state.dashboard?.summary || {};
   const statusCounts = summary.statusCounts || {};
   if (audience === "active_members") return statusCounts.Active || 0;
-  if (audience === "pending_members") return statusCounts["Pending verification"] || 0;
+  if (audience === "pending_members") return workflowPendingStatuses.reduce((sum, status) => sum + (statusCounts[status] || 0), 0);
   if (audience === "correction_members") return statusCounts["Needs correction"] || 0;
   if (audience === "all_teams") return state.users.length || "office";
   return summary.total || 0;
@@ -534,7 +538,7 @@ function audienceCount(audience) {
 
 function audienceExportParams(audience) {
   if (audience === "active_members") return { status: "Active" };
-  if (audience === "pending_members") return { status: "Pending verification" };
+  if (audience === "pending_members") return { workflowPending: "true" };
   if (audience === "correction_members") return { status: "Needs correction" };
   return {};
 }
@@ -626,7 +630,7 @@ function renderMessages() {
           <div class="list-row"><span>All Members</span><span class="badge">${state.dashboard.summary.total || 0}</span></div>
           <div class="list-row"><span>Active Members</span><span class="badge">${state.dashboard.summary.statusCounts?.Active || 0}</span></div>
           <div class="list-row"><span>Inactive Members</span><span class="badge">${state.dashboard.summary.statusCounts?.Inactive || 0}</span></div>
-          <div class="list-row"><span>Pending Verification</span><span class="badge">${state.dashboard.summary.statusCounts?.["Pending verification"] || 0}</span></div>
+          <div class="list-row"><span>Pending Workflow</span><span class="badge">${audienceCount("pending_members")}</span></div>
           <div class="list-row"><span>Needs Correction</span><span class="badge">${state.dashboard.summary.statusCounts?.["Needs correction"] || 0}</span></div>
         </div>
         <h2>Recent published notices</h2>
@@ -1107,7 +1111,7 @@ function renderTalukWorkDashboard() {
         <button class="secondary" id="talukProgressPdf">Export PDF</button>
       </div>
       <div class="work-grid">
-        ${workCard("Pending verification", pending.length, "Open queue", "pending")}
+        ${workCard("Pending approval", pending.length, "Open queue", "pending")}
         ${workCard("Missing data", state.missingData.total || missing.length, "Open follow-up", "missingData")}
         ${workCard("Pending corrections", pendingCorrections.length, "Open tracker", "dataCorrections")}
         ${workCard("Unread chat", unreadChatCount(), "Open chat", "teamChat")}
@@ -1172,7 +1176,7 @@ function renderDashboard() {
       <div class="box stat"><span class="muted">Surveyors</span><strong>${summary.total}</strong></div>
       ${state.user.role === "taluk" ? `
         <div class="box stat"><span class="muted">Active</span><strong>${summary.statusCounts?.Active || 0}</strong></div>
-        <div class="box stat"><span class="muted">Pending</span><strong>${summary.statusCounts?.["Pending verification"] || 0}</strong></div>
+        <div class="box stat"><span class="muted">Pending</span><strong>${workflowPendingStatuses.reduce((sum, status) => sum + (summary.statusCounts?.[status] || 0), 0)}</strong></div>
         <div class="box stat"><span class="muted">Needs correction</span><strong>${summary.statusCounts?.["Needs correction"] || 0}</strong></div>
       ` : `
         <div class="box stat"><span class="muted">Districts</span><strong>${summary.districts}</strong></div>
@@ -1289,6 +1293,32 @@ function verificationChecklist(member) {
   const missing = missingFields(member);
   if (!missing.length) return `<span class="badge">Ready</span>`;
   return `<span class="badge">${missing.length} missing</span><div class="mini-list">${missing.slice(0, 4).map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>`;
+}
+
+function reviewQueueStatusForRole() {
+  if (state.user.role === "taluk") return "Pending Taluk Review";
+  if (state.user.role === "district_technical_head") return "Pending District Review";
+  if (state.user.role === "division") return "Pending Division Final Approval";
+  return "";
+}
+
+function nextApprovalStatusForRole(member = {}) {
+  if (state.user.role === "taluk") return "Pending District Review";
+  if (state.user.role === "district_technical_head") return "Pending Division Final Approval";
+  if (state.user.role === "division") return "Active";
+  if (["admin", "state_president"].includes(state.user.role)) {
+    if (member.status === "Pending Taluk Review") return "Pending District Review";
+    if (member.status === "Pending District Review") return "Pending Division Final Approval";
+    return "Active";
+  }
+  return "Active";
+}
+
+function approvalActionLabel(member = {}) {
+  const next = nextApprovalStatusForRole(member);
+  if (next === "Pending District Review") return "Approve to District";
+  if (next === "Pending Division Final Approval") return "Approve to Division";
+  return "Final Approve";
 }
 
 function followupMessage(member) {
@@ -1490,7 +1520,7 @@ function exportTalukProgressPdf() {
         <div class="stat"><span>Pending</span><strong>${pending.length}</strong></div>
         <div class="stat"><span>Missing data</span><strong>${state.missingData.total || missing.length}</strong></div>
       </div>
-      <h2>Pending verification</h2>
+      <h2>Pending approval workflow</h2>
       <table><thead><tr><th>Name</th><th>LS Number</th><th>Phone</th><th>Remarks</th></tr></thead><tbody>
         ${pending.slice(0, 50).map((member) => `<tr><td>${escapeHtml(member.name)}</td><td>${escapeHtml(member.lsNumber)}</td><td>${escapeHtml(member.phoneNumber)}</td><td>${escapeHtml(member.remarks)}</td></tr>`).join("") || `<tr><td colspan="4">No pending records.</td></tr>`}
       </tbody></table>
@@ -1528,7 +1558,7 @@ function renderMembers() {
           ${canExport ? `<a class="secondary" id="memberExportLink" href="${exportUrl("/api/exports/members", state.filters)}">Export CSV</a>` : ""}
           ${canExport ? `<button class="secondary" id="memberDistrictPdf">District-wise PDF</button>` : ""}
           ${state.user.role === "taluk" && canExport ? `
-            <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Pending verification" })}">Pending CSV</a>
+            <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "", workflowPending: "true" })}">Pending CSV</a>
             <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, status: "Needs correction" })}">Needs correction CSV</a>
             <a class="secondary" href="${exportUrl("/api/exports/members", { ...state.filters, missingOnly: "true" })}">Missing data CSV</a>
           ` : ""}
@@ -1691,7 +1721,7 @@ async function exportMemberDistrictPdf() {
           <div><span>Total members</span><strong>${members.length}</strong></div>
           <div><span>Districts</span><strong>${districts.filter((district) => (membersByDistrict[district] || []).length).length}</strong></div>
           <div><span>Missing data</span><strong>${missingCount}</strong></div>
-          <div><span>Pending / correction</span><strong>${(statusCounts["Pending verification"] || 0) + (statusCounts["Needs correction"] || 0)}</strong></div>
+          <div><span>Pending / correction</span><strong>${workflowPendingStatuses.reduce((sum, status) => sum + (statusCounts[status] || 0), 0) + (statusCounts["Needs correction"] || 0)}</strong></div>
         </div>
         <div class="chips">
           ${Object.entries(statusCounts).sort().map(([label, value]) => `<span class="chip">${escapeHtml(label)}: ${value}</span>`).join("")}
@@ -1777,10 +1807,10 @@ function renderPendingQueue() {
                 <td>${escapeHtml(member.phoneNumber)}</td>
                 <td>${verificationChecklist(member)}</td>
                 <td>${escapeHtml(member.qualification)}</td>
-                <td>${escapeHtml(member.remarks)}</td>
+                <td><span class="badge">${escapeHtml(member.status)}</span><br>${escapeHtml(member.remarks)}</td>
                 <td class="actions">
                   <button class="secondary" data-view-pending="${member.id}">View</button>
-                  <button class="primary" data-review-status="Active" data-member="${member.id}">Approve</button>
+                  <button class="primary" data-review-status="${escapeHtml(nextApprovalStatusForRole(member))}" data-member="${member.id}">${escapeHtml(approvalActionLabel(member))}</button>
                   <button class="secondary" data-review-status="Inactive" data-member="${member.id}">Mark inactive</button>
                   <button class="secondary" data-review-status="Needs correction" data-member="${member.id}">Needs correction</button>
                   <button class="secondary" data-copy-followup="${member.id}">Copy msg</button>
@@ -1878,7 +1908,7 @@ function openPendingApplicationModal(member) {
         </div>
         <div class="modal-actions">
           <button class="secondary" type="button" data-close>Close</button>
-          <button class="primary" type="button" data-modal-status="Active">Approve</button>
+          <button class="primary" type="button" data-modal-status="${escapeHtml(nextApprovalStatusForRole(member))}">${escapeHtml(approvalActionLabel(member))}</button>
           <button class="secondary" type="button" data-modal-status="Inactive">Mark inactive</button>
           <button class="secondary" type="button" data-modal-status="Needs correction">Needs correction</button>
           <button class="danger" type="button" data-modal-status="Rejected">Reject</button>
@@ -1899,15 +1929,19 @@ function openPendingApplicationModal(member) {
 
 function openPendingStatusModal(member, status) {
   if (!member) return;
-  const needsReason = status !== "Active";
+  const needsReason = ["Rejected", "Needs correction", "Inactive"].includes(status);
   const actionLabels = {
-    Active: "Approve application",
+    Active: "Final approve application",
+    "Pending District Review": "Approve to District Technical Head",
+    "Pending Division Final Approval": "Approve to Division Technical Head",
     Inactive: "Mark member inactive",
     "Needs correction": "Send for correction",
     Rejected: "Reject application"
   };
   const statusHelp = {
-    Active: "This member will move from pending queue to active members.",
+    Active: "Final approval will make the member active and open the member login activation slot.",
+    "Pending District Review": "Taluk review will be completed and this application will move to the District Technical Head queue.",
+    "Pending Division Final Approval": "District review will be completed and this application will move to the Division Technical Head final approval queue.",
     Inactive: "This member will be kept in records as inactive and excluded from active member count.",
     "Needs correction": "This reason will be saved in remarks and shown to the member/team.",
     Rejected: "This rejection reason will be saved in remarks."

@@ -114,6 +114,13 @@ const talukPermissionDefaults = {
   exportReports: true
 };
 
+const pendingWorkflowStatuses = [
+  "Pending verification",
+  "Pending Taluk Review",
+  "Pending District Review",
+  "Pending Division Final Approval"
+];
+
 function normalizeTalukPermissions(input = {}) {
   const source = asObject(input);
   return Object.fromEntries(
@@ -215,6 +222,24 @@ function canReviewMembers(user) {
   if (!user) return false;
   if (user.role === "taluk") return hasTalukPermission(user, "approveMembership");
   return ["admin", "state_president", "division", "district_technical_head"].includes(user.role);
+}
+
+function validateMemberStatusReview(user, member, nextStatus) {
+  if (["Rejected", "Needs correction", "Inactive"].includes(nextStatus)) return "";
+  if (["admin", "state_president"].includes(user.role)) return "";
+  if (user.role === "taluk") {
+    if (["Pending Taluk Review", "Pending verification"].includes(member.status) && nextStatus === "Pending District Review") return "";
+    return "Taluk Technical Team can only forward applications to District Technical Head";
+  }
+  if (user.role === "district_technical_head") {
+    if (member.status === "Pending District Review" && nextStatus === "Pending Division Final Approval") return "";
+    return "District Technical Head can only approve applications waiting at district level";
+  }
+  if (user.role === "division") {
+    if (["Pending Division Final Approval", "Pending verification"].includes(member.status) && nextStatus === "Active") return "";
+    return "Division Technical Head can only final approve applications waiting at division level";
+  }
+  return "Status review access required";
 }
 
 function canReviewCorrections(user) {
@@ -423,7 +448,7 @@ async function api(req, res, pathname) {
     const body = asObject(await parseBody(req));
     const member = normalizeMember({
       ...body,
-      status: "Pending verification",
+      status: "Pending Taluk Review",
       remarks: `Public form submission${body.remarks ? ` - ${body.remarks}` : ""}`
     });
     const validation = assertMember(member);
@@ -489,6 +514,9 @@ async function api(req, res, pathname) {
       dateOfBirth: body.dateOfBirth
     });
     if (!member) return json(res, 404, { error: "Member not found. Check phone number, LS number and date of birth." });
+    if (member.status !== "Active") {
+      return json(res, 403, { error: `Member login opens only after final approval. Current status: ${member.status || "Pending"}` });
+    }
     const activated = await store.activateMemberLogin(member.id, password);
     await tryCreateAuditLogs([{
       memberId: activated.id,
@@ -514,6 +542,9 @@ async function api(req, res, pathname) {
       dateOfBirth: body.dateOfBirth
     });
     if (!member) return json(res, 404, { error: "Member not found. Check phone number, LS number and date of birth." });
+    if (member.status !== "Active") {
+      return json(res, 403, { error: `Password reset opens only after final approval. Current status: ${member.status || "Pending"}` });
+    }
     const updated = await store.updateMemberPassword(member.id, password);
     await tryCreateAuditLogs([{
       memberId: updated.id,
@@ -773,6 +804,7 @@ async function api(req, res, pathname) {
       gender: url.searchParams.get("gender") || "",
       batchYear: url.searchParams.get("batchYear") || "",
       missingOnly: url.searchParams.get("missingOnly") === "true",
+      workflowPending: url.searchParams.get("workflowPending") === "true",
       page: Math.max(1, Number(url.searchParams.get("page") || 1)),
       size: Math.min(100, Math.max(10, Number(url.searchParams.get("size") || 25)))
     }));
@@ -788,7 +820,8 @@ async function api(req, res, pathname) {
       status: url.searchParams.get("status") || "",
       gender: url.searchParams.get("gender") || "",
       batchYear: url.searchParams.get("batchYear") || "",
-      missingOnly: url.searchParams.get("missingOnly") === "true"
+      missingOnly: url.searchParams.get("missingOnly") === "true",
+      workflowPending: url.searchParams.get("workflowPending") === "true"
     });
     return csvDownload(res, "surveyor-members.csv", [
       "name", "lsNumber", "loginId", "district", "taluk", "gender",
@@ -881,6 +914,8 @@ async function api(req, res, pathname) {
     if (["Rejected", "Needs correction", "Inactive"].includes(status) && !remarks) {
       return json(res, 400, { error: "Reason is required for rejection, correction, or inactive status" });
     }
+    const statusError = validateMemberStatusReview(user, member, status);
+    if (statusError) return json(res, 403, { error: statusError });
     const updated = await store.updateMemberStatus(member.id, status, remarks);
     if (!updated) return json(res, 404, { error: "Member not found" });
     await tryCreateAuditLogs(auditDiffs({ action: "Status changed", before: member, after: updated, actor: user }));

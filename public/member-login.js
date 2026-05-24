@@ -37,7 +37,10 @@ function setMemberDashboardMode(isLoggedIn) {
 
 function statusText(status) {
   return {
-    "Pending verification": "Pending verification - Admin/Taluk team will review your application.",
+    "Pending verification": "Pending verification - Team will review your application.",
+    "Pending Taluk Review": "Pending Taluk Review - Taluk Technical Team will review your application.",
+    "Pending District Review": "Pending District Review - District Technical Head approval is pending.",
+    "Pending Division Final Approval": "Pending Division Final Approval - Division Technical Head final approval is pending.",
     Active: "Approved - Your membership record is active.",
     Rejected: "Rejected - Please contact the association office.",
     "Needs correction": "Needs correction - update the requested details below.",
