@@ -665,10 +665,14 @@ async function findUserForPasswordReset(username, phoneNumber) {
 
   if (hasPostgres) {
     const result = await pool.query(
-      `select * from users
-       where lower(username) = lower($1)
-         and right(regexp_replace(coalesce(phone_number, ''), '\\D', '', 'g'), 10) = $2
-         and active = true
+      `select u.*
+       from users u
+       left join taluk_team_requests r
+         on r.status = 'Approved'
+        and (r.user_id = u.id or lower(r.requested_username) = lower(u.username))
+       where lower(u.username) = lower($1)
+         and right(regexp_replace(coalesce(nullif(u.phone_number, ''), r.phone_number, ''), '\\D', '', 'g'), 10) = $2
+         and u.active = true
        limit 1`,
       [userName, phone]
     );
@@ -676,9 +680,14 @@ async function findUserForPasswordReset(username, phoneNumber) {
   }
 
   const db = await readJsonDb();
-  return db.users.find((item) => String(item.username || "").trim().toLowerCase() === userName.toLowerCase()
-    && normalizePhone(item.phoneNumber).slice(-10) === phone
-    && item.active) || null;
+  return db.users.find((item) => {
+    const request = (db.talukTeamRequests || []).find((entry) => entry.status === "Approved"
+      && (entry.userId === item.id || String(entry.requestedUsername || "").trim().toLowerCase() === String(item.username || "").trim().toLowerCase()));
+    const resetPhone = item.phoneNumber || request?.phoneNumber || "";
+    return String(item.username || "").trim().toLowerCase() === userName.toLowerCase()
+      && normalizePhone(resetPhone).slice(-10) === phone
+      && item.active;
+  }) || null;
 }
 
 async function updateUserPassword(id, password) {
