@@ -162,6 +162,10 @@ async function boot() {
     const data = await request("/api/me");
     state.user = data.user;
     await loadDashboard();
+    if (state.user.role === "legal_team_head") {
+      state.tab = "memberProblems";
+      await loadMemberProblems();
+    }
     if (state.user.role === "taluk") await loadTalukWork();
     startHeartbeat();
     renderApp();
@@ -217,6 +221,10 @@ function renderLogin(message = "") {
       });
       state.user = data.user;
       await loadDashboard();
+      if (state.user.role === "legal_team_head") {
+        state.tab = "memberProblems";
+        await loadMemberProblems();
+      }
       startHeartbeat();
       renderApp();
     } catch (error) {
@@ -394,7 +402,7 @@ async function loadTeamChat() {
 }
 
 async function loadMemberProblems() {
-  if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role)) return;
+  if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(state.user.role)) return;
   const params = new URLSearchParams({
     search: state.problemFilters.search,
     status: state.problemFilters.status,
@@ -528,7 +536,7 @@ function pageTitle() {
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "sessionAnalytics") return "Team Time Analytics";
   if (state.tab === "teamChat") return "Team Chat";
-  if (state.tab === "memberProblems") return "Member Problems";
+  if (state.tab === "memberProblems") return state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems";
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Correction";
   if (state.tab === "audit") return state.user.role === "taluk" ? "Taluk Activity Log" : "Audit History";
