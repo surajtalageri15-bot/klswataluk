@@ -2,7 +2,7 @@ const MASTER_TALUKS = {
   "Bagalkot": ["Bagalkote", "Jamkhandi", "Mudhola", "Badami", "Bilagi", "Hunagunda", "Ilkal", "Rabkavi Banhatti", "Guledgudda"],
   "Ballari": ["Ballari", "Kurugodu", "Kampli", "Sanduru", "Siraguppa"],
   "Belagavi": ["Belagavi", "Athani", "Bailhongal", "Chikkodi", "Gokak", "Khanapura", "Mudalgi", "Nippani", "Rayabaga", "Savadatti", "Ramadurga", "Kagawada", "Hukkeri", "Kitturu", "Yargatti"],
-  "Bengaluru Urban": ["Bengaluru", "Bengaluru North", "Bengaluru South", "Bengaluru East", "Kengeri", "Krishnarajapura", "Anekal", "Yelahanka"],
+  "Bengaluru Urban": ["Bengaluru North", "Bengaluru South", "Bengaluru East", "Yelahanka", "Anekal"],
   "Bengaluru Rural": ["Nelamangala", "Doddaballapura", "Devanahalli", "Hosakote"],
   "Bidar": ["Aurad", "Basavakalyana", "Bhalki", "Bidar", "Chitgoppa", "Hulsuru", "Humnabad", "Kamalanagara"],
   "Chamarajanagar": ["Chamarajanagara", "Gundlupete", "Kollegala", "Yelanduru", "Hanuru"],
