@@ -231,7 +231,7 @@ function masterLists(user) {
     };
   }
 
-  if (user && user.role === "district") {
+  if (user && ["district", "district_technical_head"].includes(user.role)) {
     const district = canonicalDistrict(user.district);
     const taluks = MASTER_TALUKS[district] || [];
     return {
@@ -263,7 +263,7 @@ function masterTalukCount(user) {
   if (user && user.role === "division") {
     return divisionDistricts(user.district).reduce((total, district) => total + (MASTER_TALUKS[district] || []).length, 0);
   }
-  if (user && user.role === "district") {
+  if (user && ["district", "district_technical_head"].includes(user.role)) {
     return (MASTER_TALUKS[canonicalDistrict(user.district)] || []).length;
   }
   if (user && user.role === "taluk") return 1;

@@ -175,31 +175,34 @@ function requireAdmin(user) {
 }
 
 function canViewUsers(user) {
-  return user && ["admin", "state_president", "division", "district"].includes(user.role);
+  return user && ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role);
 }
 
 function canViewSessionAnalytics(user) {
-  return user && ["admin", "state_president", "division", "district"].includes(user.role);
+  return user && ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role);
 }
 
 function canReviewTeamRequests(user) {
-  return user && ["admin", "division"].includes(user.role);
+  return user && ["admin", "division", "district_technical_head"].includes(user.role);
 }
 
 function canCorrectTaluks(user) {
-  return user && ["admin", "division"].includes(user.role);
+  return user && ["admin", "division", "district_technical_head"].includes(user.role);
 }
 
 function canUseTeamChat(user) {
   if (!user) return false;
   if (user.role === "taluk") return hasTalukPermission(user, "teamChat");
-  return ["admin", "state_president", "division", "district"].includes(user.role);
+  return ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role);
 }
 
 function canSeeTeamRequest(user, request) {
   if (user?.role === "admin") return true;
   if (user?.role === "division") {
     return divisionDistricts(user.district).includes(canonicalDistrict(request.district));
+  }
+  if (user?.role === "district_technical_head") {
+    return canonicalDistrict(user.district) === canonicalDistrict(request.district);
   }
   return false;
 }
@@ -211,19 +214,19 @@ function canCreateMembers(user) {
 function canReviewMembers(user) {
   if (!user) return false;
   if (user.role === "taluk") return hasTalukPermission(user, "approveMembership");
-  return ["admin", "state_president", "division"].includes(user.role);
+  return ["admin", "state_president", "division", "district_technical_head"].includes(user.role);
 }
 
 function canReviewCorrections(user) {
   if (!user) return false;
   if (user.role === "taluk") return hasTalukPermission(user, "approveCorrection");
-  return ["admin", "division"].includes(user.role);
+  return ["admin", "division", "district_technical_head"].includes(user.role);
 }
 
 function canExportReports(user) {
   if (!user) return false;
   if (user.role === "taluk") return hasTalukPermission(user, "exportReports");
-  return ["admin", "state_president", "division", "district"].includes(user.role);
+  return ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role);
 }
 
 function normalizeMember(input, existing = {}) {
@@ -687,7 +690,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/member-problems" && req.method === "GET") {
-    if (!["admin", "state_president", "division", "district"].includes(user.role)) return json(res, 403, { error: "Member problems access required" });
+    if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)) return json(res, 403, { error: "Member problems access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, {
       problems: await store.listMemberProblems(user, {
@@ -700,7 +703,7 @@ async function api(req, res, pathname) {
 
   const memberProblemMatch = pathname.match(/^\/api\/member-problems\/([^/]+)$/);
   if (memberProblemMatch && req.method === "PUT") {
-    if (!["admin", "state_president", "division", "district"].includes(user.role)) return json(res, 403, { error: "Leadership access required" });
+    if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)) return json(res, 403, { error: "Leadership access required" });
     const body = asObject(await parseBody(req));
     const problem = await store.updateMemberProblem(user, memberProblemMatch[1], body);
     if (!problem) return json(res, 404, { error: "Problem not found or outside your area" });
@@ -803,7 +806,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/exports/corrections" && req.method === "GET") {
-    if (!["admin", "state_president", "division", "district"].includes(user.role)) return json(res, 403, { error: "Export access required" });
+    if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role)) return json(res, 403, { error: "Export access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     const rows = await store.exportTalukCorrections(user, {
       search: (url.searchParams.get("search") || "").trim(),
@@ -924,7 +927,7 @@ async function api(req, res, pathname) {
   }
 
   if (memberNotesMatch && req.method === "POST") {
-    if (!["admin", "state_president", "division", "district", "taluk"].includes(user.role)) return json(res, 403, { error: "Member notes access required" });
+    if (!["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(user.role)) return json(res, 403, { error: "Member notes access required" });
     const body = asObject(await parseBody(req));
     const data = await store.createMemberNote(user, memberNotesMatch[1], body);
     if (!data) return json(res, 404, { error: "Member not found or outside your area" });
@@ -982,7 +985,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/data-correction-requests" && req.method === "GET") {
-    if (!["admin", "state_president", "division", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
+    if (!["admin", "state_president", "division", "district_technical_head", "taluk"].includes(user.role)) return json(res, 403, { error: "Correction request access required" });
     if (user.role === "taluk" && !hasTalukPermission(user, "submitCorrection") && !hasTalukPermission(user, "approveCorrection")) return json(res, 403, { error: "Correction request permission required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, {
@@ -1036,7 +1039,7 @@ async function api(req, res, pathname) {
       return json(res, 200, {
         request: await store.updateDataCorrectionRequest(target.id, {
           status: "Approved",
-          adminRemarks: adminRemarks || `Approved by ${user.role === "division" ? "division team" : user.role === "taluk" ? "taluk technical team" : "admin"}`,
+          adminRemarks: adminRemarks || `Approved by ${user.role === "division" ? "division team" : user.role === "district_technical_head" ? "district technical head" : user.role === "taluk" ? "taluk technical team" : "admin"}`,
           reviewedById: user.id,
           reviewedByName: user.name
         }),
@@ -1047,7 +1050,7 @@ async function api(req, res, pathname) {
       return json(res, 200, {
         request: await store.updateDataCorrectionRequest(target.id, {
           status: "Rejected",
-          adminRemarks: adminRemarks || `Rejected by ${user.role === "division" ? "division team" : user.role === "taluk" ? "taluk technical team" : "admin"}`,
+          adminRemarks: adminRemarks || `Rejected by ${user.role === "division" ? "division team" : user.role === "district_technical_head" ? "district technical head" : user.role === "taluk" ? "taluk technical team" : "admin"}`,
           reviewedById: user.id,
           reviewedByName: user.name
         })
@@ -1091,7 +1094,7 @@ async function api(req, res, pathname) {
     const body = await parseBody(req);
     const status = String(body.status || "").trim();
     const remarks = String(body.remarks || "").trim();
-    const reviewer = user.role === "division" ? "division team" : "admin";
+    const reviewer = user.role === "division" ? "division team" : user.role === "district_technical_head" ? "district technical head" : "admin";
     if (status === "Approved") {
       if (await store.usernameExists(target.requestedUsername)) return json(res, 409, { error: "This User ID is already used" });
       if (await store.talukLoginExists(target.district, target.taluk)) {
@@ -1143,12 +1146,12 @@ async function api(req, res, pathname) {
     const body = await parseBody(req);
     const before = await store.getMember(correctionMatch[1]);
     if (!before) return json(res, 404, { error: "Member not found" });
-    if (user.role === "division") {
-      const districts = divisionDistricts(user.district);
+    if (["division", "district_technical_head"].includes(user.role)) {
+      const districts = user.role === "division" ? divisionDistricts(user.district) : [canonicalDistrict(user.district)];
       const currentDistrict = canonicalDistrict(before.district);
       const nextDistrict = canonicalDistrict(body.district || "");
       if (!districts.includes(currentDistrict) || !districts.includes(nextDistrict)) {
-        return json(res, 403, { error: "This correction is outside your division" });
+        return json(res, 403, { error: "This correction is outside your area" });
       }
     }
     const member = await store.correctMemberTaluk(correctionMatch[1], body.district, body.taluk);
@@ -1164,7 +1167,7 @@ async function api(req, res, pathname) {
     const password = String(body.password || "").trim();
     if (!username || !password) return json(res, 400, { error: "Username and password are required" });
     if (await store.usernameExists(username)) return json(res, 409, { error: "Username already exists" });
-    const role = ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : "taluk";
+    const role = ["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(body.role) ? body.role : "taluk";
     const newUser = {
       username,
       password,
@@ -1178,6 +1181,7 @@ async function api(req, res, pathname) {
     };
     if (newUser.role === "taluk" && !newUser.taluk) return json(res, 400, { error: "Taluk user must be assigned a taluk" });
     if (newUser.role === "district" && !newUser.district) return json(res, 400, { error: "District President must be assigned a district" });
+    if (newUser.role === "district_technical_head" && !newUser.district) return json(res, 400, { error: "District Technical Head must be assigned a district" });
     if (newUser.role === "division" && !divisionDistricts(newUser.district).length) return json(res, 400, { error: "Division team must be assigned a valid division" });
     if (newUser.role === "taluk" && await store.talukLoginExists(newUser.district, newUser.taluk)) {
       return json(res, 409, { error: "This taluk already has a technical team login" });
@@ -1191,7 +1195,7 @@ async function api(req, res, pathname) {
     const target = await store.getUserById(userMatch[1]);
     if (!target) return json(res, 404, { error: "User not found" });
     const body = await parseBody(req);
-    const role = ["admin", "state_president", "division", "district", "taluk"].includes(body.role) ? body.role : target.role;
+    const role = ["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(body.role) ? body.role : target.role;
     const next = {
       name: String(body.name || target.name).trim(),
       role,
@@ -1202,6 +1206,7 @@ async function api(req, res, pathname) {
       permissions: role === "taluk" ? normalizeTalukPermissions(body.permissions ?? target.permissions) : {}
     };
     if (next.role === "division" && !divisionDistricts(next.district).length) return json(res, 400, { error: "Division team must be assigned a valid division" });
+    if (next.role === "district_technical_head" && !next.district) return json(res, 400, { error: "District Technical Head must be assigned a district" });
     if (next.role === "taluk" && await store.talukLoginExists(next.district, next.taluk, target.id)) {
       return json(res, 409, { error: "This taluk already has a technical team login" });
     }
