@@ -867,7 +867,7 @@ async function updateMemberStatus(id, status, remarks = "") {
     const result = await pool.query(
       `update members set status = $2,
        remarks = case when $3 = '' then remarks else $3 end,
-       member_login_active = case when $2 = 'Active' then member_login_active else false end,
+       member_login_active = case when $2 in ('Active', 'Needs correction') then member_login_active else false end,
        updated_at = now()
        where id = $1 returning *`,
       [id, status, remarks]
@@ -881,7 +881,7 @@ async function updateMemberStatus(id, status, remarks = "") {
   if (!member) return null;
   member.status = status;
   if (remarks) member.remarks = remarks;
-  if (status !== "Active") member.memberLoginActive = false;
+  if (!["Active", "Needs correction"].includes(status)) member.memberLoginActive = false;
   member.updatedAt = new Date().toISOString();
   await writeJsonDb(db);
   return member;
