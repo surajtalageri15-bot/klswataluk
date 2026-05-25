@@ -470,9 +470,9 @@ function renderApp() {
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
-          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveMembership")) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Queue</button>` : ""}
-          ${state.user.role === "admin" || (state.user.role === "taluk" && canTaluk("createMembership")) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Membership Form</button>` : ""}
-          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Correction Requests</button>` : ""}
+          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveMembership")) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Approval</button>` : ""}
+          ${state.user.role === "admin" || (state.user.role === "taluk" && canTaluk("createMembership")) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Add Member</button>` : ""}
+          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Approved Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="homeSlider" class="${state.tab === "homeSlider" ? "active" : ""}">Home Slider</button>` : ""}
@@ -481,7 +481,7 @@ function renderApp() {
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">${state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems"}</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
-          ${["admin", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveCorrection")) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Correction</button>` : ""}
+          ${["admin", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveCorrection")) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Name Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="backupRestore" class="${state.tab === "backupRestore" ? "active" : ""}">Backup & Restore</button>` : ""}
         </nav>
@@ -555,9 +555,9 @@ function renderApp() {
 function pageTitle() {
   if (state.tab === "dashboard") return "Dashboard";
   if (state.tab === "members") return "Member Data";
-  if (state.tab === "pending") return "Pending Verification Queue";
-  if (state.tab === "membership") return "Membership Form";
-  if (state.tab === "dataCorrections") return "Correction Requests";
+  if (state.tab === "pending") return "Pending Approval";
+  if (state.tab === "membership") return "Add Member";
+  if (state.tab === "dataCorrections") return "Approved Correction Requests";
   if (state.tab === "missingData") return "Missing Data Report";
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "homeSlider") return "Homepage Slider Photos";
@@ -566,7 +566,7 @@ function pageTitle() {
   if (state.tab === "teamChat") return "Team Chat";
   if (state.tab === "memberProblems") return state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems";
   if (state.tab === "duplicates") return "Duplicate Detection";
-  if (state.tab === "corrections") return "Taluk Correction";
+  if (state.tab === "corrections") return "Taluk Name Correction";
   if (state.tab === "audit") return state.user.role === "taluk" ? "Taluk Activity Log" : "Audit History";
   if (state.tab === "backupRestore") return "Backup & Restore";
   return "Dashboard";
@@ -2439,7 +2439,7 @@ function renderMembershipForm() {
 
   document.querySelector("#view").innerHTML = `
     <section class="box section">
-      <h2>New membership entry</h2>
+      <h2>Add member</h2>
       <p class="muted">Share public form: <a href="/membership.html" target="_blank">/membership.html</a></p>
       <form class="form-grid" id="membershipForm">
         <div class="three">
@@ -3491,7 +3491,7 @@ function renderDataCorrectionRequests() {
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
-          <h2>${canReviewCorrections || state.user.role === "state_president" ? "Data correction approvals" : "My correction requests"}</h2>
+          <h2>${canReviewCorrections || state.user.role === "state_president" ? "Approved correction requests" : "My correction requests"}</h2>
         <span class="badge">${pendingCount} Pending</span>
       </div>
       <div class="toolbar">
