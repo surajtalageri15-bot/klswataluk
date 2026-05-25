@@ -470,9 +470,9 @@ function renderApp() {
         <nav class="nav">
           <button data-tab="dashboard" class="${state.tab === "dashboard" ? "active" : ""}">Dashboard</button>
           <button data-tab="members" class="${state.tab === "members" ? "active" : ""}">Members</button>
-          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveMembership")) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending Approval</button>` : ""}
+          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveMembership")) ? `<button data-tab="pending" class="${state.tab === "pending" ? "active" : ""}">Pending New Member Approval</button>` : ""}
           ${state.user.role === "admin" || (state.user.role === "taluk" && canTaluk("createMembership")) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Add Member</button>` : ""}
-          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Approved Correction Requests</button>` : ""}
+          ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Pending Data Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="homeSlider" class="${state.tab === "homeSlider" ? "active" : ""}">Home Slider</button>` : ""}
@@ -555,9 +555,9 @@ function renderApp() {
 function pageTitle() {
   if (state.tab === "dashboard") return "Dashboard";
   if (state.tab === "members") return "Member Data";
-  if (state.tab === "pending") return "Pending Approval";
+  if (state.tab === "pending") return "Pending New Member Approval";
   if (state.tab === "membership") return "Add Member";
-  if (state.tab === "dataCorrections") return "Approved Correction Requests";
+  if (state.tab === "dataCorrections") return "Pending Data Correction Requests";
   if (state.tab === "missingData") return "Missing Data Report";
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "homeSlider") return "Homepage Slider Photos";
@@ -3491,7 +3491,7 @@ function renderDataCorrectionRequests() {
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
-          <h2>${canReviewCorrections || state.user.role === "state_president" ? "Approved correction requests" : "My correction requests"}</h2>
+          <h2>${canReviewCorrections || state.user.role === "state_president" ? "Pending data correction requests" : "My correction requests"}</h2>
         <span class="badge">${pendingCount} Pending</span>
       </div>
       <div class="toolbar">
