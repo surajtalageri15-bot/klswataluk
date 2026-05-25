@@ -1502,7 +1502,7 @@ function followupMessage(member) {
     `Taluk: ${member.taluk || "-"}`,
     missing.length ? `Please update/correct: ${missing.join(", ")}` : "Please contact your taluk technical team for verification.",
     "",
-    "Status check: https://klswa.in/status.html"
+    "Open member login and fill missing data: https://klswa.in/member-login.html"
   ].join("\n");
 }
 
