@@ -545,61 +545,109 @@ function renderPresidentMessages(messages = []) {
   `;
 }
 
+function emptyMemberPanel(title, text) {
+  return `
+    <section class="box public-form-card member-dashboard-card">
+      <h2>${escapeHtml(title)}</h2>
+      <p class="muted">${escapeHtml(text)}</p>
+    </section>
+  `;
+}
+
+function showMemberPanel(panelName) {
+  document.querySelectorAll("[data-member-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.memberTab === panelName);
+  });
+  document.querySelectorAll("[data-member-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.memberPanel === panelName);
+  });
+}
+
 function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = [], correctionRequests = []) {
   setMemberDashboardMode(true);
+  const noticesPanel = renderPresidentMessages(presidentMessages) || emptyMemberPanel("State President Notices", "No active notices available right now.");
+  const missingPanel = missingDataForm(member, correctionRequests) || emptyMemberPanel("Missing Data", "No missing profile fields found.");
   dashboard.innerHTML = `
-    ${renderPresidentMessages(presidentMessages)}
-    <section class="box status-card member-profile-card">
-      <div class="section-head">
-        <div class="member-photo-panel">
-          <div class="member-photo">
+    <section class="member-portal">
+      <aside class="member-portal-menu">
+        <div class="member-portal-person">
+          <div class="member-photo small">
             ${member.profilePhotoUrl ? `<img src="${escapeHtml(member.profilePhotoUrl)}" alt="Profile photo">` : `<span>${escapeHtml((member.name || "M").trim().slice(0, 1).toUpperCase())}</span>`}
           </div>
-          <label class="secondary member-photo-upload">
-            Upload photo
-            <input id="memberPhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
-          </label>
-          <div class="message" id="memberPhotoMessage"></div>
+          <strong>${escapeHtml(member.name)}</strong>
+          <span>${escapeHtml(member.lsNumber || "Member")}</span>
+          <span class="badge">${escapeHtml(member.status)}</span>
         </div>
-        <div>
-          <p class="eyebrow">Member Dashboard</p>
-          <h2>${escapeHtml(member.name)}</h2>
-          <p class="muted">${escapeHtml(member.district)} / ${escapeHtml(member.taluk)}</p>
-        </div>
-        <span class="badge">${escapeHtml(member.status)}</span>
-      </div>
-      <div class="status-grid">
-        <div><span class="muted">Status</span><strong>${escapeHtml(statusText(member.status))}</strong></div>
-        <div><span class="muted">Login Access</span><strong>${member.memberLoginActive ? "Activated" : "Not activated"}</strong></div>
-      </div>
-      ${member.remarks ? `<p class="notice">${escapeHtml(member.remarks)}</p>` : ""}
-      <div class="detail-grid">${memberRows(member)}</div>
-      <div class="modal-actions">
-        <button class="secondary" id="openProfileEdit" type="button">Edit profile</button>
-        ${member.status === "Active" ? `<button class="primary" id="downloadApprovedApplication" type="button">Download approved application PDF</button>` : ""}
-        <button class="secondary" id="memberLogout" type="button">Logout</button>
-      </div>
-    </section>
-    ${renderTalukTeamContact(member, talukTeam)}
-    ${memberDocumentForm()}
-    ${memberProblemForm()}
-    ${renderMyProblems(problems)}
-    ${changePasswordForm()}
-    ${missingDataForm(member, correctionRequests)}
-    ${correctionForm(member, correctionRequests)}
-    <section class="box public-form-card member-dashboard-card audit-card">
-      <h2>My audit timeline</h2>
-      <div class="timeline">
-        ${auditLogs.map((log) => `
-          <div class="timeline-item">
-            <span class="muted">${escapeHtml(new Date(log.createdAt).toLocaleString())}</span>
-            <strong>${escapeHtml(log.action)} / ${escapeHtml(log.field)}</strong>
-            <div class="timeline-diff">
-              <span class="diff-old">${escapeHtml(log.oldValue || "-")}</span>
-              <span class="diff-new">${escapeHtml(log.newValue || "-")}</span>
+        <nav class="member-portal-nav">
+          <button class="active" type="button" data-member-tab="profile">My Profile</button>
+          <button type="button" data-member-tab="edit">Edit Profile Request</button>
+          <button type="button" data-member-tab="missing">Missing Data</button>
+          <button type="button" data-member-tab="documents">Office / Legal Documents</button>
+          <button type="button" data-member-tab="problems">Problems / Grievance</button>
+          <button type="button" data-member-tab="contact">Contact Taluk Team</button>
+          <button type="button" data-member-tab="notices">President Notices</button>
+          <button type="button" data-member-tab="password">Change Password</button>
+          <button type="button" data-member-tab="audit">Audit Timeline</button>
+          <button class="member-logout-tab" type="button" id="memberLogout">Logout</button>
+        </nav>
+      </aside>
+      <div class="member-portal-content">
+        <div class="member-panel active" data-member-panel="profile">
+          <section class="box status-card member-profile-card">
+            <div class="section-head">
+              <div class="member-photo-panel">
+                <div class="member-photo">
+                  ${member.profilePhotoUrl ? `<img src="${escapeHtml(member.profilePhotoUrl)}" alt="Profile photo">` : `<span>${escapeHtml((member.name || "M").trim().slice(0, 1).toUpperCase())}</span>`}
+                </div>
+                <label class="secondary member-photo-upload">
+                  Upload photo
+                  <input id="memberPhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
+                </label>
+                <div class="message" id="memberPhotoMessage"></div>
+              </div>
+              <div>
+                <p class="eyebrow">Member Dashboard</p>
+                <h2>${escapeHtml(member.name)}</h2>
+                <p class="muted">${escapeHtml(member.district)} / ${escapeHtml(member.taluk)}</p>
+              </div>
+              <span class="badge">${escapeHtml(member.status)}</span>
             </div>
-          </div>
-        `).join("") || `<p class="muted">No audit history available yet.</p>`}
+            <div class="status-grid">
+              <div><span class="muted">Status</span><strong>${escapeHtml(statusText(member.status))}</strong></div>
+              <div><span class="muted">Login Access</span><strong>${member.memberLoginActive ? "Activated" : "Not activated"}</strong></div>
+            </div>
+            ${member.remarks ? `<p class="notice">${escapeHtml(member.remarks)}</p>` : ""}
+            <div class="detail-grid">${memberRows(member)}</div>
+            <div class="modal-actions">
+              <button class="secondary" id="openProfileEdit" type="button">Edit profile</button>
+              ${member.status === "Active" ? `<button class="primary" id="downloadApprovedApplication" type="button">Download approved application PDF</button>` : ""}
+            </div>
+          </section>
+        </div>
+        <div class="member-panel" data-member-panel="edit">${correctionForm(member, correctionRequests)}</div>
+        <div class="member-panel" data-member-panel="missing">${missingPanel}</div>
+        <div class="member-panel" data-member-panel="documents">${memberDocumentForm()}</div>
+        <div class="member-panel" data-member-panel="problems">${memberProblemForm()}${renderMyProblems(problems)}</div>
+        <div class="member-panel" data-member-panel="contact">${renderTalukTeamContact(member, talukTeam)}</div>
+        <div class="member-panel" data-member-panel="notices">${noticesPanel}</div>
+        <div class="member-panel" data-member-panel="password">${changePasswordForm()}</div>
+        <div class="member-panel" data-member-panel="audit">
+          <section class="box public-form-card member-dashboard-card audit-card">
+            <h2>My audit timeline</h2>
+            <div class="timeline">
+              ${auditLogs.map((log) => `
+                <div class="timeline-item">
+                  <span class="muted">${escapeHtml(new Date(log.createdAt).toLocaleString())}</span>
+                  <strong>${escapeHtml(log.action)} / ${escapeHtml(log.field)}</strong>
+                  <div class="timeline-diff">
+                    <span class="diff-old">${escapeHtml(log.oldValue || "-")}</span>
+                    <span class="diff-new">${escapeHtml(log.newValue || "-")}</span>
+                  </div>
+                </div>
+              `).join("") || `<p class="muted">No audit history available yet.</p>`}
+            </div>
+          </section>
+        </div>
       </div>
     </section>
   `;
@@ -617,9 +665,13 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   const openProfileEdit = document.querySelector("#openProfileEdit");
   if (openProfileEdit) {
     openProfileEdit.addEventListener("click", () => {
-      document.querySelector("#memberCorrectionForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      showMemberPanel("edit");
     });
   }
+
+  document.querySelectorAll("[data-member-tab]").forEach((button) => {
+    button.addEventListener("click", () => showMemberPanel(button.dataset.memberTab));
+  });
 
   const memberPhotoInput = document.querySelector("#memberPhotoInput");
   memberPhotoInput.addEventListener("change", async (event) => {

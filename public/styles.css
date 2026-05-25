@@ -590,6 +590,98 @@ a.primary {
   margin-top: 24px;
 }
 
+.member-portal {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.member-portal-menu {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.member-portal-person,
+.member-portal-nav {
+  border: 1px solid rgba(20, 108, 76, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 16px 44px rgba(28, 47, 34, 0.1);
+}
+
+.member-portal-person {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+}
+
+.member-portal-person strong {
+  color: var(--green-dark);
+  font-size: 18px;
+}
+
+.member-portal-person > span:not(.badge) {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.member-photo.small {
+  width: 64px;
+  height: 64px;
+  border-color: rgba(20, 108, 76, 0.18);
+  background: var(--green);
+  box-shadow: none;
+}
+
+.member-photo.small span {
+  font-size: 24px;
+}
+
+.member-portal-nav {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.member-portal-nav button {
+  border: 0;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.member-portal-nav button:hover,
+.member-portal-nav button.active {
+  background: var(--green-soft);
+  color: var(--green-dark);
+}
+
+.member-portal-nav .member-logout-tab {
+  color: #8c2b23;
+}
+
+.member-portal-content {
+  min-width: 0;
+}
+
+.member-panel {
+  display: none;
+}
+
+.member-panel.active {
+  display: grid;
+  gap: 18px;
+}
+
 .member-login-shell #memberDashboard .public-form-card,
 .member-login-shell #memberDashboard .status-card {
   margin-left: 0;
@@ -1838,6 +1930,38 @@ tr:last-child td {
 
   .member-login-shell .public-member-grid {
     grid-template-columns: 1fr;
+  }
+
+  .member-portal {
+    grid-template-columns: 1fr;
+  }
+
+  .member-portal-menu {
+    position: static;
+  }
+
+  .member-portal-person {
+    grid-template-columns: auto 1fr auto;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .member-portal-person > span:not(.badge) {
+    grid-column: 2;
+  }
+
+  .member-portal-nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px;
+    scroll-snap-type: x proximity;
+  }
+
+  .member-portal-nav button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    scroll-snap-align: start;
   }
 
   .member-login-shell .primary,
