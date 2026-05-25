@@ -385,7 +385,7 @@ const auditFields = [
 ];
 
 const correctionRequestFields = [
-  "name", "lsNumber", "loginId", "gender", "dateOfBirth", "age", "phoneNumber",
+  "name", "lsNumber", "loginId", "district", "taluk", "gender", "dateOfBirth", "age", "phoneNumber",
   "qualification", "batchYear", "status", "remarks", "maritalStatus", "kalyanaKarnataka",
   "category", "caste", "religion", "disability", "otherTaluks", "address"
 ];

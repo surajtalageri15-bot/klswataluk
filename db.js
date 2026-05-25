@@ -855,18 +855,16 @@ async function exportMembers(user, filters) {
 }
 
 const missingFieldLabels = {
+  name: "Name",
   phoneNumber: "Phone",
   dateOfBirth: "Date of birth",
   gender: "Gender",
-  maritalStatus: "Marital status",
-  kalyanaKarnataka: "Kalyana Karnataka",
-  category: "Category",
-  caste: "Caste",
-  religion: "Religion",
-  disability: "Disability",
+  lsNumber: "LS number",
   loginId: "Login ID",
   batchYear: "Batch year",
   qualification: "Education",
+  district: "District",
+  taluk: "Taluk",
   address: "Address"
 };
 

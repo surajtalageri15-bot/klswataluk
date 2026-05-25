@@ -203,19 +203,16 @@ function downloadApprovedApplication(member) {
 }
 
 const missingMemberFields = {
+  name: "Name",
   phoneNumber: "Phone",
   dateOfBirth: "Date of Birth",
-  age: "Age",
   gender: "Gender",
-  maritalStatus: "Marital Status",
-  kalyanaKarnataka: "Kalyana Karnataka",
-  category: "Category",
-  caste: "Caste",
-  religion: "Religion",
-  disability: "Disability",
+  lsNumber: "LS Number",
   loginId: "Mojini Login ID",
   batchYear: "Batch Year",
   qualification: "Education",
+  district: "District",
+  taluk: "Taluk",
   address: "Address"
 };
 
