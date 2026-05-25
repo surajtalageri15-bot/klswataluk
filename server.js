@@ -714,12 +714,6 @@ async function api(req, res, pathname) {
     const body = asObject(await parseBody(req));
     const reason = String(body.reason || "").trim();
     const requestedChanges = sanitizeCorrectionChanges(body.changes || {}, member);
-    const fillsMissingData = Object.entries(requestedChanges).some(([field, value]) => {
-      return !String(member[field] ?? "").trim() && String(value ?? "").trim();
-    });
-    if (member.status !== "Needs correction" && !fillsMissingData) {
-      return json(res, 400, { error: "You can submit only missing data or details requested for correction" });
-    }
     if (!reason) return json(res, 400, { error: "Reason is required" });
     if (!Object.keys(requestedChanges).length) return json(res, 400, { error: "Change at least one field before submitting" });
     const existingRequests = await store.listMemberDataCorrectionRequests(member.id, 20);

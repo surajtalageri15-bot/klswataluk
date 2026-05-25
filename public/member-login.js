@@ -297,12 +297,26 @@ function missingDataForm(member, correctionRequests = []) {
   `;
 }
 
-function correctionForm(member) {
-  if (member.status !== "Needs correction") return "";
+function correctionForm(member, correctionRequests = []) {
+  const pending = correctionRequests.find((request) => request.status === "Pending");
+  if (pending) {
+    return `
+      <section class="box public-form-card member-dashboard-card correction-card" id="memberCorrectionForm">
+        <div class="section-head">
+          <div>
+            <h2>Profile edit request pending</h2>
+            <p class="muted">Your previous profile edit is waiting for approval. You can submit another edit after review.</p>
+          </div>
+          <span class="badge">Pending approval</span>
+        </div>
+        <p class="notice">Submitted fields: ${escapeHtml(correctionRequestSummary(pending))}</p>
+      </section>
+    `;
+  }
   return `
     <form id="memberCorrectionForm" class="box public-form-card member-dashboard-card correction-card">
-      <h2>Submit correction request</h2>
-      <p class="notice">${escapeHtml(member.remarks || "Please update the required details and submit for admin review.")}</p>
+      <h2>Request profile edit</h2>
+      <p class="notice">${escapeHtml(member.remarks || "Edit your details and submit. Changes will update only after approval.")}</p>
       <div class="two">
         <label>Phone <input name="phoneNumber" value="${escapeHtml(member.phoneNumber)}"></label>
         <label>Login ID <input name="loginId" value="${escapeHtml(member.loginId)}"></label>
@@ -319,10 +333,22 @@ function correctionForm(member) {
         <label>Category <input name="category" value="${escapeHtml(member.category)}"></label>
         <label>Caste <input name="caste" value="${escapeHtml(member.caste)}"></label>
       </div>
+      <div class="three">
+        <label>Religion <input name="religion" value="${escapeHtml(member.religion)}"></label>
+        <label>Marital Status
+          <select name="maritalStatus"><option value="">Select</option>${options(["Married", "Unmarried", "Widow/Widower", "Divorced"], member.maritalStatus || "")}</select>
+        </label>
+        <label>Kalyana Karnataka
+          <select name="kalyanaKarnataka"><option value="">Select</option>${options(["Yes", "No"], member.kalyanaKarnataka || "")}</select>
+        </label>
+      </div>
+      <label>Disability
+        <select name="disability"><option value="">Select</option>${options(["None", "Yes"], member.disability || "")}</select>
+      </label>
       <label>Address <textarea name="address" rows="3">${escapeHtml(member.address)}</textarea></label>
       <label>Reason * <textarea name="reason" rows="3" required placeholder="Explain what you corrected"></textarea></label>
       <div class="message" id="correctionMessage"></div>
-      <button class="primary" type="submit">Send correction request</button>
+      <button class="primary" type="submit">Send profile edit request</button>
     </form>
   `;
 }
@@ -549,6 +575,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       ${member.remarks ? `<p class="notice">${escapeHtml(member.remarks)}</p>` : ""}
       <div class="detail-grid">${memberRows(member)}</div>
       <div class="modal-actions">
+        <button class="secondary" id="openProfileEdit" type="button">Edit profile</button>
         ${member.status === "Active" ? `<button class="primary" id="downloadApprovedApplication" type="button">Download approved application PDF</button>` : ""}
         <button class="secondary" id="memberLogout" type="button">Logout</button>
       </div>
@@ -559,7 +586,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     ${renderMyProblems(problems)}
     ${changePasswordForm()}
     ${missingDataForm(member, correctionRequests)}
-    ${correctionForm(member)}
+    ${correctionForm(member, correctionRequests)}
     <section class="box public-form-card member-dashboard-card audit-card">
       <h2>My audit timeline</h2>
       <div class="timeline">
@@ -586,6 +613,12 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   const downloadApplication = document.querySelector("#downloadApprovedApplication");
   if (downloadApplication) {
     downloadApplication.addEventListener("click", () => downloadApprovedApplication(member));
+  }
+  const openProfileEdit = document.querySelector("#openProfileEdit");
+  if (openProfileEdit) {
+    openProfileEdit.addEventListener("click", () => {
+      document.querySelector("#memberCorrectionForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   const memberPhotoInput = document.querySelector("#memberPhotoInput");
@@ -633,7 +666,10 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       const form = new FormData(event.currentTarget);
       const reason = String(form.get("reason") || "").trim();
       const changes = {};
-      ["phoneNumber", "loginId", "dateOfBirth", "age", "qualification", "batchYear", "category", "caste", "address"].forEach((field) => {
+      [
+        "phoneNumber", "loginId", "dateOfBirth", "age", "qualification", "batchYear",
+        "category", "caste", "religion", "maritalStatus", "kalyanaKarnataka", "disability", "address"
+      ].forEach((field) => {
         changes[field] = form.get(field);
       });
       try {
