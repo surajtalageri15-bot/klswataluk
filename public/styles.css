@@ -2468,6 +2468,12 @@ tr:last-child td {
     background: var(--panel-soft);
   }
 
+  .home-nav a.admin-nav-link {
+    background: var(--green-dark);
+    color: #fff;
+    box-shadow: 0 10px 22px rgba(13, 79, 56, 0.20);
+  }
+
   .topbar {
     align-items: stretch;
     flex-direction: column;
