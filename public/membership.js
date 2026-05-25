@@ -23,6 +23,22 @@ function options(items) {
   return items.map((item) => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`).join("");
 }
 
+function batchYearOptions() {
+  const end = Math.max(2026, new Date().getFullYear());
+  return Array.from({ length: end - 1998 + 1 }, (_, index) => String(end - index));
+}
+
+function calculateAgeFromDob(value) {
+  if (!value) return "";
+  const dob = new Date(value);
+  if (Number.isNaN(dob.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age -= 1;
+  return Number.isFinite(age) && age > 0 ? String(age) : "";
+}
+
 function membershipPayload() {
   const data = new FormData(form);
   return {
@@ -68,9 +84,7 @@ async function boot() {
   lists = data.lists;
   scopedJoin = data.scope;
   districtSelect.innerHTML = `<option value="">Select</option>${options(lists.districts)}`;
-  const years = [];
-  for (let year = 2026; year >= 1998; year -= 1) years.push(String(year));
-  batchYearSelect.innerHTML = `<option value="">— ಬ್ಯಾಚ್ ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(years)}`;
+  batchYearSelect.innerHTML = `<option value="">— ಬ್ಯಾಚ್ ಆಯ್ಕೆ ಮಾಡಿ —</option>${options(batchYearOptions())}`;
   if (scopedJoin) {
     districtSelect.value = scopedJoin.district;
     const taluks = lists.taluksByDistrict[scopedJoin.district] || [];
@@ -82,18 +96,12 @@ async function boot() {
   }
 }
 
-dateOfBirthInput.addEventListener("change", () => {
-  if (!dateOfBirthInput.value) {
-    ageInput.value = "";
-    return;
-  }
-  const dob = new Date(dateOfBirthInput.value);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDiff = today.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age -= 1;
-  ageInput.value = Number.isFinite(age) && age > 0 ? age : "";
-});
+function updateAge() {
+  ageInput.value = calculateAgeFromDob(dateOfBirthInput.value);
+}
+
+dateOfBirthInput.addEventListener("input", updateAge);
+dateOfBirthInput.addEventListener("change", updateAge);
 
 districtSelect.addEventListener("change", () => {
   if (scopedJoin) return;

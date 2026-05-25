@@ -31,6 +31,38 @@ function formObject(form) {
   return Object.fromEntries(new FormData(form));
 }
 
+function batchYearOptions() {
+  const end = Math.max(2026, new Date().getFullYear());
+  return Array.from({ length: end - 1998 + 1 }, (_, index) => String(end - index));
+}
+
+function options(items, selected = "") {
+  return items.map((item) => `<option value="${escapeHtml(item)}" ${String(item) === String(selected) ? "selected" : ""}>${escapeHtml(item)}</option>`).join("");
+}
+
+function calculateAgeFromDob(value) {
+  if (!value) return "";
+  const dob = new Date(value);
+  if (Number.isNaN(dob.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age -= 1;
+  return Number.isFinite(age) && age > 0 ? String(age) : "";
+}
+
+function bindAgeCalculation(root) {
+  const dob = root.querySelector('input[name="dateOfBirth"]');
+  const age = root.querySelector('input[name="age"]');
+  if (!dob || !age) return;
+  const update = () => {
+    age.value = calculateAgeFromDob(dob.value);
+  };
+  dob.addEventListener("input", update);
+  dob.addEventListener("change", update);
+  update();
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -173,6 +205,7 @@ function downloadApprovedApplication(member) {
 const missingMemberFields = {
   phoneNumber: "Phone",
   dateOfBirth: "Date of Birth",
+  age: "Age",
   gender: "Gender",
   maritalStatus: "Marital Status",
   kalyanaKarnataka: "Kalyana Karnataka",
@@ -210,7 +243,13 @@ function missingInput(field, member) {
   if (field === "disability") {
     return `<label>${missingMemberFields[field]} * <select name="${field}" required><option value="">Select</option><option>None</option><option>Yes</option></select></label>`;
   }
-  const type = field === "dateOfBirth" ? "date" : ["batchYear"].includes(field) ? "number" : "text";
+  if (field === "batchYear") {
+    return `<label>${missingMemberFields[field]} * <select name="${field}" required><option value="">Select batch</option>${options(batchYearOptions(), member[field] || "")}</select></label>`;
+  }
+  if (field === "age") {
+    return `<label>${missingMemberFields[field]} * <input name="${field}" type="number" value="${escapeHtml(member.age || calculateAgeFromDob(member.dateOfBirth))}" readonly required></label>`;
+  }
+  const type = field === "dateOfBirth" ? "date" : "text";
   return `<label>${missingMemberFields[field]} * <input name="${field}" type="${type}" value="${value}" required></label>`;
 }
 
@@ -269,8 +308,12 @@ function correctionForm(member) {
         <label>Login ID <input name="loginId" value="${escapeHtml(member.loginId)}"></label>
       </div>
       <div class="two">
+        <label>Date of Birth <input name="dateOfBirth" type="date" value="${escapeHtml(member.dateOfBirth)}"></label>
+        <label>Age <input name="age" type="number" value="${escapeHtml(member.age || calculateAgeFromDob(member.dateOfBirth))}" readonly></label>
+      </div>
+      <div class="two">
         <label>Education <input name="qualification" value="${escapeHtml(member.qualification)}"></label>
-        <label>Batch Year <input name="batchYear" type="number" value="${escapeHtml(member.batchYear)}"></label>
+        <label>Batch Year <select name="batchYear"><option value="">Select batch</option>${options(batchYearOptions(), member.batchYear || "")}</select></label>
       </div>
       <div class="two">
         <label>Category <input name="category" value="${escapeHtml(member.category)}"></label>
@@ -590,7 +633,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       const form = new FormData(event.currentTarget);
       const reason = String(form.get("reason") || "").trim();
       const changes = {};
-      ["phoneNumber", "loginId", "qualification", "batchYear", "category", "caste", "address"].forEach((field) => {
+      ["phoneNumber", "loginId", "dateOfBirth", "age", "qualification", "batchYear", "category", "caste", "address"].forEach((field) => {
         changes[field] = form.get(field);
       });
       try {
@@ -607,6 +650,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
 
   const missingData = document.querySelector("#memberMissingDataForm");
   if (missingData) {
+    bindAgeCalculation(missingData);
     missingData.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
@@ -629,6 +673,8 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   }
 
   const problemForm = document.querySelector("#memberProblemForm");
+  const correctionFormEl = document.querySelector("#memberCorrectionForm");
+  if (correctionFormEl) bindAgeCalculation(correctionFormEl);
   problemForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = document.querySelector("#memberProblemMessage");

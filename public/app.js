@@ -112,7 +112,35 @@ function escapeHtml(value) {
 }
 
 function optionList(items, selected = "", labels = {}) {
-  return items.map((item) => `<option value="${escapeHtml(item)}" ${item === selected ? "selected" : ""}>${escapeHtml(labels[item] || item)}</option>`).join("");
+  return items.map((item) => `<option value="${escapeHtml(item)}" ${String(item) === String(selected) ? "selected" : ""}>${escapeHtml(labels[item] || item)}</option>`).join("");
+}
+
+function batchYearOptions() {
+  const end = Math.max(2026, new Date().getFullYear());
+  return Array.from({ length: end - 1998 + 1 }, (_, index) => String(end - index));
+}
+
+function calculateAgeFromDob(value) {
+  if (!value) return "";
+  const dob = new Date(value);
+  if (Number.isNaN(dob.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) age -= 1;
+  return Number.isFinite(age) && age > 0 ? String(age) : "";
+}
+
+function bindAgeCalculation(root) {
+  const dob = root.querySelector('input[name="dateOfBirth"]');
+  const age = root.querySelector('input[name="age"]');
+  if (!dob || !age) return;
+  const update = () => {
+    age.value = calculateAgeFromDob(dob.value);
+  };
+  dob.addEventListener("input", update);
+  dob.addEventListener("change", update);
+  update();
 }
 
 function taluksForDistrict(lists, district) {
@@ -1694,7 +1722,7 @@ function renderMembers() {
         <label>Taluk <select id="talukFilter"><option value="">${state.filters.district ? "All taluks in district" : "All taluks"}</option>${optionList(talukOptions, state.filters.taluk)}</select></label>
         <label>Status <select id="statusFilter"><option value="">All status</option>${optionList(memberStatusOptions, state.filters.status || "")}</select></label>
         <label>Gender <select id="genderFilter"><option value="">All gender</option>${optionList(["Male", "Female", "Other"], state.filters.gender || "")}</select></label>
-        <label>Batch <input id="batchFilter" type="number" min="1998" max="2026" value="${escapeHtml(state.filters.batchYear || "")}" placeholder="1998-2026"></label>
+        <label>Batch <select id="batchFilter"><option value="">All batches</option>${optionList(batchYearOptions(), state.filters.batchYear || "")}</select></label>
         <label class="check filter-check"><input id="missingOnlyFilter" type="checkbox" ${state.filters.missingOnly ? "checked" : ""}> Missing only</label>
         <span class="actions">
           <button class="secondary" id="applyFilters">Apply</button>
@@ -2164,12 +2192,12 @@ function openMemberModal(member = {}) {
         </div>
         <div class="three">
           ${field("dateOfBirth", "Date of Birth", member.dateOfBirth, "date")}
-          ${field("age", "Age", member.age, "number")}
+          <label>Age<input name="age" type="number" value="${escapeHtml(member.age)}" readonly></label>
           ${field("phoneNumber", "Phone Number", member.phoneNumber)}
         </div>
         <div class="two">
           ${field("qualification", "Qualification", member.qualification)}
-          ${field("batchYear", "Batch Year", member.batchYear, "number")}
+          ${selectField("batchYear", "Batch Year", batchYearOptions(), member.batchYear)}
         </div>
         <div class="two">
           ${selectField("status", "Status", editableMemberStatusOptions, member.status || "Active")}
@@ -2186,6 +2214,7 @@ function openMemberModal(member = {}) {
   const backdrop = document.querySelector(".modal-backdrop");
   const districtSelect = backdrop.querySelector('select[name="district"]');
   const talukSelect = backdrop.querySelector('select[name="taluk"]');
+  bindAgeCalculation(backdrop);
   if (districtSelect && talukSelect && state.user.role === "admin") {
     districtSelect.addEventListener("change", () => {
       talukSelect.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, districtSelect.value))}`;
@@ -2344,11 +2373,11 @@ function openCorrectionRequestModal(member) {
         </div>
         <div class="two">
           ${field("qualification", "Qualification", member.qualification)}
-          ${field("batchYear", "Batch Year", member.batchYear, "number")}
+          ${selectField("batchYear", "Batch Year", batchYearOptions(), member.batchYear)}
         </div>
         <div class="three">
           ${field("dateOfBirth", "Date of Birth", member.dateOfBirth, "date")}
-          ${field("age", "Age", member.age, "number")}
+          <label>Age<input name="age" type="number" value="${escapeHtml(member.age)}" readonly></label>
           ${selectField("gender", "Gender", ["Male", "Female", "Other"], member.gender)}
         </div>
         <div class="three">
@@ -2375,6 +2404,7 @@ function openCorrectionRequestModal(member) {
     </div>
   `);
   const backdrop = document.querySelector(".modal-backdrop");
+  bindAgeCalculation(backdrop);
   backdrop.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => backdrop.remove()));
   backdrop.querySelector("#correctionRequestForm").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -2424,12 +2454,12 @@ function renderMembershipForm() {
         </div>
         <div class="three">
           ${field("dateOfBirth", "Date of Birth", "", "date")}
-          ${field("age", "Age", "", "number")}
+          <label>Age<input name="age" type="number" readonly placeholder="Auto-calculated"></label>
           ${field("phoneNumber", "Phone Number")}
         </div>
         <div class="two">
           ${field("qualification", "Qualification")}
-          ${field("batchYear", "Batch Year", "", "number")}
+          ${selectField("batchYear", "Batch Year", batchYearOptions())}
         </div>
         <div class="two">
           ${selectField("status", "Status", editableMemberStatusOptions, "Active")}
@@ -2447,6 +2477,7 @@ function renderMembershipForm() {
   const form = document.querySelector("#membershipForm");
   const districtSelect = form.querySelector('select[name="district"]');
   const talukSelect = form.querySelector('select[name="taluk"]');
+  bindAgeCalculation(form);
   if (state.user.role === "admin") {
     districtSelect.addEventListener("change", () => {
       talukSelect.innerHTML = `<option value="">Select</option>${optionList(taluksForDistrict(lists, districtSelect.value))}`;
