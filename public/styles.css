@@ -392,6 +392,320 @@ a.primary {
   font-size: 20px;
 }
 
+.tourism-home {
+  width: 100%;
+  padding-top: 0;
+}
+
+.tourism-home .home-top-strip,
+.tourism-home .home-nav,
+.tourism-home .home-section,
+.tourism-home .home-footer {
+  width: min(1220px, calc(100% - 32px));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.tourism-home .home-top-strip {
+  margin-top: 10px;
+}
+
+.home-hero-wide {
+  display: block;
+  min-height: auto;
+  padding: 12px 0 0;
+}
+
+.home-slider-hero {
+  position: relative;
+}
+
+.home-slider-hero .home-slide-frame {
+  min-height: clamp(500px, 72vh, 760px);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.home-slider-hero .home-slide-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(7, 18, 12, 0.78) 0%, rgba(7, 18, 12, 0.46) 42%, rgba(7, 18, 12, 0.12) 100%),
+    linear-gradient(0deg, rgba(7, 18, 12, 0.50) 0%, transparent 44%);
+  pointer-events: none;
+}
+
+.home-slider-hero .home-slide-frame img,
+.home-slider-hero .home-slide-fallback {
+  min-height: clamp(500px, 72vh, 760px);
+}
+
+.home-slide-caption-large {
+  z-index: 1;
+  left: max(24px, calc((100vw - 1220px) / 2));
+  right: auto;
+  bottom: 88px;
+  width: min(720px, calc(100% - 48px));
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.home-slide-caption-large .eyebrow {
+  color: rgba(255, 255, 255, 0.90);
+  font-size: clamp(18px, 2vw, 25px);
+}
+
+.home-slide-caption-large h1 {
+  margin: 12px 0 14px;
+  color: #fff;
+  font-size: clamp(44px, 6.5vw, 82px);
+  line-height: 0.98;
+  text-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+}
+
+.home-slide-caption-large p:not(.eyebrow) {
+  max-width: 660px;
+  color: rgba(255, 255, 255, 0.90);
+  font-size: clamp(17px, 1.6vw, 21px);
+  line-height: 1.5;
+}
+
+.home-slide-caption-large .home-actions {
+  margin-top: 24px;
+}
+
+.home-slide-caption-large .secondary {
+  border-color: rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.home-slider-controls-floating {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 24px;
+  width: min(1220px, calc(100% - 32px));
+  transform: translateX(-50%);
+}
+
+.home-slider-controls-floating .secondary {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.home-slider-controls-floating .home-slider-dots button {
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.home-slider-controls-floating .home-slider-dots button.active {
+  background: #fff;
+}
+
+.home-section-lift {
+  position: relative;
+  z-index: 3;
+  margin-top: -42px;
+}
+
+.home-service-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.service-card {
+  min-height: 210px;
+  padding: 20px;
+  border-top: 4px solid var(--green);
+  background: linear-gradient(180deg, #fff 0%, #f8fbf7 100%);
+}
+
+.service-card:nth-child(2) {
+  border-top-color: var(--gold);
+}
+
+.service-card:nth-child(3) {
+  border-top-color: var(--blue);
+}
+
+.service-card:nth-child(4) {
+  border-top-color: #8a5b1c;
+}
+
+.service-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 18px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green-dark);
+  font-weight: 950;
+}
+
+.home-two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  gap: 18px;
+}
+
+.section-head.compact {
+  align-items: flex-start;
+}
+
+.president-message-card {
+  border-top: 4px solid var(--green);
+  background:
+    linear-gradient(135deg, rgba(20, 108, 76, 0.08), transparent 46%),
+    #fff;
+}
+
+.president-message-card blockquote {
+  margin: 18px 0;
+  padding: 16px 18px;
+  border-left: 4px solid var(--gold);
+  background: #fff9eb;
+  color: #4b3515;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.55;
+}
+
+.home-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.home-gallery-grid figure {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(13, 79, 56, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+}
+
+.home-gallery-grid img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background:
+    linear-gradient(135deg, rgba(20, 108, 76, 0.90), rgba(188, 132, 45, 0.70)),
+    #dfe8df;
+}
+
+.home-gallery-grid figcaption {
+  padding: 12px 14px;
+  color: var(--green-dark);
+  font-weight: 900;
+}
+
+.home-gallery-grid figure.image-missing::before {
+  content: "KLSWA Photo";
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  background:
+    linear-gradient(135deg, rgba(20, 108, 76, 0.90), rgba(188, 132, 45, 0.70)),
+    #dfe8df;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.circular-list {
+  display: grid;
+  gap: 10px;
+}
+
+.circular-list a {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.circular-list a:hover {
+  border-color: rgba(20, 108, 76, 0.32);
+  background: var(--green-soft);
+}
+
+.circular-list span {
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.circular-list strong {
+  line-height: 1.35;
+}
+
+.home-flow {
+  display: grid;
+  gap: 10px;
+}
+
+.home-flow span {
+  position: relative;
+  padding: 13px 14px 13px 42px;
+  border: 1px solid rgba(20, 108, 76, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 850;
+}
+
+.home-flow span::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--green);
+  transform: translateY(-50%);
+}
+
+.tourism-footer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  text-align: left;
+}
+
+.tourism-footer > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.footer-links a {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--green-soft);
+  color: var(--green-dark);
+  font-weight: 850;
+  text-decoration: none;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;
@@ -2021,6 +2335,67 @@ tr:last-child td {
   .home-hero {
     min-height: auto;
     padding: 24px 0;
+  }
+
+  .tourism-home .home-top-strip,
+  .tourism-home .home-nav,
+  .tourism-home .home-section,
+  .tourism-home .home-footer {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .home-hero-wide {
+    padding: 10px 0 0;
+  }
+
+  .home-slider-hero .home-slide-frame,
+  .home-slider-hero .home-slide-frame img,
+  .home-slider-hero .home-slide-fallback {
+    min-height: 540px;
+  }
+
+  .home-slide-caption-large {
+    left: 16px;
+    bottom: 82px;
+    width: calc(100% - 32px);
+  }
+
+  .home-slide-caption-large h1 {
+    font-size: 42px;
+  }
+
+  .home-slide-caption-large .home-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-slider-controls-floating {
+    bottom: 18px;
+    width: calc(100% - 24px);
+  }
+
+  .home-section-lift {
+    margin-top: 18px;
+  }
+
+  .home-service-grid,
+  .home-two-column,
+  .home-gallery-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .service-card {
+    min-height: auto;
+  }
+
+  .tourism-footer {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .footer-links {
+    justify-content: center;
   }
 
   .home-slide-frame,

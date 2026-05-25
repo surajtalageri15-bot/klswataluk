@@ -123,5 +123,15 @@ function bindSlider() {
   startSlider();
 }
 
+function bindGalleryFallbacks() {
+  document.querySelectorAll(".home-gallery-grid img").forEach((image) => {
+    image.addEventListener("error", () => {
+      image.closest("figure")?.classList.add("image-missing");
+      image.remove();
+    });
+  });
+}
+
 bindSlider();
+bindGalleryFallbacks();
 loadSummary();

@@ -7,139 +7,182 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main class="home-shell">
+  <main class="home-shell tourism-home">
     <div class="home-top-strip">
-      <span>Government Licensed Surveyors Digital Portal</span>
-      <span>Karnataka State Member Services</span>
+      <span>AKSPBS / KLSWA Official Digital Portal</span>
+      <span>All Karnataka State Government Licensed Surveyors Union</span>
     </div>
+
     <nav class="home-nav">
       <a class="home-brand" href="/">
-        <span>AKSPBS</span>
-        <strong>KLSWA</strong>
+        <span>KLSWA</span>
+        <strong>AKSPBS</strong>
       </a>
       <div>
-        <a href="/">Home</a>
         <a href="/membership.html">Membership</a>
         <a href="/member-login.html">Member Login</a>
-        <a href="/status.html">Status</a>
-        <a href="/admin.html">Admin</a>
+        <a href="/status.html">Status Check</a>
+        <a href="/taluk-join.html">Taluk Team Join</a>
       </div>
     </nav>
 
-    <section class="home-hero">
-      <div class="home-hero-copy">
-        <p class="eyebrow">ಅಖಿಲ ಕರ್ನಾಟಕ ಸರ್ಕಾರಿ ಪರವಾನಗಿ ಭೂಮಾಪಕರ ಸಂಘ</p>
-        <h1>All Karnataka State Government Licensed Surveyors Union</h1>
-        <p>Official digital platform for Karnataka licensed surveyor membership data, verification, correction requests, taluk technical teams, and member self-service.</p>
-        <div class="home-portal-badges">
-          <span>4031+ member records</span>
-          <span>31 districts</span>
-          <span>239 taluks</span>
+    <section class="home-hero home-hero-wide">
+      <section class="home-slider home-slider-hero" aria-label="KLSWA photo highlights">
+        <div class="home-slide-frame">
+          <img id="homeSlideImage" src="/uploads/slider/slide-1.jpg" alt="KLSWA association highlight">
+          <div class="home-slide-fallback" id="homeSlideFallback">
+            <strong>KLSWA</strong>
+            <span>Upload official event photos as slide-1.jpg, slide-2.jpg, slide-3.jpg</span>
+          </div>
+          <div class="home-slide-caption home-slide-caption-large">
+            <p class="eyebrow">ಅಖಿಲ ಕರ್ನಾಟಕ ಸರ್ಕಾರಿ ಪರವಾನಗಿ ಭೂಮಾಪಕರ ಸಂಘ</p>
+            <span class="badge" id="homeSlideTag">Association</span>
+            <h1 id="homeSlideTitle">KLSWA State Meeting</h1>
+            <p id="homeSlideText">Official updates, member coordination, and licensed surveyor welfare programs.</p>
+            <div class="home-actions">
+              <a class="primary" href="/membership.html">Membership Form</a>
+              <a class="secondary" href="/member-login.html">Member Login</a>
+              <a class="secondary" href="/status.html">Status Check</a>
+            </div>
+          </div>
         </div>
-        <div class="home-actions">
-          <a class="primary" href="/membership.html">Fill Membership Form</a>
-          <a class="secondary" href="/member-login.html">Open Member Login</a>
-          <a class="secondary" href="/status.html">Check Status</a>
+        <div class="home-slider-controls home-slider-controls-floating">
+          <button class="secondary" id="prevSlide" type="button" aria-label="Previous photo">Prev</button>
+          <div class="home-slider-dots" id="homeSliderDots"></div>
+          <button class="secondary" id="nextSlide" type="button" aria-label="Next photo">Next</button>
+        </div>
+      </section>
+    </section>
+
+    <section class="home-section home-section-lift">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Public Services</p>
+          <h2>Quick Services</h2>
+        </div>
+        <a class="secondary" href="/links.html">Open all links</a>
+      </div>
+      <div class="home-service-grid">
+        <a class="public-link-card service-card" href="/membership.html">
+          <span class="service-icon">01</span>
+          <strong>Membership Form</strong>
+          <p>New and existing members can submit official information for verification.</p>
+        </a>
+        <a class="public-link-card service-card" href="/member-login.html">
+          <span class="service-icon">02</span>
+          <strong>Member Login</strong>
+          <p>Activate login, view profile, download approved form, and request corrections.</p>
+        </a>
+        <a class="public-link-card service-card" href="/status.html">
+          <span class="service-icon">03</span>
+          <strong>Status Check</strong>
+          <p>Check pending, approved, rejected, or needs-correction application status.</p>
+        </a>
+        <a class="public-link-card service-card" href="/taluk-join.html">
+          <span class="service-icon">04</span>
+          <strong>Taluk Team Join</strong>
+          <p>Interested members can request taluk technical team login access.</p>
+        </a>
+      </div>
+    </section>
+
+    <section class="home-section home-two-column">
+      <div class="box section home-notice-board">
+        <div class="section-head compact">
+          <div>
+            <p class="eyebrow">What's New</p>
+            <h2>Notices</h2>
+          </div>
+          <span class="badge">Live portal</span>
+        </div>
+        <div class="mini-list home-list">
+          <span><strong>Member profile update:</strong> Use member login to submit missing data and correction requests.</span>
+          <span><strong>Taluk team workflow:</strong> Taluk technical teams can support members and forward correction requests.</span>
+          <span><strong>Final approval:</strong> Member login opens after approval workflow is completed by authorized teams.</span>
         </div>
       </div>
-      <div class="home-visual-stack">
-        <section class="home-slider" aria-label="KLSWA photo highlights">
-          <div class="home-slide-frame">
-            <img id="homeSlideImage" src="/uploads/slider/slide-1.jpg" alt="KLSWA association highlight">
-            <div class="home-slide-fallback" id="homeSlideFallback">
-              <strong>KLSWA</strong>
-              <span>Upload official event photos as slide-1.jpg, slide-2.jpg, slide-3.jpg</span>
-            </div>
-            <div class="home-slide-caption">
-              <span class="badge" id="homeSlideTag">Association</span>
-              <strong id="homeSlideTitle">KLSWA State Meeting</strong>
-              <p id="homeSlideText">Official updates, member coordination, and licensed surveyor welfare programs.</p>
-            </div>
-          </div>
-          <div class="home-slider-controls">
-            <button class="secondary" id="prevSlide" type="button" aria-label="Previous photo">Prev</button>
-            <div class="home-slider-dots" id="homeSliderDots"></div>
-            <button class="secondary" id="nextSlide" type="button" aria-label="Next photo">Next</button>
-          </div>
-        </section>
+
+      <div class="box section president-message-card">
+        <p class="eyebrow">President / Committee Message</p>
+        <h2>Organized Digital Member Service</h2>
+        <p class="muted">KLSWA is building a transparent Karnataka-wide member information system for licensed surveyors, taluk teams, district teams, division teams, and state leadership.</p>
+        <blockquote>ಸದಸ್ಯರ ಮಾಹಿತಿ ಸುರಕ್ಷತೆ, ಸರಿಯಾದ ದಾಖಲೆ, ಮತ್ತು ತಾಲ್ಲೂಕು ಮಟ್ಟದ ಸಹಾಯ ನಮ್ಮ ಮುಖ್ಯ ಗುರಿ.</blockquote>
+        <a class="secondary" href="/member-login.html">Open member portal</a>
       </div>
     </section>
 
     <section class="home-section">
       <div class="section-head">
         <div>
-          <p class="eyebrow">Public Services</p>
-          <h2>Quick Services</h2>
+          <p class="eyebrow">Gallery</p>
+          <h2>Association Photos</h2>
         </div>
-        <a class="secondary" href="/links.html">All public links</a>
+        <span class="muted">Slider photos from official uploads</span>
       </div>
-      <div class="public-link-grid">
-        <a class="public-link-card" href="/membership.html">
-          <span class="badge">Member</span>
-          <strong>Membership Form</strong>
-          <p>Submit official member information for verification.</p>
-        </a>
-        <a class="public-link-card" href="/member-login.html">
-          <span class="badge">Login</span>
-          <strong>Member Login</strong>
-          <p>Activate existing member login, view profile, and request corrections.</p>
-        </a>
-        <a class="public-link-card" href="/status.html">
-          <span class="badge">Status</span>
-          <strong>Status Check</strong>
-          <p>Check pending, approved, rejected, or needs-correction status.</p>
-        </a>
-        <a class="public-link-card" href="/taluk-join.html">
-          <span class="badge">Taluk Team</span>
-          <strong>Join Taluk Team</strong>
-          <p>Interested members can request taluk technical team login access.</p>
-        </a>
+      <div class="home-gallery-grid">
+        <figure>
+          <img src="/uploads/slider/slide-1.jpg" alt="KLSWA event photo 1">
+          <figcaption>State meeting</figcaption>
+        </figure>
+        <figure>
+          <img src="/uploads/slider/slide-2.jpg" alt="KLSWA event photo 2">
+          <figcaption>Taluk coordination</figcaption>
+        </figure>
+        <figure>
+          <img src="/uploads/slider/slide-3.jpg" alt="KLSWA event photo 3">
+          <figcaption>Member service</figcaption>
+        </figure>
+        <figure>
+          <img src="/uploads/slider/slide-4.jpg" alt="KLSWA event photo 4">
+          <figcaption>Training program</figcaption>
+        </figure>
       </div>
     </section>
 
-    <section class="home-section split">
-      <div class="box section home-notice-board">
-        <p class="eyebrow">Notice Board</p>
-        <h2>Important Announcements</h2>
-        <div class="mini-list home-list">
-          <span><strong>Membership data update:</strong> Members should keep phone, LS number, district, taluk, and address updated.</span>
-          <span><strong>Correction flow:</strong> Use member login or taluk team support when your record needs correction.</span>
-          <span><strong>Privacy:</strong> Member information is used only for association verification and administration.</span>
+    <section class="home-section home-two-column">
+      <div class="box section">
+        <p class="eyebrow">Latest Updates / Circulars</p>
+        <h2>Member Communication</h2>
+        <div class="circular-list">
+          <a href="/membership.html">
+            <span>Membership data collection</span>
+            <strong>Submit or update member details through the official form.</strong>
+          </a>
+          <a href="/status.html">
+            <span>Application tracking</span>
+            <strong>Members can verify approval and correction status online.</strong>
+          </a>
+          <a href="/member-login.html">
+            <span>Member self-service</span>
+            <strong>Download approved application PDF and contact taluk support.</strong>
+          </a>
         </div>
       </div>
       <div class="box section">
-        <p class="eyebrow">Association</p>
-        <h2>About Association</h2>
-        <p class="muted">KLSWA supports Karnataka licensed surveyors with organized member records, taluk-level coordination, correction workflows, and administrative transparency.</p>
-        <p class="muted">ಸದಸ್ಯರ ಮಾಹಿತಿಯ ಗೌಪ್ಯತೆಯನ್ನು ಮತ್ತು ಗೌರವವನ್ನು ಸಂಘವು ಸದಾ ಕಾಪಾಡುತ್ತದೆ.</p>
+        <p class="eyebrow">Support Path</p>
+        <h2>How Members Get Help</h2>
+        <div class="home-flow">
+          <span>Member Form</span>
+          <span>Taluk Team Review</span>
+          <span>District / Division Approval</span>
+          <span>Member Login Active</span>
+        </div>
       </div>
     </section>
 
-    <section class="home-section split">
-      <div class="box section">
-        <p class="eyebrow">Support</p>
-        <h2>Help</h2>
-        <div class="mini-list home-list">
-          <span>1. New members should fill the membership form with all mandatory details.</span>
-          <span>2. Existing members can activate login using phone number and LS number.</span>
-          <span>3. If status shows Needs correction, submit corrected details from member login.</span>
-          <span>4. Taluk teams can support members and send correction requests to admin.</span>
-        </div>
+    <footer class="home-footer tourism-footer">
+      <div>
+        <strong>AKSPBS / KLSWA</strong>
+        <span>All Karnataka State Government Licensed Surveyors Union</span>
+        <span>Member information is kept confidential and used only for association administration.</span>
       </div>
-      <div class="box section">
-        <p class="eyebrow">Downloads</p>
-        <h2>Downloads</h2>
-        <div class="home-actions">
-          <a class="secondary" href="/membership.html">Membership Form</a>
-          <a class="secondary" href="/status.html">Status Check</a>
-          <a class="secondary" href="/member-login.html">Member Portal</a>
-        </div>
+      <div class="footer-links">
+        <a href="/membership.html">Membership</a>
+        <a href="/member-login.html">Member Login</a>
+        <a href="/status.html">Status Check</a>
+        <a href="/taluk-join.html">Taluk Team Join</a>
+        <a href="/admin.html">Admin</a>
       </div>
-    </section>
-    <footer class="home-footer">
-      <strong>AKSPBS / KLSWA</strong>
-      <span>All Karnataka State Government Licensed Surveyors Union</span>
-      <span>Member information is kept confidential and used only for association administration.</span>
     </footer>
   </main>
   <script src="/home.js"></script>
