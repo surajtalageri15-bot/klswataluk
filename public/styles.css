@@ -1671,6 +1671,50 @@ a.primary {
 
 .public-team-grid {
   display: grid;
+  gap: 18px;
+}
+
+.district-menu {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.district-menu button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--green-dark);
+  font-weight: 850;
+}
+
+.district-menu button.active,
+.district-menu button:hover {
+  background: var(--green-dark);
+  color: #fff;
+}
+
+.public-team-district {
+  display: grid;
+  gap: 12px;
+}
+
+.public-team-district > .section-head {
+  padding: 12px 14px;
+  border-left: 4px solid var(--gold);
+  border-radius: 8px;
+  background: #fff9eb;
+}
+
+.public-team-district-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
 }
