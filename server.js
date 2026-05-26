@@ -856,7 +856,7 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === "/api/member-problems" && req.method === "GET") {
-    if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(user.role)) return json(res, 403, { error: "Member problems access required" });
+    if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head", "taluk"].includes(user.role)) return json(res, 403, { error: "Member problems access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
     return json(res, 200, {
       problems: await store.listMemberProblems(user, {

@@ -430,7 +430,7 @@ async function loadTeamChat() {
 }
 
 async function loadMemberProblems() {
-  if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(state.user.role)) return;
+  if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head", "taluk"].includes(state.user.role)) return;
   const params = new URLSearchParams({
     search: state.problemFilters.search,
     status: state.problemFilters.status,
@@ -474,6 +474,7 @@ function renderApp() {
           ${state.user.role === "admin" || (state.user.role === "taluk" && canTaluk("createMembership")) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Add Member</button>` : ""}
           ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Pending Data Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
+          ${state.user.role === "taluk" ? `<button data-tab="serviceBooks" class="${state.tab === "serviceBooks" ? "active" : ""}">Service Books</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="homeSlider" class="${state.tab === "homeSlider" ? "active" : ""}">Home Slider</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
@@ -509,6 +510,7 @@ function renderApp() {
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "dataCorrections") await loadDataCorrectionRequests();
       if (state.tab === "missingData") await loadMissingData();
+      if (state.tab === "serviceBooks") await loadMemberProblems();
       if (state.tab === "messages") {
         await loadDashboard();
         await loadUsers();
@@ -540,6 +542,7 @@ function renderApp() {
   if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "dataCorrections") renderDataCorrectionRequests();
   if (state.tab === "missingData") renderMissingData();
+  if (state.tab === "serviceBooks") renderTalukServiceBooks();
   if (state.tab === "messages") renderMessages();
   if (state.tab === "homeSlider") renderHomeSlider();
   if (state.tab === "users") renderUsers();
@@ -559,6 +562,7 @@ function pageTitle() {
   if (state.tab === "membership") return "Add Member";
   if (state.tab === "dataCorrections") return "Pending Data Correction Requests";
   if (state.tab === "missingData") return "Missing Data Report";
+  if (state.tab === "serviceBooks") return "Taluk Member Service Books";
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "homeSlider") return "Homepage Slider Photos";
   if (state.tab === "users") return "Taluk Team Assignment";
@@ -1024,6 +1028,140 @@ function renderMemberProblems() {
       });
       await loadMemberProblems();
       renderApp();
+    });
+  });
+}
+
+function problemMonthLabel(value) {
+  const date = new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleString("en-IN", { month: "long", year: "numeric" });
+}
+
+function groupedTalukServiceBooks() {
+  const groups = new Map();
+  state.memberProblems.forEach((problem) => {
+    const key = problem.memberId || `${problem.memberName}-${problem.lsNumber}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        memberId: problem.memberId,
+        memberName: problem.memberName,
+        lsNumber: problem.lsNumber,
+        phoneNumber: problem.phoneNumber,
+        district: problem.district,
+        taluk: problem.taluk,
+        entries: []
+      });
+    }
+    groups.get(key).entries.push(problem);
+  });
+  return [...groups.values()].sort((a, b) => String(a.memberName || "").localeCompare(String(b.memberName || "")));
+}
+
+function serviceStatusCounts(entries = []) {
+  const closed = entries.filter((entry) => ["Verified", "Resolved", "Closed", "Approved"].includes(entry.status)).length;
+  const rejected = entries.filter((entry) => entry.status === "Rejected").length;
+  return {
+    total: entries.length,
+    closed,
+    pending: entries.length - closed - rejected,
+    rejected
+  };
+}
+
+function serviceBookEntryCard(entry) {
+  return `
+    <article class="taluk-service-entry">
+      <div class="service-entry-marker"></div>
+      <div>
+        <div class="service-entry-head">
+          <strong>${escapeHtml(entry.documentType || entry.category || "Service entry")}</strong>
+          <span class="badge">${escapeHtml(entry.status)}</span>
+        </div>
+        <h4>${escapeHtml(entry.subject || "-")}</h4>
+        <p>${escapeHtml(entry.description || "").replace(/\n/g, "<br>")}</p>
+        <div class="mini-list">
+          ${entry.officeName ? `<span><strong>Office:</strong> ${escapeHtml(entry.officeName)}</span>` : ""}
+          ${entry.village ? `<span><strong>Village/Hobli:</strong> ${escapeHtml(entry.village)}</span>` : ""}
+          ${entry.noticeDate ? `<span><strong>Notice date:</strong> ${escapeHtml(entry.noticeDate)}</span>` : ""}
+          <span><strong>Submitted:</strong> ${escapeHtml(new Date(entry.createdAt).toLocaleString())}</span>
+        </div>
+        <div class="service-entry-foot">
+          <span>${escapeHtml(problemMonthLabel(entry.createdAt))}</span>
+          ${entry.documentUrl ? `<a class="secondary" href="${escapeHtml(entry.documentUrl)}" target="_blank">View proof</a>` : ""}
+        </div>
+        ${entry.response ? `<p class="notice">${escapeHtml(entry.response)}</p>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderTalukServiceBooks() {
+  const groups = groupedTalukServiceBooks();
+  const totalEntries = state.memberProblems.length;
+  const membersWithEntries = groups.length;
+  const openEntries = state.memberProblems.filter((entry) => !["Verified", "Resolved", "Closed", "Approved", "Rejected"].includes(entry.status)).length;
+  document.querySelector("#view").innerHTML = `
+    <section class="box section taluk-service-books">
+      <div class="section-head">
+        <div>
+          <h2>All Member Digital Service Books</h2>
+          <p class="muted">${escapeHtml(state.user.taluk || "Taluk")} taluk member work history, uploaded documents, notices and follow-up entries.</p>
+        </div>
+        <span class="badge">${membersWithEntries} Members</span>
+      </div>
+      <div class="status-grid">
+        <div><span class="muted">Members with entries</span><strong>${membersWithEntries}</strong></div>
+        <div><span class="muted">Total entries</span><strong>${totalEntries}</strong></div>
+        <div><span class="muted">Pending / open</span><strong>${openEntries}</strong></div>
+      </div>
+      <div class="toolbar">
+        <label>Search <input id="serviceBookSearch" value="${escapeHtml(state.problemFilters.search)}" placeholder="Member, LS, subject, village"></label>
+        <label>Status <select id="serviceBookStatus"><option value="">All status</option>${optionList(["Submitted", "In review", "Under Legal Review", "Need More Documents", "Forwarded to President", "Resolved", "Rejected"], state.problemFilters.status)}</select></label>
+        <span></span>
+        <button class="secondary" id="applyServiceBookFilters">Apply</button>
+      </div>
+      <div class="taluk-service-grid">
+        ${groups.map((group) => {
+          const counts = serviceStatusCounts(group.entries);
+          return `
+            <article class="taluk-service-card" data-service-card="${escapeHtml(group.memberId || group.lsNumber || "")}">
+              <div class="service-book-cover taluk-service-cover">
+                <div>
+                  <p class="eyebrow">Digital Service Book</p>
+                  <h2>${escapeHtml(group.memberName || "-")}</h2>
+                  <p>${escapeHtml(group.lsNumber || "-")} / ${escapeHtml(group.phoneNumber || "-")} / ${escapeHtml(group.taluk || "-")}</p>
+                </div>
+                <button class="secondary" type="button" data-print-service="${escapeHtml(group.memberId || group.lsNumber || "")}">Print</button>
+              </div>
+              <div class="service-summary-grid taluk-service-summary">
+                <div><span>Total</span><strong>${counts.total}</strong></div>
+                <div><span>Closed</span><strong>${counts.closed}</strong></div>
+                <div><span>Pending</span><strong>${counts.pending}</strong></div>
+                <div><span>Rejected</span><strong>${counts.rejected}</strong></div>
+              </div>
+              <div class="service-book-timeline">
+                ${group.entries.map(serviceBookEntryCard).join("")}
+              </div>
+            </article>
+          `;
+        }).join("") || `<p class="muted">No service book entries found for this taluk yet.</p>`}
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyServiceBookFilters").addEventListener("click", async () => {
+    state.problemFilters.search = document.querySelector("#serviceBookSearch").value;
+    state.problemFilters.status = document.querySelector("#serviceBookStatus").value;
+    await loadMemberProblems();
+    renderApp();
+  });
+  document.querySelectorAll("[data-print-service]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".taluk-service-card").forEach((card) => {
+        card.classList.toggle("print-selected", card.dataset.serviceCard === button.dataset.printService);
+      });
+      window.print();
     });
   });
 }

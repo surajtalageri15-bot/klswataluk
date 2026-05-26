@@ -1520,6 +1520,60 @@ a.primary {
   border-top: 1px solid var(--line);
 }
 
+.taluk-service-books {
+  display: grid;
+  gap: 16px;
+}
+
+.taluk-service-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.taluk-service-card {
+  overflow: hidden;
+  border: 1px solid rgba(20, 108, 76, 0.14);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+}
+
+.taluk-service-cover {
+  padding: 20px;
+}
+
+.taluk-service-cover h2 {
+  font-size: clamp(24px, 3vw, 34px);
+}
+
+.taluk-service-summary {
+  padding: 16px;
+}
+
+.taluk-service-card .service-book-timeline {
+  padding: 0 16px 16px;
+}
+
+.taluk-service-entry {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(20, 108, 76, 0.14);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbf7 100%);
+}
+
+.taluk-service-entry h4 {
+  margin: 8px 0 6px;
+  color: var(--text);
+}
+
+.taluk-service-entry p {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
 .public-link-card {
   position: relative;
   overflow: hidden;
@@ -2840,6 +2894,14 @@ tr:last-child td {
   .member-portal-content,
   .member-panel[data-member-panel="serviceBook"] {
     display: block !important;
+  }
+
+  .taluk-service-card:not(.print-selected) {
+    display: none !important;
+  }
+
+  .taluk-service-card.print-selected {
+    box-shadow: none;
   }
 
   .member-service-book {
