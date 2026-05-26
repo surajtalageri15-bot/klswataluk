@@ -441,7 +441,7 @@ async function loadMemberProblems() {
   state.memberProblems = data.problems || [];
 }
 
-async function loadTalukServiceBooks() {
+async function loadServiceBooks() {
   await loadMemberProblems();
   const rows = await loadAllMembersForExport({ search: state.problemFilters.search || "" });
   state.serviceBookMembers = rows;
@@ -481,7 +481,7 @@ function renderApp() {
           ${state.user.role === "admin" || (state.user.role === "taluk" && canTaluk("createMembership")) ? `<button data-tab="membership" class="${state.tab === "membership" ? "active" : ""}">Add Member</button>` : ""}
           ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && (canTaluk("submitCorrection") || canTaluk("approveCorrection"))) ? `<button data-tab="dataCorrections" class="${state.tab === "dataCorrections" ? "active" : ""}">Pending Data Correction Requests</button>` : ""}
           ${state.user.role === "taluk" ? `<button data-tab="missingData" class="${state.tab === "missingData" ? "active" : ""}">Missing Data</button>` : ""}
-          ${state.user.role === "taluk" ? `<button data-tab="serviceBooks" class="${state.tab === "serviceBooks" ? "active" : ""}">Service Books</button>` : ""}
+          ${["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(state.user.role) ? `<button data-tab="serviceBooks" class="${state.tab === "serviceBooks" ? "active" : ""}">Service Books</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="homeSlider" class="${state.tab === "homeSlider" ? "active" : ""}">Home Slider</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
@@ -517,7 +517,7 @@ function renderApp() {
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "dataCorrections") await loadDataCorrectionRequests();
       if (state.tab === "missingData") await loadMissingData();
-      if (state.tab === "serviceBooks") await loadTalukServiceBooks();
+      if (state.tab === "serviceBooks") await loadServiceBooks();
       if (state.tab === "messages") {
         await loadDashboard();
         await loadUsers();
@@ -549,7 +549,7 @@ function renderApp() {
   if (state.tab === "membership") renderMembershipForm();
   if (state.tab === "dataCorrections") renderDataCorrectionRequests();
   if (state.tab === "missingData") renderMissingData();
-  if (state.tab === "serviceBooks") renderTalukServiceBooks();
+  if (state.tab === "serviceBooks") renderServiceBooksControl();
   if (state.tab === "messages") renderMessages();
   if (state.tab === "homeSlider") renderHomeSlider();
   if (state.tab === "users") renderUsers();
@@ -569,7 +569,7 @@ function pageTitle() {
   if (state.tab === "membership") return "Add Member";
   if (state.tab === "dataCorrections") return "Pending Data Correction Requests";
   if (state.tab === "missingData") return "Missing Data Report";
-  if (state.tab === "serviceBooks") return "Taluk Member Service Books";
+  if (state.tab === "serviceBooks") return state.user.role === "taluk" ? "Taluk Member Service Books" : "State Service Book Control";
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "homeSlider") return "Homepage Slider Photos";
   if (state.tab === "users") return "Taluk Team Assignment";
@@ -1094,7 +1094,13 @@ function serviceStatusCounts(entries = []) {
   };
 }
 
+function canReviewServiceBooks() {
+  return ["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role);
+}
+
 function serviceBookEntryCard(entry) {
+  const canReview = canReviewServiceBooks();
+  const statusOptions = ["Submitted", "In review", "Under Legal Review", "Need More Documents", "Forwarded to President", "Resolved", "Rejected"];
   return `
     <article class="taluk-service-entry">
       <div class="service-entry-marker"></div>
@@ -1116,23 +1122,37 @@ function serviceBookEntryCard(entry) {
           ${entry.documentUrl ? `<a class="secondary" href="${escapeHtml(entry.documentUrl)}" target="_blank">View proof</a>` : ""}
         </div>
         ${entry.response ? `<p class="notice">${escapeHtml(entry.response)}</p>` : ""}
+        ${canReview ? `
+          <div class="service-review-panel">
+            <label>Status
+              <select data-service-status="${entry.id}">
+                ${optionList(statusOptions, entry.status)}
+              </select>
+            </label>
+            <label>State/Admin remarks
+              <textarea data-service-response="${entry.id}" rows="3" placeholder="Official remarks or action taken">${escapeHtml(entry.response || "")}</textarea>
+            </label>
+            <button class="primary" data-save-service="${entry.id}">Update entry</button>
+          </div>
+        ` : ""}
       </div>
     </article>
   `;
 }
 
-function renderTalukServiceBooks() {
+function renderServiceBooksControl() {
   const groups = groupedTalukServiceBooks();
   const totalEntries = state.memberProblems.length;
   const membersWithEntries = groups.length;
   const emptyMembers = groups.filter((group) => !group.entries.length).length;
   const openEntries = state.memberProblems.filter((entry) => !["Verified", "Resolved", "Closed", "Approved", "Rejected"].includes(entry.status)).length;
+  const isTaluk = state.user.role === "taluk";
   document.querySelector("#view").innerHTML = `
     <section class="box section taluk-service-books">
       <div class="section-head">
         <div>
-          <h2>All Member Digital Service Books</h2>
-          <p class="muted">${escapeHtml(state.user.taluk || "Taluk")} taluk member work history, uploaded documents, notices and follow-up entries.</p>
+          <h2>${isTaluk ? "All Member Digital Service Books" : "State Admin Service Book Control"}</h2>
+          <p class="muted">${isTaluk ? `${escapeHtml(state.user.taluk || "Taluk")} taluk member work history, uploaded documents, notices and follow-up entries.` : "View, monitor, and update visible member service book entries across your assigned area."}</p>
         </div>
         <span class="badge">${membersWithEntries} Members</span>
       </div>
@@ -1195,6 +1215,20 @@ function renderTalukServiceBooks() {
         card.classList.toggle("print-selected", card.dataset.serviceCard === button.dataset.printService);
       });
       window.print();
+    });
+  });
+  document.querySelectorAll("[data-save-service]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.saveService;
+      await request(`/api/member-problems/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          status: document.querySelector(`[data-service-status="${id}"]`).value,
+          response: document.querySelector(`[data-service-response="${id}"]`).value
+        })
+      });
+      await loadServiceBooks();
+      renderApp();
     });
   });
 }
