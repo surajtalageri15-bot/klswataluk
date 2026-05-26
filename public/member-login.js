@@ -63,6 +63,40 @@ function bindAgeCalculation(root) {
   update();
 }
 
+function bindMemberImageUpload({ inputId, messageId, endpoint, emptyMessage, sizeMessage }) {
+  const input = document.querySelector(`#${inputId}`);
+  if (!input) return;
+  input.addEventListener("change", async (event) => {
+    const file = event.currentTarget.files?.[0];
+    const message = document.querySelector(`#${messageId}`);
+    message.textContent = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      message.textContent = emptyMessage;
+      event.currentTarget.value = "";
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      message.textContent = sizeMessage;
+      event.currentTarget.value = "";
+      return;
+    }
+    try {
+      const imageData = await fileToDataUrl(file);
+      await request(endpoint, {
+        method: "POST",
+        body: JSON.stringify({ imageData })
+      });
+      const session = await request("/api/member-me");
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+    } catch (error) {
+      message.textContent = error.message;
+    } finally {
+      event.currentTarget.value = "";
+    }
+  });
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -579,6 +613,34 @@ function emptyMemberPanel(title, text) {
   `;
 }
 
+function memberUploadSlot({
+  title,
+  description,
+  previewUrl,
+  fallbackText,
+  inputId,
+  messageId,
+  buttonText,
+  square = false
+}) {
+  return `
+    <div class="member-upload-slot">
+      <div class="${square ? "member-card-preview" : "member-photo"}">
+        ${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="${escapeHtml(title)}">` : `<span>${escapeHtml(fallbackText)}</span>`}
+      </div>
+      <div>
+        <strong>${escapeHtml(title)}</strong>
+        <p class="muted">${escapeHtml(description)}</p>
+        <label class="secondary member-photo-upload">
+          ${escapeHtml(buttonText)}
+          <input id="${escapeHtml(inputId)}" type="file" accept="image/jpeg,image/png,image/webp">
+        </label>
+        <div class="message" id="${escapeHtml(messageId)}"></div>
+      </div>
+    </div>
+  `;
+}
+
 function showMemberPanel(panelName) {
   document.querySelectorAll("[data-member-tab]").forEach((button) => {
     button.classList.toggle("active", button.dataset.memberTab === panelName);
@@ -620,15 +682,26 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
         <div class="member-panel active" data-member-panel="profile">
           <section class="box status-card member-profile-card">
             <div class="section-head">
-              <div class="member-photo-panel">
-                <div class="member-photo">
-                  ${member.profilePhotoUrl ? `<img src="${escapeHtml(member.profilePhotoUrl)}" alt="Profile photo">` : `<span>${escapeHtml((member.name || "M").trim().slice(0, 1).toUpperCase())}</span>`}
-                </div>
-                <label class="secondary member-photo-upload">
-                  Upload photo
-                  <input id="memberPhotoInput" type="file" accept="image/jpeg,image/png,image/webp">
-                </label>
-                <div class="message" id="memberPhotoMessage"></div>
+              <div class="member-photo-panel member-document-slots">
+                ${memberUploadSlot({
+                  title: "Official passport photo",
+                  description: "Upload only your clear passport size photo.",
+                  previewUrl: member.profilePhotoUrl,
+                  fallbackText: (member.name || "M").trim().slice(0, 1).toUpperCase(),
+                  inputId: "memberPhotoInput",
+                  messageId: "memberPhotoMessage",
+                  buttonText: "Upload passport photo"
+                })}
+                ${memberUploadSlot({
+                  title: "License card",
+                  description: "Upload only your official licence card image.",
+                  previewUrl: member.licenseCardUrl,
+                  fallbackText: "ID",
+                  inputId: "memberLicenseCardInput",
+                  messageId: "memberLicenseCardMessage",
+                  buttonText: "Upload licence card",
+                  square: true
+                })}
               </div>
               <div>
                 <p class="eyebrow">Member Dashboard</p>
@@ -698,35 +771,19 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     button.addEventListener("click", () => showMemberPanel(button.dataset.memberTab));
   });
 
-  const memberPhotoInput = document.querySelector("#memberPhotoInput");
-  memberPhotoInput.addEventListener("change", async (event) => {
-    const file = event.currentTarget.files?.[0];
-    const message = document.querySelector("#memberPhotoMessage");
-    message.textContent = "";
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      message.textContent = "Upload JPG, PNG, or WEBP photo.";
-      event.currentTarget.value = "";
-      return;
-    }
-    if (file.size > 3 * 1024 * 1024) {
-      message.textContent = "Photo must be less than 3 MB.";
-      event.currentTarget.value = "";
-      return;
-    }
-    try {
-      const imageData = await fileToDataUrl(file);
-      await request("/api/member-photo", {
-        method: "POST",
-        body: JSON.stringify({ imageData })
-      });
-      const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
-    } catch (error) {
-      message.textContent = error.message;
-    } finally {
-      event.currentTarget.value = "";
-    }
+  bindMemberImageUpload({
+    inputId: "memberPhotoInput",
+    messageId: "memberPhotoMessage",
+    endpoint: "/api/member-photo",
+    emptyMessage: "Upload JPG, PNG, or WEBP passport photo.",
+    sizeMessage: "Passport photo must be less than 3 MB."
+  });
+  bindMemberImageUpload({
+    inputId: "memberLicenseCardInput",
+    messageId: "memberLicenseCardMessage",
+    endpoint: "/api/member-license-card",
+    emptyMessage: "Upload JPG, PNG, or WEBP licence card image.",
+    sizeMessage: "Licence card image must be less than 3 MB."
   });
 
   document.querySelector("#copyTalukSupport").addEventListener("click", async () => {

@@ -111,8 +111,21 @@ function memberPhotoFilePath(memberId) {
   return path.join(MEMBER_PHOTO_DIR, `${String(memberId || "").replace(/[^a-zA-Z0-9_-]/g, "")}.jpg`);
 }
 
+function memberLicenseCardFilePath(memberId) {
+  return path.join(MEMBER_PHOTO_DIR, `${String(memberId || "").replace(/[^a-zA-Z0-9_-]/g, "")}-license-card.jpg`);
+}
+
 async function memberPhotoUrl(memberId) {
   const filePath = memberPhotoFilePath(memberId);
+  return memberUploadUrl(filePath);
+}
+
+async function memberLicenseCardUrl(memberId) {
+  const filePath = memberLicenseCardFilePath(memberId);
+  return memberUploadUrl(filePath);
+}
+
+async function memberUploadUrl(filePath) {
   try {
     const stat = await fs.stat(filePath);
     if (!stat.isFile()) return "";
@@ -655,6 +668,7 @@ async function api(req, res, pathname) {
     if (!member) return json(res, 401, { error: "Member login required" });
     const safeMember = publicMember(member);
     safeMember.profilePhotoUrl = await memberPhotoUrl(member.id);
+    safeMember.licenseCardUrl = await memberLicenseCardUrl(member.id);
     const auditLogs = await store.listAuditLogs({ id: member.id, role: "taluk", district: member.district, taluk: member.taluk }, {
       memberId: member.id,
       limit: 100
@@ -683,6 +697,25 @@ async function api(req, res, pathname) {
       ...auditActor({ id: member.id, name: member.name, role: "member" })
     }]);
     return json(res, 200, { ok: true, profilePhotoUrl: await memberPhotoUrl(member.id) });
+  }
+
+  if (pathname === "/api/member-license-card" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    const body = asObject(await parseBody(req));
+    const buffer = parseMemberProfileImage(body);
+    await fs.mkdir(MEMBER_PHOTO_DIR, { recursive: true });
+    await fs.writeFile(memberLicenseCardFilePath(member.id), buffer);
+    await tryCreateAuditLogs([{
+      memberId: member.id,
+      memberName: member.name,
+      action: "License card uploaded",
+      field: "licenseCard",
+      oldValue: "",
+      newValue: "Updated by member",
+      ...auditActor({ id: member.id, name: member.name, role: "member" })
+    }]);
+    return json(res, 200, { ok: true, licenseCardUrl: await memberLicenseCardUrl(member.id) });
   }
 
   if (pathname === "/api/member-problems" && req.method === "POST") {
@@ -1438,6 +1471,7 @@ const server = http.createServer(async (req, res) => {
       "/api/member-login",
       "/api/member-me",
       "/api/member-photo",
+      "/api/member-license-card",
       "/api/member-problems",
       "/api/member-correction-request",
       "/api/member-forgot-password",

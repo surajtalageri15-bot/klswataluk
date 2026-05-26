@@ -1077,7 +1077,7 @@ a.primary {
   display: grid;
   justify-items: center;
   gap: 8px;
-  min-width: 120px;
+  min-width: 260px;
 }
 
 .member-photo {
@@ -1102,6 +1102,59 @@ a.primary {
   color: #fff;
   font-size: 34px;
   font-weight: 800;
+}
+
+.member-document-slots {
+  justify-items: stretch;
+  gap: 12px;
+  width: min(100%, 520px);
+}
+
+.member-upload-slot {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.member-upload-slot strong {
+  display: block;
+  color: #fff;
+  font-size: 14px;
+}
+
+.member-upload-slot p {
+  margin: 4px 0 8px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+}
+
+.member-card-preview {
+  width: 112px;
+  height: 72px;
+  border: 3px solid rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.18);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+}
+
+.member-card-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.member-card-preview span {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
 }
 
 .member-photo-upload {
@@ -2312,6 +2365,12 @@ tr:last-child td {
   }
 
   .member-photo-panel {
+    justify-items: start;
+    min-width: 0;
+  }
+
+  .member-upload-slot {
+    grid-template-columns: 1fr;
     justify-items: start;
   }
 
