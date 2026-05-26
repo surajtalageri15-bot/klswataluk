@@ -15,6 +15,7 @@ const MEMBER_DOCUMENT_DIR = path.join(PUBLIC_DIR, "uploads", "member-documents")
 
 const sessions = new Map();
 const memberSessions = new Map();
+const MEMBER_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 function send(res, status, body, headers = {}) {
   const payload = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -234,6 +235,10 @@ async function currentMember(req) {
   const token = getCookie(req, "member_session");
   if (!token || !memberSessions.has(token)) return null;
   const session = memberSessions.get(token);
+  if (Date.now() - Number(session.createdAt || 0) > MEMBER_SESSION_MAX_AGE_SECONDS * 1000) {
+    memberSessions.delete(token);
+    return null;
+  }
   return await store.getMember(session.memberId);
 }
 
@@ -653,7 +658,7 @@ async function api(req, res, pathname) {
     const token = crypto.randomBytes(24).toString("hex");
     memberSessions.set(token, { memberId: member.id, createdAt: Date.now() });
     return json(res, 200, { member: publicMember(member) }, {
-      "Set-Cookie": `member_session=${token}; HttpOnly; SameSite=Lax; Path=/`
+      "Set-Cookie": `member_session=${token}; Max-Age=${MEMBER_SESSION_MAX_AGE_SECONDS}; HttpOnly; SameSite=Lax; Path=/`
     });
   }
 
