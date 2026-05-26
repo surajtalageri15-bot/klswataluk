@@ -261,6 +261,18 @@ function correctionRequestSummary(request) {
   return fields.length ? fields.join(", ") : "Profile data";
 }
 
+function memberSelfDeclarationHtml() {
+  return `
+    <div class="declaration">
+      I declare that the correction details submitted by me are true and correct to the best of my knowledge. I accept full responsibility for this request.
+    </div>
+    <label class="check-row">
+      <input name="declarationAccepted" type="checkbox" required>
+      I have read and agree to the self declaration for this correction request.
+    </label>
+  `;
+}
+
 function missingDataForm(member, correctionRequests = []) {
   const fields = missingFieldKeys(member);
   if (!fields.length) return "";
@@ -294,6 +306,7 @@ function missingDataForm(member, correctionRequests = []) {
       <div class="two">
         ${fields.map((field) => missingInput(field, member)).join("")}
       </div>
+      ${memberSelfDeclarationHtml()}
       <div class="message" id="missingDataMessage"></div>
       <button class="primary" type="submit">Submit missing data</button>
     </form>
@@ -320,6 +333,14 @@ function correctionForm(member, correctionRequests = []) {
     <form id="memberCorrectionForm" class="box public-form-card member-dashboard-card correction-card">
       <h2>Request profile edit</h2>
       <p class="notice">${escapeHtml(member.remarks || "Edit your details and submit. Changes will update only after approval.")}</p>
+      <div class="two">
+        <label>Name <input name="name" value="${escapeHtml(member.name)}"></label>
+        <label>LS Number <input name="lsNumber" value="${escapeHtml(member.lsNumber)}"></label>
+      </div>
+      <div class="two">
+        <label>District <input name="district" value="${escapeHtml(member.district)}"></label>
+        <label>Taluk <input name="taluk" value="${escapeHtml(member.taluk)}"></label>
+      </div>
       <div class="two">
         <label>Phone <input name="phoneNumber" value="${escapeHtml(member.phoneNumber)}"></label>
         <label>Login ID <input name="loginId" value="${escapeHtml(member.loginId)}"></label>
@@ -350,6 +371,7 @@ function correctionForm(member, correctionRequests = []) {
       </label>
       <label>Address <textarea name="address" rows="3">${escapeHtml(member.address)}</textarea></label>
       <label>Reason * <textarea name="reason" rows="3" required placeholder="Explain what you corrected"></textarea></label>
+      ${memberSelfDeclarationHtml()}
       <div class="message" id="correctionMessage"></div>
       <button class="primary" type="submit">Send profile edit request</button>
     </form>
@@ -722,7 +744,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       const reason = String(form.get("reason") || "").trim();
       const changes = {};
       [
-        "phoneNumber", "loginId", "dateOfBirth", "age", "qualification", "batchYear",
+        "name", "lsNumber", "district", "taluk", "phoneNumber", "loginId", "dateOfBirth", "age", "qualification", "batchYear",
         "category", "caste", "religion", "maritalStatus", "kalyanaKarnataka", "disability", "address"
       ].forEach((field) => {
         changes[field] = form.get(field);
@@ -730,7 +752,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       try {
         await request("/api/member-correction-request", {
           method: "POST",
-          body: JSON.stringify({ reason, changes })
+          body: JSON.stringify({ reason, changes, declarationAccepted: form.get("declarationAccepted") === "on" })
         });
         document.querySelector("#correctionMessage").textContent = "Correction request sent to admin.";
       } catch (error) {
@@ -752,7 +774,8 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
           method: "POST",
           body: JSON.stringify({
             reason: "Member filled missing profile data",
-            changes
+            changes,
+            declarationAccepted: form.get("declarationAccepted") === "on"
           })
         });
         const session = await request("/api/member-me");

@@ -332,7 +332,7 @@ function normalizeMember(input, existing = {}) {
     disability: String(input.disability || "").trim(),
     otherTaluks: String(input.otherTaluks || "").trim(),
     address: String(input.address || "").trim(),
-    declarationAccepted: input.declarationAccepted === true || input.declarationAccepted === "true" || input.declarationAccepted === "on"
+    declarationAccepted: acceptedDeclaration(input.declarationAccepted)
   };
 }
 
@@ -402,6 +402,10 @@ function valueForAudit(value) {
   if (value == null) return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   return String(value);
+}
+
+function acceptedDeclaration(value) {
+  return value === true || value === "true" || value === "on" || value === "yes";
 }
 
 function auditDiffs({ action, before = {}, after = {}, actor }) {
@@ -576,6 +580,7 @@ async function api(req, res, pathname) {
     const body = asObject(await parseBody(req));
     const password = String(body.password || "");
     const confirmPassword = String(body.confirmPassword || "");
+    if (!acceptedDeclaration(body.declarationAccepted)) return json(res, 400, { error: "Self declaration must be accepted" });
     if (password.length < 6) return json(res, 400, { error: "Password must be at least 6 characters" });
     if (password !== confirmPassword) return json(res, 400, { error: "Passwords do not match" });
     const member = await store.findMemberForActivation({
@@ -714,6 +719,7 @@ async function api(req, res, pathname) {
     const body = asObject(await parseBody(req));
     const reason = String(body.reason || "").trim();
     const requestedChanges = sanitizeCorrectionChanges(body.changes || {}, member);
+    if (!acceptedDeclaration(body.declarationAccepted)) return json(res, 400, { error: "Self declaration must be accepted before submitting corrections" });
     if (!reason) return json(res, 400, { error: "Reason is required" });
     if (!Object.keys(requestedChanges).length) return json(res, 400, { error: "Change at least one field before submitting" });
     const existingRequests = await store.listMemberDataCorrectionRequests(member.id, 20);
@@ -725,7 +731,7 @@ async function api(req, res, pathname) {
         memberId: member.id,
         memberName: member.name,
         requestedChanges,
-        reason,
+        reason: `${reason} | Self declaration accepted by member`,
         requestedById: member.id,
         requestedByName: member.name,
         requestedByRole: "member"
