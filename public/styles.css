@@ -1231,7 +1231,7 @@ a.primary {
 
 .service-book-identity {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(160px, 240px);
+  grid-template-columns: 150px minmax(360px, 1fr) minmax(180px, 240px);
   gap: 16px;
   align-items: stretch;
   padding: 0 24px;
@@ -1288,11 +1288,13 @@ a.primary {
   color: var(--green-dark);
   font-size: clamp(26px, 4vw, 38px);
   line-height: 1.05;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .service-meta-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(118px, 1fr));
   gap: 10px;
 }
 
@@ -1304,12 +1306,14 @@ a.primary {
   background: var(--panel-soft);
   color: var(--text);
   font-weight: 850;
-  overflow-wrap: anywhere;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .service-meta-grid b {
   color: var(--muted);
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .service-license-card {
@@ -2676,10 +2680,18 @@ tr:last-child td {
   }
 
   .service-book-cover,
-  .service-book-identity,
-  .service-summary-grid,
-  .service-meta-grid {
+  .service-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .service-book-identity {
+    grid-template-columns: 130px minmax(280px, 1fr) minmax(150px, 200px);
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .service-meta-grid {
+    grid-template-columns: repeat(3, minmax(112px, 1fr));
   }
 
   .service-book-cover {
@@ -2691,7 +2703,7 @@ tr:last-child td {
   }
 
   .service-photo-card {
-    width: 100%;
+    width: 130px;
   }
 
   .member-photo-panel {
@@ -2889,6 +2901,21 @@ tr:last-child td {
   .detail-grid,
   .status-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .service-book-identity,
+  .service-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .service-book-identity {
+    overflow-x: visible;
+  }
+
+  .service-photo-card {
+    width: 100%;
   }
 }
 
