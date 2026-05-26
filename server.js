@@ -43,7 +43,7 @@ function csvDownload(res, filename, headers, rows) {
     "Content-Type": "text/csv; charset=utf-8",
     "Content-Disposition": `attachment; filename="${filename}"`
   });
-  res.end(csv);
+  res.end(`\uFEFF${csv}`);
 }
 
 async function parseBody(req) {
