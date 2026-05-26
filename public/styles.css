@@ -1669,6 +1669,32 @@ a.primary {
   width: fit-content;
 }
 
+.public-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.public-team-item {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(20, 108, 76, 0.14);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbf7 100%);
+  box-shadow: var(--shadow-soft);
+}
+
+.public-team-item h2 {
+  margin: 0;
+  color: var(--green-dark);
+  font-size: 24px;
+}
+
+.public-team-card .toolbar {
+  margin-bottom: 14px;
+}
+
 .declaration {
   padding: 14px;
   border: 1px solid var(--line);

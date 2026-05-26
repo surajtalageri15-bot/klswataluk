@@ -2406,6 +2406,47 @@ async function findTalukTeamContactForMember(member) {
   };
 }
 
+async function listPublicTalukTeamContacts() {
+  if (hasPostgres) {
+    const result = await pool.query(
+      `select u.name, u.district, u.taluk,
+              coalesce(nullif(u.phone_number, ''), (
+                select r.phone_number
+                from taluk_team_requests r
+                where r.status = 'Approved'
+                  and (r.user_id = u.id or lower(r.requested_username) = lower(u.username))
+                order by r.updated_at desc
+                limit 1
+              )) as phone_number
+       from users u
+       where u.role = 'taluk'
+         and u.active = true
+       order by u.district, u.taluk, u.name`
+    );
+    return result.rows.map((row) => ({
+      name: row.name || "",
+      district: row.district || "",
+      taluk: row.taluk || "",
+      phoneNumber: row.phone_number || ""
+    }));
+  }
+
+  const db = await readJsonDb();
+  return db.users
+    .filter((user) => user.role === "taluk" && user.active === true)
+    .map((user) => {
+      const request = (db.talukTeamRequests || []).find((item) => item.status === "Approved"
+        && (item.userId === user.id || String(item.requestedUsername || "").toLowerCase() === String(user.username || "").toLowerCase()));
+      return {
+        name: user.name || "",
+        district: user.district || "",
+        taluk: user.taluk || "",
+        phoneNumber: user.phoneNumber || request?.phoneNumber || ""
+      };
+    })
+    .sort((a, b) => `${a.district}-${a.taluk}-${a.name}`.localeCompare(`${b.district}-${b.taluk}-${b.name}`));
+}
+
 async function upsertStatePresidentUser(password) {
   const user = {
     id: crypto.randomUUID(),
@@ -3010,6 +3051,7 @@ module.exports = {
   deleteMember,
   listUsers,
   findTalukTeamContactForMember,
+  listPublicTalukTeamContacts,
   usernameExists,
   talukLoginExists,
   createUser,

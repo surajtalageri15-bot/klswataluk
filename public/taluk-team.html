@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KLSWA Taluk Technical Team Contacts</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="public-form-shell">
+    <section class="public-form-intro">
+      <p class="eyebrow">AKSPBS / KLSWA</p>
+      <h1>Taluk Technical Team Contacts</h1>
+      <p>Public support list for members to contact their taluk technical team.</p>
+    </section>
+
+    <section class="box public-form-card public-team-card">
+      <div class="section-head">
+        <div>
+          <h2>Find Taluk Team</h2>
+          <p class="muted">Search by district, taluk, name, or phone number.</p>
+        </div>
+        <span class="badge" id="teamCount">Loading</span>
+      </div>
+      <div class="toolbar">
+        <label>Search <input id="teamSearch" placeholder="District, taluk, team name, phone"></label>
+        <span></span>
+        <span></span>
+      </div>
+      <div id="teamMessage" class="message"></div>
+      <div class="public-team-grid" id="teamContacts"></div>
+    </section>
+  </main>
+  <script src="/taluk-team.js"></script>
+</body>
+</html>

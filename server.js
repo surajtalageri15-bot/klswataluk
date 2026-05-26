@@ -475,6 +475,10 @@ async function api(req, res, pathname) {
     return json(res, 200, await store.getPublicSummary());
   }
 
+  if (pathname === "/api/public-taluk-team-contacts" && req.method === "GET") {
+    return json(res, 200, { contacts: await store.listPublicTalukTeamContacts() });
+  }
+
   if (pathname === "/api/public-strike-suggestion" && req.method === "POST") {
     const body = asObject(await parseBody(req));
     const name = String(body.name || "").trim();
