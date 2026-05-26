@@ -810,10 +810,10 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
                   square: true
                 })}
               </div>
-              <div>
+              <div class="member-profile-title">
                 <p class="eyebrow">Member Dashboard</p>
                 <h2>${escapeHtml(member.name)}</h2>
-                <p class="muted">${escapeHtml(member.district)} / ${escapeHtml(member.taluk)}</p>
+                <p class="muted"><strong>District:</strong> ${escapeHtml(member.district || "-")} / <strong>Taluk:</strong> ${escapeHtml(member.taluk || "-")}</p>
               </div>
               <span class="badge">${escapeHtml(member.status)}</span>
             </div>

@@ -1056,7 +1056,7 @@ a.primary {
   content: "";
   position: absolute;
   inset: 0 0 auto;
-  height: 132px;
+  height: 220px;
   background: linear-gradient(135deg, rgba(13, 79, 56, 0.98), rgba(20, 108, 76, 0.78));
 }
 
@@ -1066,8 +1066,10 @@ a.primary {
 }
 
 .member-login-shell .member-profile-card > .section-head {
-  min-height: 132px;
-  align-items: flex-start;
+  min-height: 220px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   padding: 24px;
   border-bottom: 0;
   color: #fff;
@@ -1107,6 +1109,7 @@ a.primary {
 .member-document-slots {
   justify-items: stretch;
   gap: 12px;
+  grid-column: 1 / -1;
   width: min(100%, 520px);
 }
 
@@ -1177,12 +1180,22 @@ a.primary {
 .member-login-shell .member-profile-card .section-head h2 {
   margin: 4px 0;
   color: #fff;
-  font-size: clamp(26px, 4vw, 38px);
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.member-profile-title {
+  min-width: 0;
 }
 
 .member-login-shell .member-profile-card .section-head .muted,
 .member-login-shell .member-profile-card .section-head .eyebrow {
   color: rgba(255, 255, 255, 0.82);
+}
+
+.member-login-shell .member-profile-card .section-head .muted strong {
+  color: #fff;
 }
 
 .member-login-shell .member-profile-card .section-head .badge {
@@ -2676,7 +2689,12 @@ tr:last-child td {
 
   .member-login-shell .member-profile-card > .section-head {
     flex-direction: column;
-    min-height: 170px;
+    grid-template-columns: 1fr;
+    min-height: 280px;
+  }
+
+  .member-login-shell .member-profile-card::before {
+    height: 280px;
   }
 
   .service-book-cover,
