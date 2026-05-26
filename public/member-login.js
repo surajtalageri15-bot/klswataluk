@@ -513,6 +513,112 @@ function renderMyProblems(problems = []) {
   `;
 }
 
+function monthLabel(value) {
+  const date = new Date(value || Date.now());
+  if (Number.isNaN(date.getTime())) return "Unknown month";
+  return date.toLocaleString("en-IN", { month: "long", year: "numeric" });
+}
+
+function serviceBookEntries(problems = []) {
+  return [...problems]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .map((problem) => ({
+      month: monthLabel(problem.createdAt),
+      category: problem.documentType || problem.category || "Service entry",
+      title: problem.subject || "Member service entry",
+      description: problem.description || "",
+      place: [problem.village, problem.officeName].filter(Boolean).join(" / "),
+      status: problem.status || "Pending",
+      date: problem.createdAt ? new Date(problem.createdAt).toLocaleString("en-IN") : "",
+      documentUrl: problem.documentUrl || "",
+      response: problem.response || ""
+    }));
+}
+
+function renderServiceBook(member, problems = []) {
+  const entries = serviceBookEntries(problems);
+  const verified = entries.filter((entry) => ["Verified", "Resolved", "Closed", "Approved"].includes(entry.status)).length;
+  const pending = entries.filter((entry) => !["Verified", "Resolved", "Closed", "Approved", "Rejected"].includes(entry.status)).length;
+  const thisMonth = entries.filter((entry) => entry.month === monthLabel(new Date())).length;
+  const groups = entries.reduce((map, entry) => {
+    map.set(entry.month, [...(map.get(entry.month) || []), entry]);
+    return map;
+  }, new Map());
+  return `
+    <section class="member-service-book" id="memberServiceBook">
+      <div class="service-book-cover">
+        <div>
+          <p class="eyebrow">KLSWA Official Record</p>
+          <h2>Digital Service Book</h2>
+          <p>Individual member work history, documents, notices, and verification trail.</p>
+        </div>
+        <button class="secondary" type="button" id="printServiceBook">Print / Save PDF</button>
+      </div>
+
+      <div class="service-book-identity">
+        <div class="service-photo-card">
+          ${member.profilePhotoUrl ? `<img src="${escapeHtml(member.profilePhotoUrl)}" alt="Passport photo">` : `<span>${escapeHtml((member.name || "M").slice(0, 1).toUpperCase())}</span>`}
+          <small>Passport Photo</small>
+        </div>
+        <div class="service-member-main">
+          <span class="badge">${escapeHtml(member.status || "Member")}</span>
+          <h3>${escapeHtml(member.name || "-")}</h3>
+          <div class="service-meta-grid">
+            <span><b>LS No</b>${escapeHtml(member.lsNumber || "-")}</span>
+            <span><b>Phone</b>${escapeHtml(member.phoneNumber || "-")}</span>
+            <span><b>District</b>${escapeHtml(member.district || "-")}</span>
+            <span><b>Taluk</b>${escapeHtml(member.taluk || "-")}</span>
+            <span><b>Batch</b>${escapeHtml(member.batchYear || "-")}</span>
+            <span><b>Education</b>${escapeHtml(member.qualification || "-")}</span>
+          </div>
+        </div>
+        <div class="service-license-card">
+          ${member.licenseCardUrl ? `<img src="${escapeHtml(member.licenseCardUrl)}" alt="License card">` : `<span>License Card</span>`}
+        </div>
+      </div>
+
+      <div class="service-summary-grid">
+        <div><span>Total Entries</span><strong>${entries.length}</strong></div>
+        <div><span>Verified / Closed</span><strong>${verified}</strong></div>
+        <div><span>Pending</span><strong>${pending}</strong></div>
+        <div><span>This Month</span><strong>${thisMonth}</strong></div>
+      </div>
+
+      <div class="service-book-timeline">
+        ${entries.length ? [...groups.entries()].map(([month, monthEntries]) => `
+          <section class="service-month">
+            <h3>${escapeHtml(month)}</h3>
+            ${monthEntries.map((entry) => `
+              <article class="service-entry">
+                <div class="service-entry-marker"></div>
+                <div>
+                  <div class="service-entry-head">
+                    <strong>${escapeHtml(entry.category)}</strong>
+                    <span class="badge">${escapeHtml(entry.status)}</span>
+                  </div>
+                  <h4>${escapeHtml(entry.title)}</h4>
+                  ${entry.place ? `<p class="muted">${escapeHtml(entry.place)}</p>` : ""}
+                  <p>${escapeHtml(entry.description).replace(/\n/g, "<br>")}</p>
+                  <div class="service-entry-foot">
+                    <span>${escapeHtml(entry.date)}</span>
+                    ${entry.documentUrl ? `<a class="secondary" href="${escapeHtml(entry.documentUrl)}" target="_blank">View proof</a>` : ""}
+                  </div>
+                  ${entry.response ? `<p class="notice">${escapeHtml(entry.response)}</p>` : ""}
+                </div>
+              </article>
+            `).join("")}
+          </section>
+        `).join("") : `
+          <div class="service-empty">
+            <strong>No service entries yet</strong>
+            <p class="muted">Office/legal documents and submitted work records will appear here month-wise.</p>
+          </div>
+        `}
+      </div>
+    </section>
+  `;
+}
+
 function memberSupportMessage(member, talukTeam) {
   return [
     `Dear ${talukTeam?.name || "Taluk Technical Team"},`,
@@ -667,6 +773,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
         </div>
         <nav class="member-portal-nav">
           <button class="active" type="button" data-member-tab="profile">My Profile</button>
+          <button type="button" data-member-tab="serviceBook">Digital Service Book</button>
           <button type="button" data-member-tab="edit">Edit Profile Request</button>
           <button type="button" data-member-tab="missing">Missing Data</button>
           <button type="button" data-member-tab="documents">Office / Legal Documents</button>
@@ -722,6 +829,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
             </div>
           </section>
         </div>
+        <div class="member-panel" data-member-panel="serviceBook">${renderServiceBook(member, problems)}</div>
         <div class="member-panel" data-member-panel="edit">${correctionForm(member, correctionRequests)}</div>
         <div class="member-panel" data-member-panel="missing">${missingPanel}</div>
         <div class="member-panel" data-member-panel="documents">${memberDocumentForm()}</div>
@@ -764,6 +872,13 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   if (openProfileEdit) {
     openProfileEdit.addEventListener("click", () => {
       showMemberPanel("edit");
+    });
+  }
+  const printServiceBook = document.querySelector("#printServiceBook");
+  if (printServiceBook) {
+    printServiceBook.addEventListener("click", () => {
+      showMemberPanel("serviceBook");
+      window.print();
     });
   }
 
