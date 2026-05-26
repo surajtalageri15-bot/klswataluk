@@ -1574,6 +1574,14 @@ a.primary {
   line-height: 1.5;
 }
 
+.taluk-service-empty {
+  text-align: left;
+  border-style: solid;
+  background:
+    linear-gradient(135deg, rgba(20, 108, 76, 0.06), transparent 52%),
+    #fff;
+}
+
 .public-link-card {
   position: relative;
   overflow: hidden;

@@ -14,6 +14,7 @@ const state = {
   duplicates: { summary: { totalGroups: 0, phoneNumber: 0, lsNumber: 0, loginId: 0, name: 0 }, groups: [] },
   dataCorrectionRequests: [],
   memberProblems: [],
+  serviceBookMembers: [],
   problemFilters: { search: "", status: "" },
   sessionAnalytics: { summary: { users: 0, sessionCount: 0, totalSeconds: 0, todaySeconds: 0, activeUsers: 0 }, rows: [] },
   sessionFilters: { search: "", role: "taluk", from: "", to: "" },
@@ -440,6 +441,12 @@ async function loadMemberProblems() {
   state.memberProblems = data.problems || [];
 }
 
+async function loadTalukServiceBooks() {
+  await loadMemberProblems();
+  const rows = await loadAllMembersForExport({ search: state.problemFilters.search || "" });
+  state.serviceBookMembers = rows;
+}
+
 async function loadSessionAnalytics() {
   if (!["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role)) return;
   const params = new URLSearchParams({
@@ -510,7 +517,7 @@ function renderApp() {
       if (state.tab === "membership") await loadDashboard();
       if (state.tab === "dataCorrections") await loadDataCorrectionRequests();
       if (state.tab === "missingData") await loadMissingData();
-      if (state.tab === "serviceBooks") await loadMemberProblems();
+      if (state.tab === "serviceBooks") await loadTalukServiceBooks();
       if (state.tab === "messages") {
         await loadDashboard();
         await loadUsers();
@@ -1040,6 +1047,21 @@ function problemMonthLabel(value) {
 
 function groupedTalukServiceBooks() {
   const groups = new Map();
+  state.serviceBookMembers.forEach((member) => {
+    const key = member.id || `${member.name}-${member.lsNumber}`;
+    groups.set(key, {
+      memberId: member.id,
+      memberName: member.name,
+      lsNumber: member.lsNumber,
+      phoneNumber: member.phoneNumber,
+      district: member.district,
+      taluk: member.taluk,
+      status: member.status,
+      batchYear: member.batchYear,
+      qualification: member.qualification,
+      entries: []
+    });
+  });
   state.memberProblems.forEach((problem) => {
     const key = problem.memberId || `${problem.memberName}-${problem.lsNumber}`;
     if (!groups.has(key)) {
@@ -1050,6 +1072,9 @@ function groupedTalukServiceBooks() {
         phoneNumber: problem.phoneNumber,
         district: problem.district,
         taluk: problem.taluk,
+        status: "",
+        batchYear: "",
+        qualification: "",
         entries: []
       });
     }
@@ -1100,6 +1125,7 @@ function renderTalukServiceBooks() {
   const groups = groupedTalukServiceBooks();
   const totalEntries = state.memberProblems.length;
   const membersWithEntries = groups.length;
+  const emptyMembers = groups.filter((group) => !group.entries.length).length;
   const openEntries = state.memberProblems.filter((entry) => !["Verified", "Resolved", "Closed", "Approved", "Rejected"].includes(entry.status)).length;
   document.querySelector("#view").innerHTML = `
     <section class="box section taluk-service-books">
@@ -1111,9 +1137,10 @@ function renderTalukServiceBooks() {
         <span class="badge">${membersWithEntries} Members</span>
       </div>
       <div class="status-grid">
-        <div><span class="muted">Members with entries</span><strong>${membersWithEntries}</strong></div>
+        <div><span class="muted">Total taluk members</span><strong>${membersWithEntries}</strong></div>
         <div><span class="muted">Total entries</span><strong>${totalEntries}</strong></div>
         <div><span class="muted">Pending / open</span><strong>${openEntries}</strong></div>
+        <div><span class="muted">No entries yet</span><strong>${emptyMembers}</strong></div>
       </div>
       <div class="toolbar">
         <label>Search <input id="serviceBookSearch" value="${escapeHtml(state.problemFilters.search)}" placeholder="Member, LS, subject, village"></label>
@@ -1131,6 +1158,7 @@ function renderTalukServiceBooks() {
                   <p class="eyebrow">Digital Service Book</p>
                   <h2>${escapeHtml(group.memberName || "-")}</h2>
                   <p>${escapeHtml(group.lsNumber || "-")} / ${escapeHtml(group.phoneNumber || "-")} / ${escapeHtml(group.taluk || "-")}</p>
+                  <p>${escapeHtml(group.status || "-")} / Batch ${escapeHtml(group.batchYear || "-")} / ${escapeHtml(group.qualification || "-")}</p>
                 </div>
                 <button class="secondary" type="button" data-print-service="${escapeHtml(group.memberId || group.lsNumber || "")}">Print</button>
               </div>
@@ -1141,7 +1169,12 @@ function renderTalukServiceBooks() {
                 <div><span>Rejected</span><strong>${counts.rejected}</strong></div>
               </div>
               <div class="service-book-timeline">
-                ${group.entries.map(serviceBookEntryCard).join("")}
+                ${group.entries.length ? group.entries.map(serviceBookEntryCard).join("") : `
+                  <div class="service-empty taluk-service-empty">
+                    <strong>Service book ready</strong>
+                    <p class="muted">No entries yet. Member work, office notice, legal document, or taluk team update will appear here step by step.</p>
+                  </div>
+                `}
               </div>
             </article>
           `;
