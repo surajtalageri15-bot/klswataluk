@@ -1556,6 +1556,23 @@ a.primary {
   font-weight: 700;
 }
 
+.donation-page .public-form-intro {
+  background:
+    linear-gradient(135deg, rgba(13, 73, 55, 0.90), rgba(14, 103, 74, 0.82)),
+    url("/uploads/slider/slide-1.jpg");
+  background-size: cover;
+  background-position: center;
+}
+
+.donation-public-card,
+.donation-info-card {
+  width: min(100%, 980px);
+}
+
+.public-link-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .donation-qr-preview {
   margin-top: 18px;
 }
