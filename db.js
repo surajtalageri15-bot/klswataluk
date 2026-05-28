@@ -508,7 +508,6 @@ async function initDb() {
     create index if not exists idx_donations_scope on donations (district, taluk, status, created_at desc);
     create index if not exists idx_donations_member on donations (member_id, created_at desc);
     create index if not exists idx_donations_order on donations (razorpay_order_id);
-    create index if not exists idx_donations_qr on donations (razorpay_qr_id);
   `);
 
   await pool.query(`
@@ -546,6 +545,10 @@ async function initDb() {
     alter table donations add column if not exists razorpay_qr_id text;
     alter table donations add column if not exists razorpay_qr_url text;
     alter table donations add column if not exists razorpay_short_url text;
+  `);
+
+  await pool.query(`
+    create index if not exists idx_donations_qr on donations (razorpay_qr_id);
   `);
 
   await pool.query(`
