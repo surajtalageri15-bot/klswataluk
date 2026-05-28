@@ -521,14 +521,22 @@ function renderMyProblems(problems = []) {
 function memberDonationPanel(donations = []) {
   return `
     <section class="box public-form-card member-dashboard-card donation-card">
-      <div class="section-head">
+      <div class="donation-hero">
         <div>
-          <h2>Official Razorpay Payment Button</h2>
-          <p class="muted">Use this if Dynamic QR is temporarily unavailable. After payment, submit the payment/reference ID below for admin tracking.</p>
+          <p class="eyebrow">KLSWA Secure Donation</p>
+          <h2>Horata & Legal Samiti Fund</h2>
+          <p>Pay safely using Razorpay. UPI, cards, and netbanking options may be available inside Razorpay checkout.</p>
         </div>
+        <span class="donation-secure-badge">Secured by Razorpay</span>
       </div>
-      <div class="razorpay-button-wrap" id="razorpayPaymentButtonWrap"></div>
-      <p class="muted">This hosted Razorpay button is provided by Razorpay. It opens Razorpay's secure payment page.</p>
+      <div class="donation-payment-box">
+        <div>
+          <strong>Donate online</strong>
+          <p class="muted">Click the button below and complete payment on Razorpay's secure page.</p>
+        </div>
+        <div class="razorpay-button-wrap" id="razorpayPaymentButtonWrap"></div>
+      </div>
+      <p class="donation-note">After payment, keep the Razorpay payment receipt for your records.</p>
     </section>
     <section class="box public-form-card member-dashboard-card donation-history-card">
       <h2>My Donation Receipts</h2>
