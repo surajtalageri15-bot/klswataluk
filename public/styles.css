@@ -1486,6 +1486,34 @@ a.primary {
   border-left-color: #6d5bd0;
 }
 
+.member-login-shell .donation-card,
+.member-login-shell .donation-history-card {
+  border-left-color: var(--gold);
+}
+
+.donation-qr-preview {
+  margin-top: 18px;
+}
+
+.qr-box {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(20, 108, 76, 0.18);
+  border-radius: 8px;
+  background: #f7fbf7;
+  text-align: center;
+}
+
+.qr-box img {
+  width: min(280px, 100%);
+  height: auto;
+  border: 8px solid #fff;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
 .member-login-shell .audit-card {
   border-left-color: var(--green-dark);
 }

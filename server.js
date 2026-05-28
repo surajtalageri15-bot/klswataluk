@@ -497,6 +497,15 @@ function razorpayRequest(pathname, payload) {
   });
 }
 
+function verifyRazorpayWebhook(rawBody, signature) {
+  if (!process.env.RAZORPAY_WEBHOOK_SECRET) return true;
+  const expected = crypto
+    .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest("hex");
+  return expected === String(signature || "");
+}
+
 function verifyRazorpaySignature(orderId, paymentId, signature) {
   const expected = crypto
     .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
@@ -543,6 +552,37 @@ async function tryCreateAuditLogs(logs) {
 
 async function api(req, res, pathname) {
   const user = await currentUser(req);
+
+  if (pathname === "/api/razorpay/webhook" && req.method === "POST") {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const rawBody = Buffer.concat(chunks).toString("utf8");
+    if (!verifyRazorpayWebhook(rawBody, req.headers["x-razorpay-signature"])) {
+      return json(res, 400, { error: "Invalid webhook signature" });
+    }
+    const payload = JSON.parse(rawBody || "{}");
+    if (payload.event === "qr_code.credited") {
+      const payment = payload.payload?.payment?.entity || {};
+      const qrCode = payload.payload?.qr_code?.entity || {};
+      const qrId = payment.qr_code_id || qrCode.id || "";
+      const donation = await store.updateDonationQrPaymentByQrId(qrId, {
+        status: "Paid",
+        razorpayPaymentId: payment.id || ""
+      });
+      if (donation) {
+        await tryCreateAuditLogs([{
+          memberId: donation.memberId,
+          memberName: donation.memberName,
+          action: "Donation QR paid",
+          field: donation.fundType,
+          oldValue: "QR Generated",
+          newValue: `${currency(donation.amount)} Razorpay QR ${donation.razorpayPaymentId}`,
+          ...auditActor({ id: "razorpay", name: "Razorpay webhook", role: "payment_gateway" })
+        }]);
+      }
+    }
+    return json(res, 200, { ok: true });
+  }
 
   if (pathname === "/api/public-config" && req.method === "GET") {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -821,6 +861,44 @@ async function api(req, res, pathname) {
       donation,
       member: publicMember(member)
     });
+  }
+
+  if (pathname === "/api/member-donations/razorpay-qr" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured yet. Please use manual payment option." });
+    const body = normalizeDonationBody({ ...(asObject(await parseBody(req))), paymentMethod: "Razorpay Dynamic QR" });
+    if (!DONATION_FUNDS.includes(body.fundType)) return json(res, 400, { error: "Select donation fund" });
+    if (!Number.isFinite(body.amount) || body.amount < 1) return json(res, 400, { error: "Enter donation amount" });
+    const amountPaise = Math.round(body.amount * 100);
+    const referenceId = `klswa_qr_${Date.now()}_${member.id.slice(0, 8)}`;
+    const qr = await razorpayRequest("/v1/payments/qr_codes", {
+      type: "upi_qr",
+      name: "KLSWA Donation",
+      usage: "single_use",
+      fixed_amount: true,
+      payment_amount: amountPaise,
+      description: `${body.fundType} donation by ${member.name}`,
+      close_by: Math.floor(Date.now() / 1000) + 30 * 60,
+      notes: {
+        referenceId,
+        memberId: member.id,
+        memberName: member.name,
+        fundType: body.fundType,
+        district: member.district || "",
+        taluk: member.taluk || ""
+      }
+    });
+    const donation = await store.createDonation(member, {
+      ...body,
+      paymentMethod: "Razorpay Dynamic QR",
+      status: "QR Generated",
+      razorpayQrId: qr.id,
+      razorpayQrUrl: qr.image_url || "",
+      razorpayShortUrl: qr.short_url || "",
+      manualReference: referenceId
+    });
+    return json(res, 201, { donation, qr });
   }
 
   if (pathname === "/api/member-donations/razorpay-verify" && req.method === "POST") {
@@ -1692,6 +1770,7 @@ const server = http.createServer(async (req, res) => {
       "/api/member-problems",
       "/api/member-donations/manual",
       "/api/member-donations/razorpay-order",
+      "/api/member-donations/razorpay-qr",
       "/api/member-donations/razorpay-verify",
       "/api/member-correction-request",
       "/api/member-forgot-password",

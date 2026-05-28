@@ -1115,7 +1115,7 @@ function renderDonations() {
                 <td>${escapeHtml(rupees(item.amount))}</td>
                 <td>${escapeHtml(item.paymentMethod)}</td>
                 <td><span class="badge">${escapeHtml(item.status)}</span></td>
-                <td>${escapeHtml(item.razorpayPaymentId || item.manualReference || item.razorpayOrderId || "-")}</td>
+                <td>${escapeHtml(item.razorpayPaymentId || item.manualReference || item.razorpayQrId || item.razorpayOrderId || "-")}</td>
                 <td>
                   ${canVerifyDonations() ? `
                     <select data-donation-status="${escapeHtml(item.id)}">${optionList(statusOptions, item.status)}</select>

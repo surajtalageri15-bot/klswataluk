@@ -237,6 +237,9 @@ function toDonation(row) {
     status: row.status || "Pending",
     razorpayOrderId: row.razorpay_order_id || "",
     razorpayPaymentId: row.razorpay_payment_id || "",
+    razorpayQrId: row.razorpay_qr_id || "",
+    razorpayQrUrl: row.razorpay_qr_url || "",
+    razorpayShortUrl: row.razorpay_short_url || "",
     manualReference: row.manual_reference || "",
     remarks: row.remarks || "",
     verifiedById: row.verified_by_id || "",
@@ -475,6 +478,9 @@ async function initDb() {
       razorpay_order_id text,
       razorpay_payment_id text,
       razorpay_signature text,
+      razorpay_qr_id text,
+      razorpay_qr_url text,
+      razorpay_short_url text,
       manual_reference text,
       remarks text,
       verified_by_id text,
@@ -502,6 +508,7 @@ async function initDb() {
     create index if not exists idx_donations_scope on donations (district, taluk, status, created_at desc);
     create index if not exists idx_donations_member on donations (member_id, created_at desc);
     create index if not exists idx_donations_order on donations (razorpay_order_id);
+    create index if not exists idx_donations_qr on donations (razorpay_qr_id);
   `);
 
   await pool.query(`
@@ -536,6 +543,9 @@ async function initDb() {
     alter table member_problems add column if not exists notice_date date;
     alter table member_problems add column if not exists office_name text;
     alter table member_problems add column if not exists village text;
+    alter table donations add column if not exists razorpay_qr_id text;
+    alter table donations add column if not exists razorpay_qr_url text;
+    alter table donations add column if not exists razorpay_short_url text;
   `);
 
   await pool.query(`
@@ -2225,6 +2235,9 @@ async function createDonation(member, input = {}) {
   donation.razorpayOrderId = String(input.razorpayOrderId || "").trim();
   donation.razorpayPaymentId = String(input.razorpayPaymentId || "").trim();
   donation.razorpaySignature = String(input.razorpaySignature || "").trim();
+  donation.razorpayQrId = String(input.razorpayQrId || "").trim();
+  donation.razorpayQrUrl = String(input.razorpayQrUrl || "").trim();
+  donation.razorpayShortUrl = String(input.razorpayShortUrl || "").trim();
   donation.createdAt = new Date().toISOString();
   donation.updatedAt = donation.createdAt;
 
@@ -2233,14 +2246,15 @@ async function createDonation(member, input = {}) {
       `insert into donations (
         id, member_id, member_name, ls_number, phone_number, district, taluk, fund_type,
         amount_paise, currency, payment_method, status, razorpay_order_id, razorpay_payment_id,
-        razorpay_signature, manual_reference, remarks
-      ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        razorpay_signature, razorpay_qr_id, razorpay_qr_url, razorpay_short_url, manual_reference, remarks
+      ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
       returning *`,
       [
         donation.id, donation.memberId, donation.memberName, donation.lsNumber, donation.phoneNumber,
         donation.district, donation.taluk, donation.fundType, donation.amountPaise, donation.currency,
         donation.paymentMethod, donation.status, donation.razorpayOrderId, donation.razorpayPaymentId,
-        donation.razorpaySignature, donation.manualReference, donation.remarks
+        donation.razorpaySignature, donation.razorpayQrId, donation.razorpayQrUrl, donation.razorpayShortUrl,
+        donation.manualReference, donation.remarks
       ]
     );
     await touchMeta();
@@ -2272,6 +2286,30 @@ async function updateDonationPayment(id, input = {}) {
   donation.status = input.status || "Paid";
   donation.razorpayPaymentId = String(input.razorpayPaymentId || "");
   donation.razorpaySignature = String(input.razorpaySignature || "");
+  donation.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return donation;
+}
+
+async function updateDonationQrPaymentByQrId(qrId, input = {}) {
+  const safeQrId = String(qrId || "").trim();
+  if (!safeQrId) return null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update donations
+       set status = $2, razorpay_payment_id = coalesce(nullif($3, ''), razorpay_payment_id), updated_at = now()
+       where razorpay_qr_id = $1
+       returning *`,
+      [safeQrId, input.status || "Paid", String(input.razorpayPaymentId || "")]
+    );
+    await touchMeta();
+    return toDonation(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  const donation = (db.donations || []).find((item) => item.razorpayQrId === safeQrId);
+  if (!donation) return null;
+  donation.status = input.status || "Paid";
+  if (input.razorpayPaymentId) donation.razorpayPaymentId = String(input.razorpayPaymentId);
   donation.updatedAt = new Date().toISOString();
   await writeJsonDb(db);
   return donation;
@@ -3311,6 +3349,7 @@ module.exports = {
   updateMemberProblem,
   createDonation,
   updateDonationPayment,
+  updateDonationQrPaymentByQrId,
   listDonations,
   updateDonationStatus,
   donationSummary,

@@ -537,7 +537,8 @@ function memberDonationPanel(donations = []) {
         </label>
         <label>Payment method
           <select name="paymentMethod" required>
-            <option value="Razorpay">Razorpay online payment</option>
+            <option value="Razorpay Dynamic QR">Razorpay Dynamic QR</option>
+            <option value="Razorpay">Razorpay online payment popup</option>
             ${options(manualDonationMethods)}
           </select>
         </label>
@@ -552,6 +553,7 @@ function memberDonationPanel(donations = []) {
         </div>
         <div class="message full" id="memberDonationMessage"></div>
       </form>
+      <div class="donation-qr-preview hidden" id="donationQrPreview"></div>
     </section>
     <section class="box public-form-card member-dashboard-card donation-history-card">
       <h2>My Donation Receipts</h2>
@@ -566,7 +568,10 @@ function memberDonationPanel(donations = []) {
                 <td>${escapeHtml(rupees(item.amount))}</td>
                 <td>${escapeHtml(item.paymentMethod)}</td>
                 <td><span class="badge">${escapeHtml(item.status)}</span></td>
-                <td>${escapeHtml(item.razorpayPaymentId || item.manualReference || item.razorpayOrderId || "-")}</td>
+                <td>
+                  ${escapeHtml(item.razorpayPaymentId || item.manualReference || item.razorpayQrId || item.razorpayOrderId || "-")}
+                  ${item.razorpayShortUrl ? `<br><a href="${escapeHtml(item.razorpayShortUrl)}" target="_blank">Open QR</a>` : ""}
+                </td>
               </tr>
             `).join("") || `<tr><td colspan="6">No donations submitted yet.</td></tr>`}
           </tbody>
@@ -1096,9 +1101,30 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   donationForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const message = document.querySelector("#memberDonationMessage");
+    const qrPreview = document.querySelector("#donationQrPreview");
     message.textContent = "";
+    qrPreview.classList.add("hidden");
+    qrPreview.innerHTML = "";
     const payload = formObject(donationForm);
     try {
+      if (payload.paymentMethod === "Razorpay Dynamic QR") {
+        const data = await request("/api/member-donations/razorpay-qr", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        donationForm.reset();
+        qrPreview.classList.remove("hidden");
+        qrPreview.innerHTML = `
+          <div class="qr-box">
+            <h3>Scan and pay ${escapeHtml(rupees(data.donation.amount))}</h3>
+            ${data.donation.razorpayQrUrl ? `<img src="${escapeHtml(data.donation.razorpayQrUrl)}" alt="Razorpay QR code">` : ""}
+            ${data.donation.razorpayShortUrl ? `<p><a class="primary" href="${escapeHtml(data.donation.razorpayShortUrl)}" target="_blank">Open payment QR</a></p>` : ""}
+            <p class="muted">After payment, status will auto-update when Razorpay webhook confirms it. You can refresh this page after paying.</p>
+          </div>
+        `;
+        return;
+      }
+
       if (payload.paymentMethod === "Razorpay") {
         const orderData = await request("/api/member-donations/razorpay-order", {
           method: "POST",
