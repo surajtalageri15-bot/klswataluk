@@ -21,7 +21,7 @@ const MASTER_TALUKS = {
   "Koppal": ["Koppala", "Gangavathi", "Kushtagi", "Yelaburga", "Kanakagiri", "Karatagi", "Kukanuru"],
   "Mandya": ["Mandya", "Madduru", "Malavalli", "Srirangapattana", "Krishnarajapete", "Nagamangala", "Pandavapura"],
   "Mysuru": ["Mysuru", "Hunasuru", "Krishnarajanagara", "Nanjanagodu", "Heggadadevanakote", "Piriyapattana", "Tirumakudalu Narasipura", "Saraguru", "Saligrama"],
-  "Raichur": ["Raichuru", "Sindhanuru", "Manvi", "Devadurga", "Lingasaguru", "Mudgal", "Maski", "Sirawara", "Arakera"],
+  "Raichur": ["Raichuru", "Sindhanuru", "Manvi", "Devadurga", "Lingasaguru", "Maski", "Sirawara", "Arakera"],
   "Ramanagara": ["Ramanagara", "Magadi", "Kanakapura", "Channapattana", "Harohalli"],
   "Shivamogga": ["Shivamogga", "Sagara", "Bhadravathi", "Hosanagara", "Shikaripura", "Soraba", "Tirthahalli"],
   "Tumakuru": ["Tumakuru", "Chikkanayakanahalli", "Kunigal", "Madhugiri", "Sira", "Tipturu", "Gubbi", "Koratagere", "Pavagada", "Turuvekere"],
