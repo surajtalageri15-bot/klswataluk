@@ -14,8 +14,10 @@ const state = {
   duplicates: { summary: { totalGroups: 0, phoneNumber: 0, lsNumber: 0, loginId: 0, name: 0 }, groups: [] },
   dataCorrectionRequests: [],
   memberProblems: [],
+  donations: { donations: [], summary: { totalAmount: 0, pendingAmount: 0, verifiedAmount: 0, count: 0, byFund: {} }, razorpayConfigured: false },
   serviceBookMembers: [],
   problemFilters: { search: "", status: "" },
+  donationFilters: { search: "", status: "", fundType: "" },
   sessionAnalytics: { summary: { users: 0, sessionCount: 0, totalSeconds: 0, todaySeconds: 0, activeUsers: 0 }, rows: [] },
   sessionFilters: { search: "", role: "taluk", from: "", to: "" },
   filters: { search: "", district: "", taluk: "" },
@@ -87,6 +89,14 @@ function canTaluk(permission, user = state.user) {
   return talukPermissions(user)[permission] !== false;
 }
 
+function canViewDonations() {
+  return ["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(state.user?.role);
+}
+
+function canVerifyDonations() {
+  return ["admin", "state_president", "division", "district_technical_head"].includes(state.user?.role);
+}
+
 const workflowPendingStatuses = ["Pending Taluk Review", "Pending District Review", "Pending Division Final Approval", "Pending verification"];
 const memberStatusOptions = ["Active", ...workflowPendingStatuses, "Inactive", "Needs correction", "Rejected"];
 const editableMemberStatusOptions = ["Active", "Inactive", ...workflowPendingStatuses, "Needs correction", "Rejected"];
@@ -154,6 +164,10 @@ function taluksForDistrict(lists, district) {
 function exportUrl(path, params = {}) {
   const query = new URLSearchParams(params);
   return `${path}?${query.toString()}`;
+}
+
+function rupees(value) {
+  return `Rs. ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 async function sendHeartbeat() {
@@ -441,6 +455,17 @@ async function loadMemberProblems() {
   state.memberProblems = data.problems || [];
 }
 
+async function loadDonations() {
+  if (!canViewDonations()) return;
+  const params = new URLSearchParams({
+    search: state.donationFilters.search,
+    status: state.donationFilters.status,
+    fundType: state.donationFilters.fundType,
+    limit: "500"
+  });
+  state.donations = await request(`/api/donations?${params.toString()}`);
+}
+
 async function loadServiceBooks() {
   await loadMemberProblems();
   const rows = await loadAllMembersForExport({ search: state.problemFilters.search || "" });
@@ -488,6 +513,7 @@ function renderApp() {
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="sessionAnalytics" class="${state.tab === "sessionAnalytics" ? "active" : ""}">Team Time</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">${state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems"}</button>` : ""}
+          ${canViewDonations() ? `<button data-tab="donations" class="${state.tab === "donations" ? "active" : ""}">Donations</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
           ${["admin", "division", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("approveCorrection")) ? `<button data-tab="corrections" class="${state.tab === "corrections" ? "active" : ""}">Taluk Name Correction</button>` : ""}
           ${["admin", "state_president", "taluk"].includes(state.user.role) ? `<button data-tab="audit" class="${state.tab === "audit" ? "active" : ""}">${state.user.role === "taluk" ? "Activity Log" : "Audit History"}</button>` : ""}
@@ -527,6 +553,7 @@ function renderApp() {
       if (state.tab === "sessionAnalytics") await loadSessionAnalytics();
       if (state.tab === "teamChat") await loadTeamChat();
       if (state.tab === "memberProblems") await loadMemberProblems();
+      if (state.tab === "donations") await loadDonations();
       if (state.tab === "duplicates") await loadDuplicates();
       if (state.tab === "corrections") await loadCorrections();
       if (state.tab === "audit") await loadAuditLogs();
@@ -556,6 +583,7 @@ function renderApp() {
   if (state.tab === "sessionAnalytics") renderSessionAnalytics();
   if (state.tab === "teamChat") renderTeamChat();
   if (state.tab === "memberProblems") renderMemberProblems();
+  if (state.tab === "donations") renderDonations();
   if (state.tab === "duplicates") renderDuplicates();
   if (state.tab === "corrections") renderCorrections();
   if (state.tab === "audit") renderAuditLogs();
@@ -576,6 +604,7 @@ function pageTitle() {
   if (state.tab === "sessionAnalytics") return "Team Time Analytics";
   if (state.tab === "teamChat") return "Team Chat";
   if (state.tab === "memberProblems") return state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems";
+  if (state.tab === "donations") return "Donation / Fund Reports";
   if (state.tab === "duplicates") return "Duplicate Detection";
   if (state.tab === "corrections") return "Taluk Name Correction";
   if (state.tab === "audit") return state.user.role === "taluk" ? "Taluk Activity Log" : "Audit History";
@@ -1034,6 +1063,92 @@ function renderMemberProblems() {
         })
       });
       await loadMemberProblems();
+      renderApp();
+    });
+  });
+}
+
+function renderDonations() {
+  const rows = state.donations.donations || [];
+  const summary = state.donations.summary || {};
+  const statusOptions = ["Pending Verification", "Paid", "Verified", "Rejected"];
+  const fundOptions = ["Horata Fund", "Legal Samiti Fund", "General Association Fund"];
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <div>
+          <h2>Donation / Fund Reports</h2>
+          <p class="muted">Track Horata Fund, Legal Samiti Fund, Razorpay payments, and manual collections.</p>
+        </div>
+        <span class="badge">${state.donations.razorpayConfigured ? "Razorpay active" : "Manual mode"}</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Total records</span><strong>${escapeHtml(summary.count || 0)}</strong></div>
+        <div class="stat"><span>Total amount</span><strong>${escapeHtml(rupees(summary.totalAmount))}</strong></div>
+        <div class="stat"><span>Paid / verified</span><strong>${escapeHtml(rupees(summary.verifiedAmount))}</strong></div>
+        <div class="stat"><span>Pending</span><strong>${escapeHtml(rupees(summary.pendingAmount))}</strong></div>
+      </div>
+      <div class="toolbar">
+        <label>Search <input id="donationSearch" value="${escapeHtml(state.donationFilters.search)}" placeholder="Member, phone, LS, taluk"></label>
+        <label>Status <select id="donationStatus"><option value="">All status</option>${optionList(statusOptions, state.donationFilters.status)}</select></label>
+        <label>Fund <select id="donationFund"><option value="">All funds</option>${optionList(fundOptions, state.donationFilters.fundType)}</select></label>
+        <button class="secondary" id="applyDonationFilters">Apply</button>
+        <a class="secondary" href="${exportUrl("/api/donations/export.csv", state.donationFilters)}">Export CSV</a>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th><th>Member</th><th>Phone</th><th>District</th><th>Taluk</th>
+              <th>Fund</th><th>Amount</th><th>Method</th><th>Status</th><th>Reference</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN") : "-")}</td>
+                <td>${escapeHtml(item.memberName)}<br><span class="muted">${escapeHtml(item.lsNumber || "-")}</span></td>
+                <td>${escapeHtml(item.phoneNumber || "-")}</td>
+                <td>${escapeHtml(item.district || "-")}</td>
+                <td>${escapeHtml(item.taluk || "-")}</td>
+                <td>${escapeHtml(item.fundType)}</td>
+                <td>${escapeHtml(rupees(item.amount))}</td>
+                <td>${escapeHtml(item.paymentMethod)}</td>
+                <td><span class="badge">${escapeHtml(item.status)}</span></td>
+                <td>${escapeHtml(item.razorpayPaymentId || item.manualReference || item.razorpayOrderId || "-")}</td>
+                <td>
+                  ${canVerifyDonations() ? `
+                    <select data-donation-status="${escapeHtml(item.id)}">${optionList(statusOptions, item.status)}</select>
+                    <input data-donation-remarks="${escapeHtml(item.id)}" value="${escapeHtml(item.remarks || "")}" placeholder="Remarks">
+                    <button class="primary" data-save-donation="${escapeHtml(item.id)}">Save</button>
+                  ` : `<span class="muted">View only</span>`}
+                </td>
+              </tr>
+            `).join("") || `<tr><td colspan="11">No donations found.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+
+  document.querySelector("#applyDonationFilters").addEventListener("click", async () => {
+    state.donationFilters.search = document.querySelector("#donationSearch").value;
+    state.donationFilters.status = document.querySelector("#donationStatus").value;
+    state.donationFilters.fundType = document.querySelector("#donationFund").value;
+    await loadDonations();
+    renderApp();
+  });
+  document.querySelectorAll("[data-save-donation]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.saveDonation;
+      await request(`/api/donations/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          status: document.querySelector(`[data-donation-status="${id}"]`).value,
+          remarks: document.querySelector(`[data-donation-remarks="${id}"]`).value
+        })
+      });
+      await loadDonations();
       renderApp();
     });
   });

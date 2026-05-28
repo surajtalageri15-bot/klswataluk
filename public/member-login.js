@@ -6,6 +6,8 @@ const loginMessage = document.querySelector("#loginMessage");
 const forgotMessage = document.querySelector("#forgotMessage");
 const dashboard = document.querySelector("#memberDashboard");
 const memberFormsGrid = document.querySelector(".public-member-grid");
+const donationFunds = ["Horata Fund", "Legal Samiti Fund", "General Association Fund"];
+const manualDonationMethods = ["UPI QR", "UPI ID", "Bank transfer", "Cash collected by taluk team"];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -38,6 +40,10 @@ function batchYearOptions() {
 
 function options(items, selected = "") {
   return items.map((item) => `<option value="${escapeHtml(item)}" ${String(item) === String(selected) ? "selected" : ""}>${escapeHtml(item)}</option>`).join("");
+}
+
+function rupees(value) {
+  return `Rs. ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 function calculateAgeFromDob(value) {
@@ -88,7 +94,7 @@ function bindMemberImageUpload({ inputId, messageId, endpoint, emptyMessage, siz
         body: JSON.stringify({ imageData })
       });
       const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
     } catch (error) {
       message.textContent = error.message;
     } finally {
@@ -513,6 +519,74 @@ function renderMyProblems(problems = []) {
   `;
 }
 
+function memberDonationPanel(donations = []) {
+  return `
+    <section class="box public-form-card member-dashboard-card donation-card">
+      <div class="section-head">
+        <div>
+          <h2>Donation / Fund Support</h2>
+          <p class="muted">Support Horata Fund or Legal Samiti Fund. Razorpay works after live keys are configured by admin.</p>
+        </div>
+      </div>
+      <form id="memberDonationForm" class="grid-form">
+        <label>Fund
+          <select name="fundType" required>${options(donationFunds)}</select>
+        </label>
+        <label>Amount
+          <input name="amount" type="number" min="1" step="1" placeholder="500" required>
+        </label>
+        <label>Payment method
+          <select name="paymentMethod" required>
+            <option value="Razorpay">Razorpay online payment</option>
+            ${options(manualDonationMethods)}
+          </select>
+        </label>
+        <label>Transaction / reference number
+          <input name="manualReference" placeholder="UPI ref / bank ref / cash receipt">
+        </label>
+        <label class="full">Remarks
+          <textarea name="remarks" rows="3" placeholder="Optional note"></textarea>
+        </label>
+        <div class="full modal-actions">
+          <button class="primary" type="submit">Submit donation</button>
+        </div>
+        <div class="message full" id="memberDonationMessage"></div>
+      </form>
+    </section>
+    <section class="box public-form-card member-dashboard-card donation-history-card">
+      <h2>My Donation Receipts</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Fund</th><th>Amount</th><th>Method</th><th>Status</th><th>Reference</th></tr></thead>
+          <tbody>
+            ${donations.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.createdAt ? new Date(item.createdAt).toLocaleDateString("en-IN") : "-")}</td>
+                <td>${escapeHtml(item.fundType)}</td>
+                <td>${escapeHtml(rupees(item.amount))}</td>
+                <td>${escapeHtml(item.paymentMethod)}</td>
+                <td><span class="badge">${escapeHtml(item.status)}</span></td>
+                <td>${escapeHtml(item.razorpayPaymentId || item.manualReference || item.razorpayOrderId || "-")}</td>
+              </tr>
+            `).join("") || `<tr><td colspan="6">No donations submitted yet.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function loadRazorpayCheckout() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Could not load Razorpay checkout"));
+    document.head.appendChild(script);
+  });
+}
+
 function monthLabel(value) {
   const date = new Date(value || Date.now());
   if (Number.isNaN(date.getTime())) return "Unknown month";
@@ -756,7 +830,7 @@ function showMemberPanel(panelName) {
   });
 }
 
-function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = [], correctionRequests = []) {
+function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = [], correctionRequests = [], donations = []) {
   setMemberDashboardMode(true);
   const noticesPanel = renderPresidentMessages(presidentMessages) || emptyMemberPanel("State President Notices", "No active notices available right now.");
   const missingPanel = missingDataForm(member, correctionRequests) || emptyMemberPanel("Missing Data", "No missing profile fields found.");
@@ -778,6 +852,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
           <button type="button" data-member-tab="missing">Missing Data</button>
           <button type="button" data-member-tab="documents">Office / Legal Documents</button>
           <button type="button" data-member-tab="problems">Problems / Grievance</button>
+          <button type="button" data-member-tab="donations">Donations</button>
           <button type="button" data-member-tab="contact">Contact Taluk Team</button>
           <button type="button" data-member-tab="notices">President Notices</button>
           <button type="button" data-member-tab="password">Change Password</button>
@@ -834,6 +909,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
         <div class="member-panel" data-member-panel="missing">${missingPanel}</div>
         <div class="member-panel" data-member-panel="documents">${memberDocumentForm()}</div>
         <div class="member-panel" data-member-panel="problems">${memberProblemForm()}${renderMyProblems(problems)}</div>
+        <div class="member-panel" data-member-panel="donations">${memberDonationPanel(donations)}</div>
         <div class="member-panel" data-member-panel="contact">${renderTalukTeamContact(member, talukTeam)}</div>
         <div class="member-panel" data-member-panel="notices">${noticesPanel}</div>
         <div class="member-panel" data-member-panel="password">${changePasswordForm()}</div>
@@ -951,7 +1027,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
           })
         });
         const session = await request("/api/member-me");
-        renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+        renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
       } catch (error) {
         document.querySelector("#missingDataMessage").textContent = error.message;
       }
@@ -973,7 +1049,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       problemForm.reset();
       message.textContent = "Problem submitted to leadership.";
       const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
     } catch (error) {
       message.textContent = error.message;
     }
@@ -1010,7 +1086,59 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       documentForm.reset();
       message.textContent = "Document uploaded for legal/team review.";
       const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
+
+  const donationForm = document.querySelector("#memberDonationForm");
+  donationForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#memberDonationMessage");
+    message.textContent = "";
+    const payload = formObject(donationForm);
+    try {
+      if (payload.paymentMethod === "Razorpay") {
+        const orderData = await request("/api/member-donations/razorpay-order", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        await loadRazorpayCheckout();
+        const checkout = new window.Razorpay({
+          key: orderData.keyId,
+          amount: orderData.order.amount,
+          currency: orderData.order.currency,
+          name: "KLSWA Donation",
+          description: payload.fundType,
+          order_id: orderData.order.id,
+          prefill: {
+            name: member.name || "",
+            contact: member.phoneNumber || ""
+          },
+          handler: async (response) => {
+            await request("/api/member-donations/razorpay-verify", {
+              method: "POST",
+              body: JSON.stringify({ ...response, donationId: orderData.donation.id })
+            });
+            const session = await request("/api/member-me");
+            renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+            showMemberPanel("donations");
+          }
+        });
+        checkout.open();
+        return;
+      }
+
+      await request("/api/member-donations/manual", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      donationForm.reset();
+      message.textContent = "Donation submitted. Treasurer/Admin will verify payment.";
+      const session = await request("/api/member-me");
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+      showMemberPanel("donations");
     } catch (error) {
       message.textContent = error.message;
     }
@@ -1037,7 +1165,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
 async function loadMemberSession() {
   try {
     const data = await request("/api/member-me");
-    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null, data.problems || [], data.correctionRequests || []);
+    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null, data.problems || [], data.correctionRequests || [], data.donations || []);
   } catch {
     dashboard.innerHTML = "";
     setMemberDashboardMode(false);
@@ -1069,7 +1197,7 @@ loginForm.addEventListener("submit", async (event) => {
     });
     loginForm.reset();
     const session = await request("/api/member-me");
-    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || []);
+    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
   } catch (error) {
     loginMessage.textContent = error.message;
   }

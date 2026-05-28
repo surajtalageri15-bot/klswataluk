@@ -218,6 +218,34 @@ function toMemberProblem(row) {
   };
 }
 
+function toDonation(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    memberId: row.member_id || "",
+    memberName: row.member_name || "",
+    lsNumber: row.ls_number || "",
+    phoneNumber: row.phone_number || "",
+    district: row.district || "",
+    taluk: row.taluk || "",
+    fundType: row.fund_type || "Horata Fund",
+    amount: Number(row.amount_paise || 0) / 100,
+    amountPaise: Number(row.amount_paise || 0),
+    currency: row.currency || "INR",
+    paymentMethod: row.payment_method || "Manual",
+    status: row.status || "Pending",
+    razorpayOrderId: row.razorpay_order_id || "",
+    razorpayPaymentId: row.razorpay_payment_id || "",
+    manualReference: row.manual_reference || "",
+    remarks: row.remarks || "",
+    verifiedById: row.verified_by_id || "",
+    verifiedByName: row.verified_by_name || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 function toUserSession(row) {
   if (!row) return row;
   if (!hasPostgres) return row;
@@ -431,6 +459,30 @@ async function initDb() {
       active boolean not null default true
     );
 
+    create table if not exists donations (
+      id text primary key,
+      member_id text not null,
+      member_name text not null,
+      ls_number text,
+      phone_number text,
+      district text,
+      taluk text,
+      fund_type text not null,
+      amount_paise integer not null,
+      currency text not null default 'INR',
+      payment_method text not null,
+      status text not null default 'Pending',
+      razorpay_order_id text,
+      razorpay_payment_id text,
+      razorpay_signature text,
+      manual_reference text,
+      remarks text,
+      verified_by_id text,
+      verified_by_name text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
     create index if not exists idx_members_district on members (district);
     create index if not exists idx_members_taluk on members (taluk);
     create index if not exists idx_members_ls_number on members (ls_number);
@@ -447,6 +499,9 @@ async function initDb() {
     create index if not exists idx_member_problems_member on member_problems (member_id, created_at desc);
     create index if not exists idx_user_sessions_user on user_sessions (user_id, started_at desc);
     create index if not exists idx_user_sessions_role on user_sessions (role, district, taluk, started_at desc);
+    create index if not exists idx_donations_scope on donations (district, taluk, status, created_at desc);
+    create index if not exists idx_donations_member on donations (member_id, created_at desc);
+    create index if not exists idx_donations_order on donations (razorpay_order_id);
   `);
 
   await pool.query(`
@@ -2128,6 +2183,176 @@ async function updateMemberProblem(user, id, changes = {}) {
   return target;
 }
 
+function normalizeDonationInput(input = {}) {
+  const fundType = String(input.fundType || "Horata Fund").trim();
+  const amount = Number(input.amount);
+  const amountPaise = Math.round(amount * 100);
+  const paymentMethod = String(input.paymentMethod || "Manual").trim();
+  return {
+    fundType,
+    amountPaise,
+    currency: "INR",
+    paymentMethod,
+    manualReference: String(input.manualReference || "").trim(),
+    remarks: String(input.remarks || "").trim()
+  };
+}
+
+function assertDonation(input) {
+  if (!["Horata Fund", "Legal Samiti Fund", "General Association Fund"].includes(input.fundType)) return "Select a valid donation fund";
+  if (!Number.isInteger(input.amountPaise) || input.amountPaise < 100) return "Donation amount must be at least Rs. 1";
+  if (!["Razorpay", "UPI QR", "UPI ID", "Bank transfer", "Cash collected by taluk team", "Manual"].includes(input.paymentMethod)) return "Select a valid payment method";
+  return "";
+}
+
+async function createDonation(member, input = {}) {
+  const donation = normalizeDonationInput(input);
+  const error = assertDonation(donation);
+  if (error) {
+    const problem = new Error(error);
+    problem.status = 400;
+    throw problem;
+  }
+  donation.id = crypto.randomUUID();
+  donation.amount = donation.amountPaise / 100;
+  donation.memberId = member.id;
+  donation.memberName = member.name;
+  donation.lsNumber = member.lsNumber || "";
+  donation.phoneNumber = member.phoneNumber || "";
+  donation.district = member.district || "";
+  donation.taluk = member.taluk || "";
+  donation.status = input.status || (donation.paymentMethod === "Razorpay" ? "Payment Started" : "Pending Verification");
+  donation.razorpayOrderId = String(input.razorpayOrderId || "").trim();
+  donation.razorpayPaymentId = String(input.razorpayPaymentId || "").trim();
+  donation.razorpaySignature = String(input.razorpaySignature || "").trim();
+  donation.createdAt = new Date().toISOString();
+  donation.updatedAt = donation.createdAt;
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into donations (
+        id, member_id, member_name, ls_number, phone_number, district, taluk, fund_type,
+        amount_paise, currency, payment_method, status, razorpay_order_id, razorpay_payment_id,
+        razorpay_signature, manual_reference, remarks
+      ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      returning *`,
+      [
+        donation.id, donation.memberId, donation.memberName, donation.lsNumber, donation.phoneNumber,
+        donation.district, donation.taluk, donation.fundType, donation.amountPaise, donation.currency,
+        donation.paymentMethod, donation.status, donation.razorpayOrderId, donation.razorpayPaymentId,
+        donation.razorpaySignature, donation.manualReference, donation.remarks
+      ]
+    );
+    await touchMeta();
+    return toDonation(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.donations ||= [];
+  db.donations.unshift(donation);
+  await writeJsonDb(db);
+  return donation;
+}
+
+async function updateDonationPayment(id, input = {}) {
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update donations
+       set status = $2, razorpay_payment_id = $3, razorpay_signature = $4, updated_at = now()
+       where id = $1
+       returning *`,
+      [id, input.status || "Paid", String(input.razorpayPaymentId || ""), String(input.razorpaySignature || "")]
+    );
+    await touchMeta();
+    return toDonation(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  const donation = (db.donations || []).find((item) => item.id === id);
+  if (!donation) return null;
+  donation.status = input.status || "Paid";
+  donation.razorpayPaymentId = String(input.razorpayPaymentId || "");
+  donation.razorpaySignature = String(input.razorpaySignature || "");
+  donation.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return donation;
+}
+
+async function listDonations(userOrMember, filters = {}) {
+  const role = userOrMember.role || "member";
+  let rows = [];
+  if (hasPostgres) {
+    rows = (await pool.query("select * from donations order by created_at desc")).rows.map(toDonation);
+  } else {
+    const db = await readJsonDb();
+    rows = db.donations || [];
+  }
+
+  rows = rows.filter((donation) => {
+    if (role === "member") return donation.memberId === userOrMember.id;
+    if (["admin", "state_president"].includes(role)) return true;
+    if (role === "division") return divisionDistricts(userOrMember.district).includes(canonicalDistrict(donation.district));
+    if (["district", "district_technical_head"].includes(role)) return canonicalDistrict(userOrMember.district) === canonicalDistrict(donation.district);
+    if (role === "taluk") {
+      const district = canonicalDistrict(userOrMember.district);
+      return canonicalDistrict(donation.district) === district && normalizedTaluk(district, donation.taluk) === normalizedTaluk(district, userOrMember.taluk);
+    }
+    return false;
+  });
+
+  const search = String(filters.search || "").toLowerCase();
+  if (search) {
+    rows = rows.filter((item) => [item.memberName, item.lsNumber, item.phoneNumber, item.district, item.taluk, item.fundType, item.status, item.manualReference]
+      .some((value) => String(value || "").toLowerCase().includes(search)));
+  }
+  if (filters.status) rows = rows.filter((item) => item.status === filters.status);
+  if (filters.fundType) rows = rows.filter((item) => item.fundType === filters.fundType);
+  return rows.slice(0, Number(filters.limit || 300));
+}
+
+async function updateDonationStatus(user, id, input = {}) {
+  const rows = await listDonations(user, { limit: 100000 });
+  if (!rows.some((item) => item.id === id)) return null;
+  const status = String(input.status || "").trim();
+  if (!["Pending Verification", "Paid", "Verified", "Rejected"].includes(status)) {
+    const error = new Error("Select a valid donation status");
+    error.status = 400;
+    throw error;
+  }
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update donations
+       set status = $2, remarks = $3, verified_by_id = $4, verified_by_name = $5, updated_at = now()
+       where id = $1
+       returning *`,
+      [id, status, String(input.remarks || ""), user.id || "", user.name || ""]
+    );
+    await touchMeta();
+    return toDonation(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  const donation = (db.donations || []).find((item) => item.id === id);
+  if (!donation) return null;
+  donation.status = status;
+  donation.remarks = String(input.remarks || "");
+  donation.verifiedById = user.id || "";
+  donation.verifiedByName = user.name || "";
+  donation.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return donation;
+}
+
+function donationSummary(rows = []) {
+  const summary = { totalAmount: 0, pendingAmount: 0, verifiedAmount: 0, count: rows.length, byFund: {} };
+  for (const row of rows) {
+    const amount = Number(row.amount || 0);
+    summary.totalAmount += amount;
+    if (["Paid", "Verified"].includes(row.status)) summary.verifiedAmount += amount;
+    else summary.pendingAmount += amount;
+    summary.byFund[row.fundType] = (summary.byFund[row.fundType] || 0) + amount;
+  }
+  return summary;
+}
+
 async function startUserSession(user) {
   const now = new Date().toISOString();
   const item = {
@@ -2892,7 +3117,8 @@ const backupTables = [
   "team_chat_messages",
   "member_notes",
   "member_problems",
-  "user_sessions"
+  "user_sessions",
+  "donations"
 ];
 
 const jsonBackupKeys = {
@@ -2906,7 +3132,8 @@ const jsonBackupKeys = {
   team_chat_messages: "teamChatMessages",
   member_notes: "memberNotes",
   member_problems: "memberProblems",
-  user_sessions: "userSessions"
+  user_sessions: "userSessions",
+  donations: "donations"
 };
 
 async function createBackup(createdBy = {}) {
@@ -2994,7 +3221,8 @@ async function restoreBackup(backup, restoredBy = {}) {
       teamChatMessages: backup.tables.team_chat_messages || [],
       memberNotes: backup.tables.member_notes || [],
       memberProblems: backup.tables.member_problems || [],
-      userSessions: backup.tables.user_sessions || []
+      userSessions: backup.tables.user_sessions || [],
+      donations: backup.tables.donations || []
     };
     nextDb.meta.updatedAt = new Date().toISOString();
     await writeJsonDb(nextDb);
@@ -3081,6 +3309,11 @@ module.exports = {
   createMemberProblem,
   listMemberProblems,
   updateMemberProblem,
+  createDonation,
+  updateDonationPayment,
+  listDonations,
+  updateDonationStatus,
+  donationSummary,
   startUserSession,
   touchUserSession,
   endUserSession,

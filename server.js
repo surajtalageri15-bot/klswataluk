@@ -1,4 +1,5 @@
 const http = require("http");
+const https = require("https");
 const fs = require("fs/promises");
 const fssync = require("fs");
 const path = require("path");
@@ -16,6 +17,8 @@ const MEMBER_DOCUMENT_DIR = path.join(PUBLIC_DIR, "uploads", "member-documents")
 const sessions = new Map();
 const memberSessions = new Map();
 const MEMBER_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const DONATION_FUNDS = ["Horata Fund", "Legal Samiti Fund", "General Association Fund"];
+const MANUAL_DONATION_METHODS = ["UPI QR", "UPI ID", "Bank transfer", "Cash collected by taluk team"];
 
 function send(res, status, body, headers = {}) {
   const payload = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -45,6 +48,10 @@ function csvDownload(res, filename, headers, rows) {
     "Content-Disposition": `attachment; filename="${filename}"`
   });
   res.end(`\uFEFF${csv}`);
+}
+
+function currency(value) {
+  return `Rs. ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 async function parseBody(req) {
@@ -326,6 +333,14 @@ function canExportReports(user) {
   return ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role);
 }
 
+function canViewDonations(user) {
+  return user && ["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(user.role);
+}
+
+function canVerifyDonations(user) {
+  return user && ["admin", "state_president", "division", "district_technical_head"].includes(user.role);
+}
+
 function normalizeMember(input, existing = {}) {
   return {
     ...existing,
@@ -424,6 +439,70 @@ function valueForAudit(value) {
 
 function acceptedDeclaration(value) {
   return value === true || value === "true" || value === "on" || value === "yes";
+}
+
+function normalizeDonationBody(body = {}) {
+  return {
+    fundType: DONATION_FUNDS.includes(String(body.fundType || "").trim()) ? String(body.fundType).trim() : "",
+    amount: Number(body.amount),
+    paymentMethod: String(body.paymentMethod || "").trim(),
+    manualReference: String(body.manualReference || "").trim(),
+    remarks: String(body.remarks || "").trim()
+  };
+}
+
+function assertManualDonation(body) {
+  if (!DONATION_FUNDS.includes(body.fundType)) return "Select donation fund";
+  if (!Number.isFinite(body.amount) || body.amount < 1) return "Enter donation amount";
+  if (!MANUAL_DONATION_METHODS.includes(body.paymentMethod)) return "Select manual payment method";
+  if (!body.manualReference && body.paymentMethod !== "Cash collected by taluk team") return "Enter transaction/reference number";
+  return "";
+}
+
+function razorpayConfigured() {
+  return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+}
+
+function razorpayRequest(pathname, payload) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64");
+    const request = https.request({
+      hostname: "api.razorpay.com",
+      path: pathname,
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
+      }
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { error: { description: text || "Razorpay request failed" } };
+        }
+        if (response.statusCode >= 200 && response.statusCode < 300) resolve(data);
+        else reject(new Error(data.error?.description || "Razorpay request failed"));
+      });
+    });
+    request.on("error", reject);
+    request.write(body);
+    request.end();
+  });
+}
+
+function verifyRazorpaySignature(orderId, paymentId, signature) {
+  const expected = crypto
+    .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "")
+    .update(`${orderId}|${paymentId}`)
+    .digest("hex");
+  return expected === String(signature || "");
 }
 
 function auditDiffs({ action, before = {}, after = {}, actor }) {
@@ -686,7 +765,90 @@ async function api(req, res, pathname) {
     const talukTeam = await store.findTalukTeamContactForMember(member);
     const problems = await store.listMemberProblems({ ...member, role: "member" }, { limit: 100 });
     const correctionRequests = await store.listMemberDataCorrectionRequests(member.id, 20);
-    return json(res, 200, { member: safeMember, auditLogs, presidentMessages, talukTeam, problems, correctionRequests });
+    const donations = await store.listDonations({ ...member, role: "member" }, { limit: 100 });
+    return json(res, 200, { member: safeMember, auditLogs, presidentMessages, talukTeam, problems, correctionRequests, donations });
+  }
+
+  if (pathname === "/api/member-donations/manual" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    const body = normalizeDonationBody(asObject(await parseBody(req)));
+    const error = assertManualDonation(body);
+    if (error) return json(res, 400, { error });
+    const donation = await store.createDonation(member, { ...body, status: "Pending Verification" });
+    await tryCreateAuditLogs([{
+      memberId: member.id,
+      memberName: member.name,
+      action: "Donation submitted",
+      field: donation.fundType,
+      oldValue: "",
+      newValue: `${currency(donation.amount)} via ${donation.paymentMethod}`,
+      ...auditActor({ id: member.id, name: member.name, role: "member" })
+    }]);
+    return json(res, 201, { donation });
+  }
+
+  if (pathname === "/api/member-donations/razorpay-order" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured yet. Please use manual payment option." });
+    const body = normalizeDonationBody({ ...(asObject(await parseBody(req))), paymentMethod: "Razorpay" });
+    if (!DONATION_FUNDS.includes(body.fundType)) return json(res, 400, { error: "Select donation fund" });
+    if (!Number.isFinite(body.amount) || body.amount < 1) return json(res, 400, { error: "Enter donation amount" });
+    const amountPaise = Math.round(body.amount * 100);
+    const receipt = `klswa_${Date.now()}_${member.id.slice(0, 8)}`;
+    const order = await razorpayRequest("/v1/orders", {
+      amount: amountPaise,
+      currency: "INR",
+      receipt,
+      notes: {
+        memberId: member.id,
+        memberName: member.name,
+        fundType: body.fundType,
+        district: member.district || "",
+        taluk: member.taluk || ""
+      }
+    });
+    const donation = await store.createDonation(member, {
+      ...body,
+      paymentMethod: "Razorpay",
+      status: "Payment Started",
+      razorpayOrderId: order.id
+    });
+    return json(res, 201, {
+      keyId: process.env.RAZORPAY_KEY_ID,
+      order,
+      donation,
+      member: publicMember(member)
+    });
+  }
+
+  if (pathname === "/api/member-donations/razorpay-verify" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured" });
+    const body = asObject(await parseBody(req));
+    if (!verifyRazorpaySignature(body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature)) {
+      return json(res, 400, { error: "Payment verification failed" });
+    }
+    const donations = await store.listDonations({ ...member, role: "member" }, { limit: 100 });
+    const target = donations.find((item) => item.id === body.donationId && item.razorpayOrderId === body.razorpay_order_id);
+    if (!target) return json(res, 404, { error: "Donation record not found" });
+    const donation = await store.updateDonationPayment(target.id, {
+      status: "Paid",
+      razorpayPaymentId: body.razorpay_payment_id,
+      razorpaySignature: body.razorpay_signature
+    });
+    await tryCreateAuditLogs([{
+      memberId: member.id,
+      memberName: member.name,
+      action: "Donation paid",
+      field: donation.fundType,
+      oldValue: "Payment Started",
+      newValue: `${currency(donation.amount)} Razorpay ${donation.razorpayPaymentId}`,
+      ...auditActor({ id: member.id, name: member.name, role: "member" })
+    }]);
+    return json(res, 200, { donation });
   }
 
   if (pathname === "/api/member-photo" && req.method === "POST") {
@@ -883,6 +1045,52 @@ async function api(req, res, pathname) {
     const problem = await store.updateMemberProblem(user, memberProblemMatch[1], body);
     if (!problem) return json(res, 404, { error: "Problem not found or outside your area" });
     return json(res, 200, { problem });
+  }
+
+  if (pathname === "/api/donations" && req.method === "GET") {
+    if (!canViewDonations(user)) return json(res, 403, { error: "Donation report access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const donations = await store.listDonations(user, {
+      search: url.searchParams.get("search") || "",
+      status: url.searchParams.get("status") || "",
+      fundType: url.searchParams.get("fundType") || "",
+      limit: Number(url.searchParams.get("limit") || 500)
+    });
+    return json(res, 200, { donations, summary: store.donationSummary(donations), razorpayConfigured: razorpayConfigured() });
+  }
+
+  if (pathname === "/api/donations/export.csv" && req.method === "GET") {
+    if (!canViewDonations(user)) return json(res, 403, { error: "Donation report access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const donations = await store.listDonations(user, {
+      search: url.searchParams.get("search") || "",
+      status: url.searchParams.get("status") || "",
+      fundType: url.searchParams.get("fundType") || "",
+      limit: 100000
+    });
+    const headers = ["Date", "Member", "LS Number", "Phone", "District", "Taluk", "Fund", "Amount", "Method", "Status", "Reference", "Remarks"];
+    return csvDownload(res, `klswa-donations-${new Date().toISOString().slice(0, 10)}.csv`, headers, donations.map((item) => ({
+      Date: item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN") : "",
+      Member: item.memberName,
+      "LS Number": item.lsNumber,
+      Phone: item.phoneNumber,
+      District: item.district,
+      Taluk: item.taluk,
+      Fund: item.fundType,
+      Amount: item.amount,
+      Method: item.paymentMethod,
+      Status: item.status,
+      Reference: item.razorpayPaymentId || item.manualReference || item.razorpayOrderId,
+      Remarks: item.remarks
+    })));
+  }
+
+  const donationMatch = pathname.match(/^\/api\/donations\/([^/]+)$/);
+  if (donationMatch && req.method === "PUT") {
+    if (!canVerifyDonations(user)) return json(res, 403, { error: "Donation verification access required" });
+    const donation = await store.updateDonationStatus(user, donationMatch[1], asObject(await parseBody(req)));
+    if (!donation) return json(res, 404, { error: "Donation not found or outside your area" });
+    return json(res, 200, { donation });
   }
 
   if (pathname === "/api/admin/backup" && req.method === "GET") {
@@ -1482,6 +1690,9 @@ const server = http.createServer(async (req, res) => {
       "/api/member-photo",
       "/api/member-license-card",
       "/api/member-problems",
+      "/api/member-donations/manual",
+      "/api/member-donations/razorpay-order",
+      "/api/member-donations/razorpay-verify",
       "/api/member-correction-request",
       "/api/member-forgot-password",
       "/api/member-change-password"
