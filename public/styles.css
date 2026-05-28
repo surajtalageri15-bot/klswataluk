@@ -1601,9 +1601,12 @@ a.primary {
   font-weight: 800 !important;
 }
 
-.razorpay-fallback-link {
+.razorpay-loading {
+  display: inline-flex;
+  align-items: center;
   min-height: 46px;
-  text-decoration: none;
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .member-login-shell .audit-card {
@@ -2950,7 +2953,7 @@ tr:last-child td {
   }
 
   .razorpay-button-wrap form,
-  .razorpay-fallback-link {
+  .razorpay-button-wrap .razorpay-payment-button {
     width: 100%;
   }
 
