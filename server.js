@@ -488,7 +488,13 @@ function razorpayRequest(pathname, payload) {
           data = { error: { description: text || "Razorpay request failed" } };
         }
         if (response.statusCode >= 200 && response.statusCode < 300) resolve(data);
-        else reject(new Error(data.error?.description || "Razorpay request failed"));
+        else {
+          const message = data.error?.description || data.error?.reason || data.error?.code || "Razorpay request failed";
+          const error = new Error(message);
+          error.status = response.statusCode >= 400 && response.statusCode < 500 ? 400 : 502;
+          error.razorpay = data.error || data;
+          reject(error);
+        }
       });
     });
     request.on("error", reject);
