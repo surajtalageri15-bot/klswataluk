@@ -17,7 +17,7 @@ const state = {
   donations: { donations: [], summary: { totalAmount: 0, pendingAmount: 0, verifiedAmount: 0, count: 0, byFund: {} }, razorpayConfigured: false },
   serviceBookMembers: [],
   problemFilters: { search: "", status: "" },
-  donationFilters: { search: "", status: "", fundType: "" },
+  donationFilters: { search: "", status: "Paid", fundType: "" },
   sessionAnalytics: { summary: { users: 0, sessionCount: 0, totalSeconds: 0, todaySeconds: 0, activeUsers: 0 }, rows: [] },
   sessionFilters: { search: "", role: "taluk", from: "", to: "" },
   filters: { search: "", district: "", taluk: "" },
@@ -1071,26 +1071,26 @@ function renderMemberProblems() {
 function renderDonations() {
   const rows = state.donations.donations || [];
   const summary = state.donations.summary || {};
-  const statusOptions = ["Pending Verification", "Paid", "Verified", "Rejected"];
+  const statusOptions = ["Paid", "Verified"];
   const fundOptions = ["Horata Fund", "Legal Samiti Fund", "General Association Fund"];
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
         <div>
           <h2>Donation / Fund Reports</h2>
-          <p class="muted">Track Horata Fund, Legal Samiti Fund, Razorpay payments, and manual collections.</p>
+          <p class="muted">Only successful donations are shown here. Pending, rejected, and started payments are hidden.</p>
         </div>
         <span class="badge">${state.donations.razorpayConfigured ? "Razorpay active" : "Manual mode"}</span>
       </div>
       <div class="stats">
-        <div class="stat"><span>Total records</span><strong>${escapeHtml(summary.count || 0)}</strong></div>
+        <div class="stat"><span>Successful records</span><strong>${escapeHtml(summary.count || 0)}</strong></div>
         <div class="stat"><span>Total amount</span><strong>${escapeHtml(rupees(summary.totalAmount))}</strong></div>
         <div class="stat"><span>Paid / verified</span><strong>${escapeHtml(rupees(summary.verifiedAmount))}</strong></div>
-        <div class="stat"><span>Pending</span><strong>${escapeHtml(rupees(summary.pendingAmount))}</strong></div>
+        <div class="stat"><span>Visible status</span><strong>Success only</strong></div>
       </div>
       <div class="toolbar">
         <label>Search <input id="donationSearch" value="${escapeHtml(state.donationFilters.search)}" placeholder="Member, phone, LS, taluk"></label>
-        <label>Status <select id="donationStatus"><option value="">All status</option>${optionList(statusOptions, state.donationFilters.status)}</select></label>
+        <label>Status <select id="donationStatus"><option value="">Paid + Verified</option>${optionList(statusOptions, state.donationFilters.status)}</select></label>
         <label>Fund <select id="donationFund"><option value="">All funds</option>${optionList(fundOptions, state.donationFilters.fundType)}</select></label>
         <button class="secondary" id="applyDonationFilters">Apply</button>
         <a class="secondary" href="${exportUrl("/api/donations/export.csv", state.donationFilters)}">Export CSV</a>

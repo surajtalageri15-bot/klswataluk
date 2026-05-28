@@ -19,6 +19,7 @@ const memberSessions = new Map();
 const MEMBER_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 const DONATION_FUNDS = ["Horata Fund", "Legal Samiti Fund", "General Association Fund"];
 const MANUAL_DONATION_METHODS = ["UPI QR", "UPI ID", "Bank transfer", "Cash collected by taluk team"];
+const SUCCESSFUL_DONATION_STATUSES = ["Paid", "Verified"];
 
 function send(res, status, body, headers = {}) {
   const payload = typeof body === "string" || Buffer.isBuffer(body) ? body : JSON.stringify(body);
@@ -1134,24 +1135,28 @@ async function api(req, res, pathname) {
   if (pathname === "/api/donations" && req.method === "GET") {
     if (!canViewDonations(user)) return json(res, 403, { error: "Donation report access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const donations = await store.listDonations(user, {
+    const requestedStatus = url.searchParams.get("status") || "";
+    let donations = await store.listDonations(user, {
       search: url.searchParams.get("search") || "",
-      status: url.searchParams.get("status") || "",
+      status: SUCCESSFUL_DONATION_STATUSES.includes(requestedStatus) ? requestedStatus : "",
       fundType: url.searchParams.get("fundType") || "",
       limit: Number(url.searchParams.get("limit") || 500)
     });
+    donations = donations.filter((item) => SUCCESSFUL_DONATION_STATUSES.includes(item.status));
     return json(res, 200, { donations, summary: store.donationSummary(donations), razorpayConfigured: razorpayConfigured() });
   }
 
   if (pathname === "/api/donations/export.csv" && req.method === "GET") {
     if (!canViewDonations(user)) return json(res, 403, { error: "Donation report access required" });
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const donations = await store.listDonations(user, {
+    const requestedStatus = url.searchParams.get("status") || "";
+    let donations = await store.listDonations(user, {
       search: url.searchParams.get("search") || "",
-      status: url.searchParams.get("status") || "",
+      status: SUCCESSFUL_DONATION_STATUSES.includes(requestedStatus) ? requestedStatus : "",
       fundType: url.searchParams.get("fundType") || "",
       limit: 100000
     });
+    donations = donations.filter((item) => SUCCESSFUL_DONATION_STATUSES.includes(item.status));
     const headers = ["Date", "Member", "LS Number", "Phone", "District", "Taluk", "Fund", "Amount", "Method", "Status", "Reference", "Remarks"];
     return csvDownload(res, `klswa-donations-${new Date().toISOString().slice(0, 10)}.csv`, headers, donations.map((item) => ({
       Date: item.createdAt ? new Date(item.createdAt).toLocaleString("en-IN") : "",
