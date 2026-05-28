@@ -6,8 +6,6 @@ const loginMessage = document.querySelector("#loginMessage");
 const forgotMessage = document.querySelector("#forgotMessage");
 const dashboard = document.querySelector("#memberDashboard");
 const memberFormsGrid = document.querySelector(".public-member-grid");
-const donationFunds = ["Horata Fund", "Legal Samiti Fund", "General Association Fund"];
-const manualDonationMethods = ["UPI QR", "UPI ID", "Bank transfer", "Cash collected by taluk team"];
 const razorpayPaymentButtonId = "pl_Suq8LypT1hctYr";
 
 function escapeHtml(value) {
@@ -532,40 +530,6 @@ function memberDonationPanel(donations = []) {
       <div class="razorpay-button-wrap" id="razorpayPaymentButtonWrap"></div>
       <p class="muted">This hosted Razorpay button is provided by Razorpay. It opens Razorpay's secure payment page.</p>
     </section>
-    <section class="box public-form-card member-dashboard-card donation-card">
-      <div class="section-head">
-        <div>
-          <h2>Donation / Fund Support</h2>
-          <p class="muted">Support Horata Fund or Legal Samiti Fund. For records, submit Razorpay payment ID or UPI/bank transaction reference after payment.</p>
-        </div>
-      </div>
-      <form id="memberDonationForm" class="grid-form">
-        <label>Fund
-          <select name="fundType" required>${options(donationFunds)}</select>
-        </label>
-        <label>Amount
-          <input name="amount" type="number" min="1" step="1" placeholder="500" required>
-        </label>
-        <label>Payment method
-          <select name="paymentMethod" required>
-            <option value="Razorpay Dynamic QR">Razorpay Dynamic QR</option>
-            <option value="Razorpay">Razorpay online payment popup</option>
-            ${options(manualDonationMethods)}
-          </select>
-        </label>
-        <label>Transaction / reference number
-          <input name="manualReference" placeholder="UPI ref / bank ref / cash receipt">
-        </label>
-        <label class="full">Remarks
-          <textarea name="remarks" rows="3" placeholder="Optional note"></textarea>
-        </label>
-        <div class="full modal-actions">
-          <button class="primary" type="submit">Submit donation</button>
-        </div>
-        <div class="message full" id="memberDonationMessage"></div>
-      </form>
-      <div class="donation-qr-preview hidden" id="donationQrPreview"></div>
-    </section>
     <section class="box public-form-card member-dashboard-card donation-history-card">
       <h2>My Donation Receipts</h2>
       <div class="table-wrap">
@@ -590,17 +554,6 @@ function memberDonationPanel(donations = []) {
       </div>
     </section>
   `;
-}
-
-function loadRazorpayCheckout() {
-  return new Promise((resolve, reject) => {
-    if (window.Razorpay) return resolve();
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = resolve;
-    script.onerror = () => reject(new Error("Could not load Razorpay checkout"));
-    document.head.appendChild(script);
-  });
 }
 
 function mountRazorpayPaymentButton() {
@@ -1118,79 +1071,6 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       message.textContent = "Document uploaded for legal/team review.";
       const session = await request("/api/member-me");
       renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
-    } catch (error) {
-      message.textContent = error.message;
-    }
-  });
-
-  const donationForm = document.querySelector("#memberDonationForm");
-  donationForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const message = document.querySelector("#memberDonationMessage");
-    const qrPreview = document.querySelector("#donationQrPreview");
-    message.textContent = "";
-    qrPreview.classList.add("hidden");
-    qrPreview.innerHTML = "";
-    const payload = formObject(donationForm);
-    try {
-      if (payload.paymentMethod === "Razorpay Dynamic QR") {
-        const data = await request("/api/member-donations/razorpay-qr", {
-          method: "POST",
-          body: JSON.stringify(payload)
-        });
-        donationForm.reset();
-        qrPreview.classList.remove("hidden");
-        qrPreview.innerHTML = `
-          <div class="qr-box">
-            <h3>Scan and pay ${escapeHtml(rupees(data.donation.amount))}</h3>
-            ${data.donation.razorpayQrUrl ? `<img src="${escapeHtml(data.donation.razorpayQrUrl)}" alt="Razorpay QR code">` : ""}
-            ${data.donation.razorpayShortUrl ? `<p><a class="primary" href="${escapeHtml(data.donation.razorpayShortUrl)}" target="_blank">Open payment QR</a></p>` : ""}
-            <p class="muted">After payment, status will auto-update when Razorpay webhook confirms it. You can refresh this page after paying.</p>
-          </div>
-        `;
-        return;
-      }
-
-      if (payload.paymentMethod === "Razorpay") {
-        const orderData = await request("/api/member-donations/razorpay-order", {
-          method: "POST",
-          body: JSON.stringify(payload)
-        });
-        await loadRazorpayCheckout();
-        const checkout = new window.Razorpay({
-          key: orderData.keyId,
-          amount: orderData.order.amount,
-          currency: orderData.order.currency,
-          name: "KLSWA Donation",
-          description: payload.fundType,
-          order_id: orderData.order.id,
-          prefill: {
-            name: member.name || "",
-            contact: member.phoneNumber || ""
-          },
-          handler: async (response) => {
-            await request("/api/member-donations/razorpay-verify", {
-              method: "POST",
-              body: JSON.stringify({ ...response, donationId: orderData.donation.id })
-            });
-            const session = await request("/api/member-me");
-            renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
-            showMemberPanel("donations");
-          }
-        });
-        checkout.open();
-        return;
-      }
-
-      await request("/api/member-donations/manual", {
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
-      donationForm.reset();
-      message.textContent = "Donation submitted. Treasurer/Admin will verify payment.";
-      const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
-      showMemberPanel("donations");
     } catch (error) {
       message.textContent = error.message;
     }
