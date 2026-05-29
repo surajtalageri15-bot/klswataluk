@@ -666,6 +666,32 @@ function memberDonationPanel(donations = []) {
       </div>
       <p class="donation-note">After payment, keep the Razorpay payment receipt for your records.</p>
     </section>
+    <section class="box public-form-card member-dashboard-card donation-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Dynamic UPI QR</p>
+          <h2>Generate Amount QR</h2>
+          <p class="muted">Generate a single-use Razorpay QR using your member details.</p>
+        </div>
+      </div>
+      <form id="memberDonationQrForm" class="grid-form">
+        <label>Fund
+          <select name="fundType" required>
+            <option>Horata Fund</option>
+            <option>Legal Samiti Fund</option>
+            <option>General Association Fund</option>
+          </select>
+        </label>
+        <label>Amount
+          <input name="amount" type="number" min="1" step="1" required placeholder="500">
+        </label>
+        <div class="full modal-actions">
+          <button class="primary" type="submit">Generate Dynamic QR</button>
+        </div>
+        <div class="message full" id="memberDonationQrMessage"></div>
+      </form>
+      <div class="donation-qr-preview hidden" id="memberDonationQrPreview"></div>
+    </section>
     <section class="box public-form-card member-dashboard-card donation-history-card">
       <h2>My Donation Receipts</h2>
       <div class="table-wrap">
@@ -1216,6 +1242,33 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       message.textContent = "Document uploaded for legal/team review.";
       const session = await request("/api/member-me");
       renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
+
+  const donationQrForm = document.querySelector("#memberDonationQrForm");
+  donationQrForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#memberDonationQrMessage");
+    const preview = document.querySelector("#memberDonationQrPreview");
+    message.textContent = "";
+    preview.classList.add("hidden");
+    preview.innerHTML = "";
+    try {
+      const data = await request("/api/member-donations/razorpay-qr", {
+        method: "POST",
+        body: JSON.stringify(formObject(donationQrForm))
+      });
+      preview.classList.remove("hidden");
+      preview.innerHTML = `
+        <div class="qr-box">
+          <h3>Scan and pay ${escapeHtml(rupees(data.donation.amount))}</h3>
+          ${data.donation.razorpayQrUrl ? `<img src="${escapeHtml(data.donation.razorpayQrUrl)}" alt="Razorpay QR code">` : ""}
+          ${data.donation.razorpayShortUrl ? `<p><a class="primary" href="${escapeHtml(data.donation.razorpayShortUrl)}" target="_blank" rel="noopener">Open payment QR</a></p>` : ""}
+          <p class="muted">This QR is single-use and valid for 30 minutes. After payment, refresh this page to see status.</p>
+        </div>
+      `;
     } catch (error) {
       message.textContent = error.message;
     }

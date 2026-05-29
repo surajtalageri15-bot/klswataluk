@@ -601,6 +601,54 @@ async function api(req, res, pathname) {
     return json(res, 200, await store.getPublicSummary());
   }
 
+  if (pathname === "/api/public-donations/razorpay-qr" && req.method === "POST") {
+    if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured yet." });
+    const raw = asObject(await parseBody(req));
+    const donorName = String(raw.name || "").trim();
+    const donorPhone = String(raw.phoneNumber || "").trim();
+    if (!donorName) return json(res, 400, { error: "Name is required" });
+    if (!/^\d{10}$/.test(donorPhone)) return json(res, 400, { error: "Enter a valid 10-digit phone number" });
+    const body = normalizeDonationBody({ ...raw, paymentMethod: "Razorpay Dynamic QR" });
+    if (!DONATION_FUNDS.includes(body.fundType)) return json(res, 400, { error: "Select donation fund" });
+    if (!Number.isFinite(body.amount) || body.amount < 1) return json(res, 400, { error: "Enter donation amount" });
+    const amountPaise = Math.round(body.amount * 100);
+    const publicDonor = {
+      id: `public-${crypto.randomUUID()}`,
+      name: donorName,
+      phoneNumber: donorPhone,
+      lsNumber: String(raw.lsNumber || "").trim(),
+      district: "",
+      taluk: ""
+    };
+    const referenceId = `klswa_public_qr_${Date.now()}`;
+    const qr = await razorpayRequest("/v1/payments/qr_codes", {
+      type: "upi_qr",
+      name: "KLSWA Donation",
+      usage: "single_use",
+      fixed_amount: true,
+      payment_amount: amountPaise,
+      description: `${body.fundType} donation by ${donorName}`,
+      close_by: Math.floor(Date.now() / 1000) + 30 * 60,
+      notes: {
+        referenceId,
+        donorName,
+        donorPhone,
+        fundType: body.fundType,
+        source: "public_donation_page"
+      }
+    });
+    const donation = await store.createDonation(publicDonor, {
+      ...body,
+      paymentMethod: "Razorpay Dynamic QR",
+      status: "QR Generated",
+      razorpayQrId: qr.id,
+      razorpayQrUrl: qr.image_url || "",
+      razorpayShortUrl: qr.short_url || "",
+      manualReference: referenceId
+    });
+    return json(res, 201, { donation, qr });
+  }
+
   if (pathname === "/api/public-taluk-team-contacts" && req.method === "GET") {
     return json(res, 200, { contacts: await store.listPublicTalukTeamContacts() });
   }
@@ -1773,6 +1821,7 @@ const server = http.createServer(async (req, res) => {
       "/api/public-membership",
       "/api/public-status",
       "/api/public-strike-suggestion",
+      "/api/public-donations/razorpay-qr",
       "/api/member-activate",
       "/api/member-login",
       "/api/member-me",

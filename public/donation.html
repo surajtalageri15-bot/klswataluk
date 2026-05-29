@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLSWA Donation</title>
-  <link rel="stylesheet" href="/styles.css?v=20260528-donation-page">
+  <link rel="stylesheet" href="/styles.css?v=20260529-dynamic-qr">
 </head>
 <body>
   <main class="public-form-shell donation-page">
@@ -33,6 +33,42 @@
       <p class="donation-note">After payment, keep the Razorpay receipt for your records.</p>
     </section>
 
+    <section class="box public-form-card member-dashboard-card donation-card donation-public-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Dynamic UPI QR</p>
+          <h2>Generate Amount QR</h2>
+          <p class="muted">Enter donor details and amount. A single-use Razorpay UPI QR will be generated for 30 minutes.</p>
+        </div>
+      </div>
+      <form id="publicDonationQrForm" class="grid-form">
+        <label>Name *
+          <input name="name" required maxlength="120" placeholder="Donor name">
+        </label>
+        <label>Phone Number *
+          <input name="phoneNumber" required inputmode="numeric" maxlength="10" placeholder="10-digit phone">
+        </label>
+        <label>LS Number
+          <input name="lsNumber" maxlength="60" placeholder="Optional">
+        </label>
+        <label>Fund
+          <select name="fundType" required>
+            <option>Horata Fund</option>
+            <option>Legal Samiti Fund</option>
+            <option>General Association Fund</option>
+          </select>
+        </label>
+        <label>Amount
+          <input name="amount" type="number" min="1" step="1" required placeholder="500">
+        </label>
+        <div class="full modal-actions">
+          <button class="primary" type="submit">Generate Dynamic QR</button>
+        </div>
+        <div class="message full" id="publicDonationQrMessage"></div>
+      </form>
+      <div class="donation-qr-preview hidden" id="publicDonationQrPreview"></div>
+    </section>
+
     <section class="box public-form-card donation-info-card">
       <h2>Useful links</h2>
       <div class="public-link-grid compact">
@@ -49,6 +85,6 @@
       </div>
     </section>
   </main>
-  <script src="/donation.js?v=20260528-donation-page"></script>
+  <script src="/donation.js?v=20260529-dynamic-qr"></script>
 </body>
 </html>
