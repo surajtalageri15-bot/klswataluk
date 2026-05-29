@@ -241,6 +241,138 @@ function downloadApprovedApplication(member) {
   setTimeout(() => printWindow.print(), 350);
 }
 
+function dayaMaranaPetitionHtml(member) {
+  const generatedAt = new Date().toLocaleString("en-IN");
+  const today = new Date().toLocaleDateString("kn-IN", { day: "2-digit", month: "long", year: "numeric" });
+  const rows = [
+    ["ಸದಸ್ಯರ ಹೆಸರು", member.name],
+    ["LS ಸಂಖ್ಯೆ", member.lsNumber],
+    ["ಮೊಬೈಲ್ ಸಂಖ್ಯೆ", member.phoneNumber],
+    ["ಜಿಲ್ಲೆ", member.district],
+    ["ತಾಲ್ಲೂಕು", member.taluk],
+    ["ಮೊಜಿನಿ Login ID", member.loginId],
+    ["Batch Year", member.batchYear],
+    ["ವಿಳಾಸ", member.address]
+  ];
+  const points = [
+    ["ರಾಜ್ಯಾದ್ಯಂತ ಬಾಕಿ ಅರ್ಜಿಗಳು", "5,65,391 ಕಡತಗಳು (~6 ಲಕ್ಷ)"],
+    ["ಕ್ಷೇತ್ರ LS ಸಂಖ್ಯೆ", "4,300"],
+    ["ಪ್ರತಿ LS - ಮಾಸಿಕ ಕಡತಗಳು", "23 (15 ಯಶಸ್ವಿ + 6 ಅಯಶಸ್ವಿ + 2 ತಕರಾರು)"],
+    ["ಅರ್ಜಿದಾರ ಶುಲ್ಕ (ಪ್ರತಿ ಕಡತ)", "₹1,600 - ಸರ್ಕಾರಕ್ಕೆ ಪೂರ್ತಿ"],
+    ["LS ಗೆ ಯಶಸ್ವಿ ಕಡತಕ್ಕೆ ಸಿಗುವ ಮೊತ್ತ", "₹1,200 ಮಾತ್ರ"],
+    ["ತಕರಾರು ಕಡತಕ್ಕೆ LS ಗೆ ಸಂಭಾವನೆ", "ಶೂನ್ಯ (₹0) - ಕೆಲಸ ಉಚಿತ"],
+    ["LS ಮಾಸಿಕ ಒಟ್ಟು ಆದಾಯ", "₹20,160"],
+    ["LS ನಿವ್ವಳ ಕೈಗೆ ಬರುವ ಮೊತ್ತ", "₹10,000 - ₹12,000"],
+    ["ಸರ್ಕಾರದ ವಾರ್ಷಿಕ ನಿವ್ವಳ ಲಾಭ", "₹85.86 ಕೋಟಿ"]
+  ];
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>KLSWA Daya Marana Petition - ${escapeHtml(member.name)}</title>
+  <style>
+    body { font-family: Nirmala UI, Arial, sans-serif; margin: 28px; color: #17251d; line-height: 1.55; }
+    .letter { max-width: 820px; margin: 0 auto; }
+    .head { text-align: center; border-bottom: 3px solid #116047; padding-bottom: 12px; margin-bottom: 18px; }
+    .head h1 { margin: 0 0 6px; color: #116047; font-size: 22px; }
+    .head h2 { margin: 0; color: #27372e; font-size: 14px; letter-spacing: 0.3px; }
+    .address { font-size: 12px; color: #5d6b62; margin-top: 8px; }
+    .title { text-align: center; margin: 18px 0; padding: 14px; border: 1px solid #d9e2dc; background: #f7fbf7; }
+    .title h3 { margin: 0; color: #9a2222; font-size: 24px; }
+    .title p { margin: 6px 0 0; font-weight: 700; }
+    .meta { display: flex; justify-content: space-between; gap: 16px; margin: 14px 0; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; }
+    th, td { border: 1px solid #d9e2dc; padding: 8px 10px; vertical-align: top; }
+    th { background: #eaf3ed; color: #116047; text-align: left; }
+    .section-title { color: #116047; font-size: 18px; margin: 18px 0 8px; }
+    .quote { border-left: 4px solid #b48018; background: #fff8e6; padding: 12px; font-weight: 700; }
+    .member-box { background: #f6faf7; border: 1px solid #d9e2dc; padding: 12px; margin: 18px 0; }
+    .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 34px; }
+    .line { border-top: 1px solid #7c8c82; padding-top: 8px; min-height: 48px; }
+    .muted { color: #607064; font-size: 12px; }
+    p { margin: 9px 0; }
+    @page { size: A4; margin: 15mm; }
+    @media print { body { margin: 0; } .letter { max-width: none; } }
+  </style>
+</head>
+<body>
+  <main class="letter">
+    <div class="head">
+      <h1>ಅಖಿಲ ಕರ್ನಾಟಕ ಸರ್ಕಾರಿ ಪರವಾನಗಿ ಭೂಮಾಪಕರ ಸಂಘ (ರಿ.), ಬೆಂಗಳೂರು</h1>
+      <h2>AKHILA KARNATAKA SARKARI PARAVANAGI BHOOMAPAKARA SANGHA (R.), BENGALURU</h2>
+      <div class="address">357, 7ನೇ ಕ್ರಾಸ್, 3ನೇ ಮುಖ್ಯ, 6ನೇ ಹಂತ, W.O.C. ರಸ್ತೆ, ರಾಜಾಜಿನಗರ, ಬೆಂಗಳೂರು - 560 044 | Ph: 98800 92451 | Email: statelsassociation@gmail.com</div>
+    </div>
+
+    <div class="title">
+      <h3>ದಯಾ ಮರಣ ಮನವಿ</h3>
+      <p>- ನ್ಯಾಯ ಕೊಡಿ, ಇಲ್ಲದಿದ್ದರೆ ನಮ್ಮ ವೃತ್ತಿಗೆ ಗೌರವಯುತ ಅಂತ್ಯ ಕೊಡಿ -</p>
+    </div>
+
+    <div class="meta">
+      <div>ಸ್ವೀಕರಿಸುವವರು,<br>ಮಾನ್ಯ ಶ್ರೀ ಸಿದ್ದರಾಮಯ್ಯ ಅವರು,<br>ಗೌರವಾನ್ವಿತ ಮುಖ್ಯಮಂತ್ರಿಗಳು, ಕರ್ನಾಟಕ ಸರ್ಕಾರ,<br>ವಿಧಾನ ಸೌಧ, ಬೆಂಗಳೂರು - 560 001.</div>
+      <div>ದಿನಾಂಕ: ${escapeHtml(today)}</div>
+    </div>
+
+    <p><strong>ಮಾನ್ಯರೇ,</strong></p>
+    <p>ಕರ್ನಾಟಕದ 4,300 ಪರವಾನಗಿ ಭೂಮಾಪಕರು ಇಂದು ನಿಮ್ಮ ಮುಂದೆ ಒಂದು ಕಹಿ ಸತ್ಯ ಇಡುತ್ತಿದ್ದೇವೆ. ನಾವು ವರ್ಷಕ್ಕೆ ₹85 ಕೋಟಿ ಆದಾಯ ಸರ್ಕಾರದ ಬೊಕ್ಕಸಕ್ಕೆ ತಂದುಕೊಡುತ್ತೇವೆ. ಆದರೆ ನಮ್ಮ ನಿವ್ವಳ ಮಾಸಿಕ ಆದಾಯ ₹10,000 - ₹12,000 ಮಾತ್ರ - ಕರ್ನಾಟಕ ಕನಿಷ್ಠ ವೇತನ ಕಾಯಿದೆಯಡಿ ಅಕುಶಲ ದಿನಗೂಲಿ ಕಾರ್ಮಿಕರಿಗಿಂತಲೂ ಕಡಿಮೆ.</p>
+
+    <h3 class="section-title">ಪ್ರಮುಖ ಅಂಕಿ-ಅಂಶಗಳು (ಮೊಜಿನಿ ವರದಿ, ದಿ. 08-05-2026)</h3>
+    <table>
+      <thead><tr><th>ವಿವರ</th><th>ಮೊತ್ತ / ಸಂಖ್ಯೆ</th></tr></thead>
+      <tbody>${points.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join("")}</tbody>
+    </table>
+
+    <h3 class="section-title">ಕ್ಷೇತ್ರ ವಾಸ್ತವತೆ - ₹20,160 ರ ನಿಜ ಅರ್ಥ</h3>
+    <p>ಪ್ರತಿ ತಿಂಗಳು ₹20,160 ಸಂಪಾದಿಸುವ LS, ಅದೇ ಮೊತ್ತದಿಂದ ಹಳ್ಳಿಗಳಿಗೆ ಪೆಟ್ರೋಲ್, GPS / Total Station ಬಾಡಿಗೆ, ಸಹಾಯಕ ಕೂಲಿ, ನಕ್ಷೆ ಮುದ್ರಣ, ಮೊಬೈಲ್ ಡೇಟಾ, ಪರವಾನಗಿ ನವೀಕರಣ ಶುಲ್ಕ, ವಾಹನ ನಿರ್ವಹಣೆ - ಈ ಎಲ್ಲ ಖರ್ಚು ಭರಿಸಬೇಕಾಗುತ್ತದೆ. ಕೊನೆಗೆ ಕೈಗೆ ಬರುವ ಮೊತ್ತ ₹10,000 - ₹12,000 ಮಾತ್ರ.</p>
+    <p>ಇದೇ ಕೆಲಸ ಮಾಡುವ ಸರ್ಕಾರಿ ಭೂಮಾಪಕರಿಗೆ ಮೂಲ ವೇತನ ₹37,500 - ₹76,100 + DA + HRA + GPF + ಪಿಂಚಣಿ + ಬಡ್ತಿ ಕ್ರಮ. ಅದೇ 19 ವಿಧದ ಕೆಲಸ - ಆದರೆ ನಮಗೆ ಅರ್ಧಕ್ಕರ್ಧ ಕೂಡ ಇಲ್ಲ.</p>
+
+    <h3 class="section-title">ಸರ್ಕಾರವೇ ಒಪ್ಪಿಕೊಂಡ ಅಂಶಗಳು</h3>
+    <p>ಸರ್ಕಾರದ ಸ್ವಂತ ಕಾನೂನು ಅಭಿಪ್ರಾಯ ಪತ್ರ: "Licensed surveyors have been rendering all services as that of II Grade surveyors."</p>
+    <p>ಅದೇ ಪತ್ರ: "As a one time measure, they can be absorbed." - LS ಗಳ ನೇಮಕ ಕಾನೂನುಬಾಹಿರವಲ್ಲ; ಎಲ್ಲರೂ 240+ ದಿನ ಸೇವೆ ಸಲ್ಲಿಸಿದ್ದಾರೆ.</p>
+    <p>ಭೂಕಂದಾಯ ಕಾಯಿದೆ ಸೆಕ್ಷನ್ 18-A: "Appointment of Licensed Surveyors" - ಗುತ್ತಿಗೆ ಅಲ್ಲ, ನೇಮಕ.</p>
+    <p>ಮಾನ್ಯ ಉಚ್ಚ ನ್ಯಾಯಾಲಯ - 2013 (W.P. 51923-52207/2012) ಮತ್ತು 2023 (W.P. 18763/2022): ಎರಡು ಬಾಧ್ಯಕರ ಆದೇಶಗಳು - ಇಂದಿಗೂ ಜಾರಿಯಾಗಿಲ್ಲ.</p>
+
+    <h3 class="section-title">ನಮ್ಮ ವಿನಮ್ರ ಬೇಡಿಕೆ</h3>
+    <p><strong>ಆಯ್ಕೆ (ಎ): "ಒಂದು ಬಾರಿಯ ವಿಶೇಷ ಖಾಯಂಗೊಳಿಸುವಿಕೆ"</strong><br>ಪ್ರಸ್ತುತ ಕ್ಷೇತ್ರ ಕಾರ್ಯ ನಿರ್ವಹಿಸುತ್ತಿರುವ 4,300 (ಒಟ್ಟು 6,000+) ಪರವಾನಗಿ ಭೂಮಾಪಕರನ್ನು - ಭೂಮಾಪನ, ಕಂದಾಯ ವ್ಯವಸ್ಥೆ ಮತ್ತು ಭೂ-ದಾಖಲೆಗಳ ಇಲಾಖೆಯಲ್ಲಿ - KLR Rules 46-A ರಿಂದ 46-K ರ ತಿದ್ದುಪಡಿ ಮೂಲಕ ಸರ್ಕಾರಿ ಭೂಮಾಪಕರಾಗಿ ಖಾಯಂಗೊಳಿಸಬೇಕು.</p>
+    <p><strong>ಆಯ್ಕೆ (ಬಿ): "ಸಮಾನ ಕೆಲಸಕ್ಕೆ ಸಮಾನ ವೇತನ"</strong><br>LS ಗಳು ಸರ್ಕಾರಿ ಭೂಮಾಪಕರ ಸಮಾನ ಶಾಸನಬದ್ಧ ಕರ್ತವ್ಯಗಳನ್ನು ನಿರ್ವಹಿಸುವವರೆಗೆ - ಮೂಲ ವೇತನ ₹23,500 - ₹47,650 + DA + HRA + ಆರೋಗ್ಯ ವಿಮೆ + ಜೀವ ವಿಮೆ + ರಜಾ ಸೌಲಭ್ಯ + ಗ್ರಾಚ್ಯುಟಿ + ನಿವೃತ್ತಿ ಭದ್ರತೆ ಒದಗಿಸಬೇಕು.</p>
+
+    <div class="quote">ನ್ಯಾಯ ಕೊಡಿ - ಇಲ್ಲದಿದ್ದರೆ ನಮ್ಮ ವೃತ್ತಿಗೆ ದಯಾ ಮರಣ ಕೊಡಿ.</div>
+    <p>ಒಂದು ವೇಳೆ ಈ ಎರಡೂ ಆಯ್ಕೆಗಳನ್ನು ಪರಿಗಣಿಸಲು ಸರ್ಕಾರ ಸಿದ್ಧವಿಲ್ಲ ಎಂದಾದರೆ - ದಯವಿಟ್ಟು ನಮ್ಮ ಪರವಾನಗಿ ರದ್ದು ಮಾಡಿ. ₹10,000 ಸಂಪಾದಿಸಲು ₹8,000 ಖರ್ಚು ಮಾಡಿ, ಸ್ವಾಭಿಮಾನವನ್ನು ಕಳೆದುಕೊಳ್ಳುವ ವ್ಯವಸ್ಥೆಯಲ್ಲಿ ಮುಂದುವರಿಯಲು ಸಾಧ್ಯವಿಲ್ಲ.</p>
+
+    <div class="member-box">
+      <h3 class="section-title">ಸದಸ್ಯರ ಸ್ವಯಂ-ತುಂಬಿದ ವಿವರಗಳು</h3>
+      <table>
+        <tbody>${rows.map(([label, value]) => `<tr><td><strong>${escapeHtml(label)}</strong></td><td>${escapeHtml(value || "-")}</td></tr>`).join("")}</tbody>
+      </table>
+      <p>ಈ ಮನವಿಯ ವಿಷಯವನ್ನು ನಾನು ಓದಿ ಅರ್ಥ ಮಾಡಿಕೊಂಡಿದ್ದೇನೆ ಮತ್ತು ಸಂಘದ ನ್ಯಾಯಸಮ್ಮತ ಬೇಡಿಕೆಗೆ ಬೆಂಬಲ ಸೂಚಿಸುತ್ತೇನೆ.</p>
+    </div>
+
+    <p>ತಮ್ಮ ವಿಶ್ವಾಸಿ,</p>
+    <p>ಪರವಾಗಿ - ಅಖಿಲ ಕರ್ನಾಟಕ ಸರ್ಕಾರಿ ಪರವಾನಗಿ ಭೂಮಾಪಕರ ಸಂಘ (ರಿ.), ಬೆಂಗಳೂರು</p>
+
+    <div class="sign">
+      <div class="line">ಸದಸ್ಯರ ಸಹಿ<br>${escapeHtml(member.name || "")}</div>
+      <div class="line">ಅಧ್ಯಕ್ಷರು / ಪ್ರಧಾನ ಕಾರ್ಯದರ್ಶಿ</div>
+    </div>
+    <p class="muted">Generated on ${escapeHtml(generatedAt)} from KLSWA member login.</p>
+  </main>
+</body>
+</html>`;
+}
+
+function downloadDayaMaranaPetition(member) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("Please allow popups to download the petition PDF.");
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(dayaMaranaPetitionHtml(member));
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => printWindow.print(), 450);
+}
+
 const missingMemberFields = {
   name: "Name",
   phoneNumber: "Phone",
@@ -895,6 +1027,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
             <div class="detail-grid">${memberRows(member)}</div>
             <div class="modal-actions">
               <button class="secondary" id="openProfileEdit" type="button">Edit profile</button>
+              <button class="secondary" id="downloadDayaMaranaPetition" type="button">Download petition PDF</button>
               ${member.status === "Active" ? `<button class="primary" id="downloadApprovedApplication" type="button">Download approved application PDF</button>` : ""}
             </div>
           </section>
@@ -938,6 +1071,10 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   const downloadApplication = document.querySelector("#downloadApprovedApplication");
   if (downloadApplication) {
     downloadApplication.addEventListener("click", () => downloadApprovedApplication(member));
+  }
+  const downloadPetition = document.querySelector("#downloadDayaMaranaPetition");
+  if (downloadPetition) {
+    downloadPetition.addEventListener("click", () => downloadDayaMaranaPetition(member));
   }
   const openProfileEdit = document.querySelector("#openProfileEdit");
   if (openProfileEdit) {
