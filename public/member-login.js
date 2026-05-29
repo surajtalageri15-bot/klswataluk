@@ -242,7 +242,7 @@ function downloadApprovedApplication(member) {
 }
 
 function dayaMaranaPetitionHtml(member) {
-  const today = new Date().toLocaleDateString("kn-IN", { day: "2-digit", month: "long", year: "numeric" });
+  const applicationDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
   const rows = [
     ["ಸದಸ್ಯರ ಹೆಸರು", member.name],
     ["LS ಸಂಖ್ಯೆ", member.lsNumber],
@@ -311,7 +311,7 @@ function dayaMaranaPetitionHtml(member) {
 
     <div class="meta">
       <div class="recipient-lines">ಸ್ವೀಕರಿಸುವವರು / To,<br><span class="blank-line"></span><span class="blank-line"></span><span class="blank-line"></span><span class="blank-line"></span></div>
-      <div>ದಿನಾಂಕ: ${escapeHtml(today)}</div>
+      <div>ಅರ್ಜಿ ದಿನಾಂಕ / Application Date:<br>${escapeHtml(applicationDate)}</div>
     </div>
 
     <p><strong>ಮಾನ್ಯರೇ,</strong></p>
