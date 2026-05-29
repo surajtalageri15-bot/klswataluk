@@ -2214,7 +2214,7 @@ function normalizeDonationInput(input = {}) {
 function assertDonation(input) {
   if (!["Horata Fund", "Legal Samiti Fund", "General Association Fund"].includes(input.fundType)) return "Select a valid donation fund";
   if (!Number.isInteger(input.amountPaise) || input.amountPaise < 100) return "Donation amount must be at least Rs. 1";
-  if (!["Razorpay", "UPI QR", "UPI ID", "Bank transfer", "Cash collected by taluk team", "Manual"].includes(input.paymentMethod)) return "Select a valid payment method";
+  if (!["Razorpay", "Razorpay Dynamic QR", "UPI QR", "UPI ID", "Bank transfer", "Cash collected by taluk team", "Manual"].includes(input.paymentMethod)) return "Select a valid payment method";
   return "";
 }
 
