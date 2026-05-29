@@ -1233,7 +1233,12 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
         <div class="qr-box">
           <h3>Scan and pay ${escapeHtml(rupees(data.donation.amount))}</h3>
           ${data.donation.razorpayQrUrl ? `<img src="${escapeHtml(data.donation.razorpayQrUrl)}" alt="Razorpay QR code">` : ""}
-          ${data.donation.razorpayShortUrl ? `<p><a class="primary" href="${escapeHtml(data.donation.razorpayShortUrl)}" target="_blank" rel="noopener">Open payment QR</a></p>` : ""}
+          ${data.donation.razorpayShortUrl ? `
+            <div class="qr-pay-actions">
+              <a class="primary pay-now-mobile" href="${escapeHtml(data.donation.razorpayShortUrl)}" target="_blank" rel="noopener">Pay Now on Mobile</a>
+            </div>
+            <p class="qr-mobile-tip">Mobile nalli idre button tap madi. Desktop nalli QR scan madi.</p>
+          ` : ""}
           <p class="muted">This QR is single-use and valid for 30 minutes. After payment, refresh this page to see status.</p>
         </div>
       `;

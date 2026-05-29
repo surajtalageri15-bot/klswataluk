@@ -1596,6 +1596,24 @@ a.primary {
   box-shadow: var(--shadow);
 }
 
+.qr-pay-actions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.pay-now-mobile {
+  min-width: min(100%, 280px);
+  text-align: center;
+  text-decoration: none;
+}
+
+.qr-mobile-tip {
+  margin: 0;
+  color: var(--green-dark);
+  font-weight: 800;
+}
+
 .razorpay-button-wrap {
   display: flex;
   align-items: center;
@@ -2971,6 +2989,10 @@ tr:last-child td {
 
   .razorpay-button-wrap form,
   .razorpay-button-wrap .razorpay-payment-button {
+    width: 100%;
+  }
+
+  .pay-now-mobile {
     width: 100%;
   }
 
