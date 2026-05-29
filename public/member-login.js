@@ -242,7 +242,6 @@ function downloadApprovedApplication(member) {
 }
 
 function dayaMaranaPetitionHtml(member) {
-  const generatedAt = new Date().toLocaleString("en-IN");
   const today = new Date().toLocaleDateString("kn-IN", { day: "2-digit", month: "long", year: "numeric" });
   const rows = [
     ["ಸದಸ್ಯರ ಹೆಸರು", member.name],
@@ -289,7 +288,7 @@ function dayaMaranaPetitionHtml(member) {
     .section-title { color: #116047; font-size: 18px; margin: 18px 0 8px; }
     .quote { border-left: 4px solid #b48018; background: #fff8e6; padding: 12px; font-weight: 700; }
     .member-box { background: #f6faf7; border: 1px solid #d9e2dc; padding: 12px; margin: 18px 0; }
-    .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 34px; }
+    .sign { display: grid; grid-template-columns: minmax(240px, 360px); gap: 24px; margin-top: 34px; }
     .line { border-top: 1px solid #7c8c82; padding-top: 8px; min-height: 48px; }
     .muted { color: #607064; font-size: 12px; }
     p { margin: 9px 0; }
@@ -349,14 +348,9 @@ function dayaMaranaPetitionHtml(member) {
       <p>ಈ ಮನವಿಯ ವಿಷಯವನ್ನು ನಾನು ಓದಿ ಅರ್ಥ ಮಾಡಿಕೊಂಡಿದ್ದೇನೆ ಮತ್ತು ಸಂಘದ ನ್ಯಾಯಸಮ್ಮತ ಬೇಡಿಕೆಗೆ ಬೆಂಬಲ ಸೂಚಿಸುತ್ತೇನೆ.</p>
     </div>
 
-    <p>ತಮ್ಮ ವಿಶ್ವಾಸಿ,</p>
-    <p>ಪರವಾಗಿ - ಅಖಿಲ ಕರ್ನಾಟಕ ಸರ್ಕಾರಿ ಪರವಾನಗಿ ಭೂಮಾಪಕರ ಸಂಘ (ರಿ.), ಬೆಂಗಳೂರು</p>
-
     <div class="sign">
       <div class="line">ಸದಸ್ಯರ ಸಹಿ<br>${escapeHtml(member.name || "")}</div>
-      <div class="line">ಅಧ್ಯಕ್ಷರು / ಪ್ರಧಾನ ಕಾರ್ಯದರ್ಶಿ</div>
     </div>
-    <p class="muted">Generated on ${escapeHtml(generatedAt)} from KLSWA member login.</p>
   </main>
 </body>
 </html>`;
