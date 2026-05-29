@@ -6,8 +6,6 @@ const loginMessage = document.querySelector("#loginMessage");
 const forgotMessage = document.querySelector("#forgotMessage");
 const dashboard = document.querySelector("#memberDashboard");
 const memberFormsGrid = document.querySelector(".public-member-grid");
-const razorpayPaymentButtonId = "pl_Suq8LypT1hctYr";
-
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -653,24 +651,14 @@ function memberDonationPanel(donations = []) {
         <div>
           <p class="eyebrow">KLSWA Secure Donation</p>
           <h2>Horata & Legal Samiti Fund</h2>
-          <p>Pay safely using Razorpay. UPI, cards, and netbanking options may be available inside Razorpay checkout.</p>
+          <p>Generate a Razorpay UPI QR, scan it from any UPI app, and pay directly.</p>
         </div>
         <span class="donation-secure-badge">Secured by Razorpay</span>
       </div>
-      <div class="donation-payment-box">
-        <div>
-          <strong>Donate online</strong>
-          <p class="muted">Click the button below and complete payment on Razorpay's secure page.</p>
-        </div>
-        <div class="razorpay-button-wrap" id="razorpayPaymentButtonWrap"></div>
-      </div>
-      <p class="donation-note">After payment, keep the Razorpay payment receipt for your records.</p>
-    </section>
-    <section class="box public-form-card member-dashboard-card donation-card">
       <div class="section-head">
         <div>
           <p class="eyebrow">Dynamic UPI QR</p>
-          <h2>Generate Amount QR</h2>
+          <h2>Generate Razorpay QR</h2>
           <p class="muted">Generate a single-use Razorpay QR using your member details.</p>
         </div>
       </div>
@@ -716,24 +704,6 @@ function memberDonationPanel(donations = []) {
       </div>
     </section>
   `;
-}
-
-function mountRazorpayPaymentButton() {
-  const target = document.querySelector("#razorpayPaymentButtonWrap");
-  if (!target || target.dataset.loaded === "true") return;
-  target.dataset.loaded = "true";
-  target.innerHTML = `<span class="razorpay-loading">Loading secure Razorpay button...</span>`;
-  const form = document.createElement("form");
-  const script = document.createElement("script");
-  script.src = "https://checkout.razorpay.com/v1/payment-button.js";
-  script.async = true;
-  script.dataset.payment_button_id = razorpayPaymentButtonId;
-  script.onload = () => {
-    const loading = target.querySelector(".razorpay-loading");
-    if (loading) loading.remove();
-  };
-  form.appendChild(script);
-  target.prepend(form);
 }
 
 function monthLabel(value) {
@@ -1130,8 +1100,6 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     emptyMessage: "Upload JPG, PNG, or WEBP licence card image.",
     sizeMessage: "Licence card image must be less than 3 MB."
   });
-  mountRazorpayPaymentButton();
-
   document.querySelector("#copyTalukSupport").addEventListener("click", async () => {
     await copyText(document.querySelector("#talukSupportMessage").value);
     const status = document.querySelector("#talukSupportStatus");

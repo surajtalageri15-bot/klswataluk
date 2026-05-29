@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>KLSWA Donation</title>
-  <link rel="stylesheet" href="/styles.css?v=20260529-dynamic-qr">
+  <link rel="stylesheet" href="/styles.css?v=20260529-qr-only">
 </head>
 <body>
   <main class="public-form-shell donation-page">
     <section class="public-form-intro">
       <p class="eyebrow">AKSPBS / KLSWA</p>
       <h1>Donation / Fund Support</h1>
-      <p>Support Horata Fund and Legal Samiti Fund through the official Razorpay payment button.</p>
+      <p>Enter amount, generate Razorpay UPI QR, scan, and pay directly.</p>
     </section>
 
     <section class="box public-form-card member-dashboard-card donation-card donation-public-card">
@@ -19,25 +19,14 @@
         <div>
           <p class="eyebrow">KLSWA Secure Donation</p>
           <h2>Horata & Legal Samiti Fund</h2>
-          <p>Pay safely using Razorpay. UPI, cards, and netbanking options may be available inside Razorpay checkout.</p>
+          <p>Generate a single-use Razorpay UPI QR for the exact amount and scan it from any UPI app.</p>
         </div>
         <span class="donation-secure-badge">Secured by Razorpay</span>
       </div>
-      <div class="donation-payment-box">
-        <div>
-          <strong>Donate online</strong>
-          <p class="muted">Click below and complete payment on Razorpay's secure page.</p>
-        </div>
-        <div class="razorpay-button-wrap" id="razorpayPaymentButtonWrap"></div>
-      </div>
-      <p class="donation-note">After payment, keep the Razorpay receipt for your records.</p>
-    </section>
-
-    <section class="box public-form-card member-dashboard-card donation-card donation-public-card">
       <div class="section-head">
         <div>
           <p class="eyebrow">Dynamic UPI QR</p>
-          <h2>Generate Amount QR</h2>
+          <h2>Generate Razorpay QR</h2>
           <p class="muted">Enter donor details and amount. A single-use Razorpay UPI QR will be generated for 30 minutes.</p>
         </div>
       </div>
@@ -85,6 +74,6 @@
       </div>
     </section>
   </main>
-  <script src="/donation.js?v=20260529-dynamic-qr"></script>
+  <script src="/donation.js?v=20260529-qr-only"></script>
 </body>
 </html>
