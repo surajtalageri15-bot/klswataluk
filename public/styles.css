@@ -1546,24 +1546,6 @@ a.primary {
   font-size: 18px;
 }
 
-.donation-payment-link {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 16px;
-  align-items: center;
-  margin: 22px;
-  padding: 18px;
-  border: 1px solid rgba(184, 128, 20, 0.26);
-  border-radius: 8px;
-  background: linear-gradient(135deg, #fffaf0, #f6fbf5);
-}
-
-.donation-payment-link strong {
-  display: block;
-  color: var(--green-dark);
-  font-size: 18px;
-}
-
 .donation-note {
   margin: 0 22px 22px;
   padding: 12px 14px;
@@ -2993,8 +2975,7 @@ tr:last-child td {
   }
 
   .donation-hero,
-  .donation-payment-box,
-  .donation-payment-link {
+  .donation-payment-box {
     grid-template-columns: 1fr;
   }
 
@@ -3193,8 +3174,7 @@ tr:last-child td {
 
 @media (max-width: 560px) {
   .donation-hero,
-  .donation-payment-box,
-  .donation-payment-link {
+  .donation-payment-box {
     margin-left: 12px;
     margin-right: 12px;
   }

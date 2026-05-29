@@ -2294,6 +2294,38 @@ async function updateDonationPayment(id, input = {}) {
   return donation;
 }
 
+async function updateDonationPaymentByOrder(id, orderId, input = {}) {
+  const safeId = String(id || "").trim();
+  const safeOrderId = String(orderId || "").trim();
+  if (!safeId || !safeOrderId) return null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      `update donations
+       set status = $3, razorpay_payment_id = $4, razorpay_signature = $5, updated_at = now()
+       where id = $1 and razorpay_order_id = $2
+       returning *`,
+      [
+        safeId,
+        safeOrderId,
+        input.status || "Paid",
+        String(input.razorpayPaymentId || ""),
+        String(input.razorpaySignature || "")
+      ]
+    );
+    await touchMeta();
+    return toDonation(result.rows[0]) || null;
+  }
+  const db = await readJsonDb();
+  const donation = (db.donations || []).find((item) => item.id === safeId && item.razorpayOrderId === safeOrderId);
+  if (!donation) return null;
+  donation.status = input.status || "Paid";
+  donation.razorpayPaymentId = String(input.razorpayPaymentId || "");
+  donation.razorpaySignature = String(input.razorpaySignature || "");
+  donation.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return donation;
+}
+
 async function updateDonationQrPaymentByQrId(qrId, input = {}) {
   const safeQrId = String(qrId || "").trim();
   if (!safeQrId) return null;
@@ -3352,6 +3384,7 @@ module.exports = {
   updateMemberProblem,
   createDonation,
   updateDonationPayment,
+  updateDonationPaymentByOrder,
   updateDonationQrPaymentByQrId,
   listDonations,
   updateDonationStatus,

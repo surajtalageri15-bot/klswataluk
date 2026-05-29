@@ -11,7 +11,7 @@
     <section class="public-form-intro">
       <p class="eyebrow">AKSPBS / KLSWA</p>
       <h1>Donation / Fund Support</h1>
-      <p>Enter amount, generate Razorpay UPI QR, scan, and pay directly.</p>
+      <p>Enter donor details and pay securely through Razorpay API checkout.</p>
     </section>
 
     <section class="box public-form-card member-dashboard-card donation-card donation-public-card">
@@ -19,25 +19,18 @@
         <div>
           <p class="eyebrow">KLSWA Secure Donation</p>
           <h2>Horata & Legal Samiti Fund</h2>
-          <p>Pay through Razorpay using UPI, Paytm, PhonePe, GPay, card, or generate a single-use UPI QR.</p>
+          <p>Pay through Razorpay using UPI apps, card, or netbanking.</p>
         </div>
         <span class="donation-secure-badge">Secured by Razorpay</span>
       </div>
-      <div class="donation-payment-link hidden" id="publicPaymentLinkBox">
-        <div>
-          <strong>Razorpay Payment Link</strong>
-          <p class="muted">Best for mobile users. Opens Razorpay secure payment page with UPI, Paytm, PhonePe and GPay options.</p>
-        </div>
-        <a class="primary pay-now-mobile" id="publicPaymentLink" href="#" target="_blank" rel="noopener">Pay Now by Razorpay / Paytm</a>
-      </div>
       <div class="section-head">
         <div>
-          <p class="eyebrow">Dynamic UPI QR</p>
-          <h2>Generate Razorpay QR</h2>
-          <p class="muted">Enter donor details and amount. A single-use Razorpay UPI QR will be generated for 30 minutes.</p>
+          <p class="eyebrow">Razorpay API Payment</p>
+          <h2>Pay online</h2>
+          <p class="muted">Enter donor details and amount. Razorpay secure checkout will open for payment.</p>
         </div>
       </div>
-      <form id="publicDonationQrForm" class="grid-form">
+      <form id="publicDonationPayForm" class="grid-form">
         <label>Name *
           <input name="name" required maxlength="120" placeholder="Donor name">
         </label>
@@ -58,11 +51,11 @@
           <input name="amount" type="number" min="1" step="1" required placeholder="500">
         </label>
         <div class="full modal-actions">
-          <button class="primary" type="submit">Generate Dynamic QR</button>
+          <button class="primary" type="submit">Pay Now</button>
         </div>
-        <div class="message full" id="publicDonationQrMessage"></div>
+        <div class="message full" id="publicDonationPayMessage"></div>
       </form>
-      <div class="donation-qr-preview hidden" id="publicDonationQrPreview"></div>
+      <div class="donation-qr-preview hidden" id="publicDonationPayResult"></div>
     </section>
 
     <section class="box public-form-card donation-info-card">
@@ -81,6 +74,7 @@
       </div>
     </section>
   </main>
-  <script src="/donation.js?v=20260529-payment-link"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="/donation.js?v=20260529-api-pay"></script>
 </body>
 </html>

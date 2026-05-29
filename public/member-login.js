@@ -30,18 +30,19 @@ function formObject(form) {
   return Object.fromEntries(new FormData(form));
 }
 
-async function loadDonationPaymentLink(containerId, linkId) {
-  const box = document.querySelector(`#${containerId}`);
-  const link = document.querySelector(`#${linkId}`);
-  if (!box || !link) return;
-  try {
-    const data = await request("/api/donation-payment-link");
-    if (!data.paymentLink) return;
-    link.href = data.paymentLink;
-    box.classList.remove("hidden");
-  } catch {
-    box.classList.add("hidden");
-  }
+function requireRazorpay() {
+  if (!window.Razorpay) throw new Error("Razorpay checkout did not load. Please refresh and try again.");
+}
+
+function showDonationPaidResult(preview, donation) {
+  preview.classList.remove("hidden");
+  preview.innerHTML = `
+    <div class="qr-box">
+      <h3>Payment successful</h3>
+      <p><strong>${escapeHtml(rupees(donation.amount))}</strong> received for ${escapeHtml(donation.fundType)}.</p>
+      <p class="muted">Payment ID: ${escapeHtml(donation.razorpayPaymentId || "-")}</p>
+    </div>
+  `;
 }
 
 function batchYearOptions() {
@@ -665,25 +666,18 @@ function memberDonationPanel(donations = []) {
         <div>
           <p class="eyebrow">KLSWA Secure Donation</p>
           <h2>Horata & Legal Samiti Fund</h2>
-          <p>Pay through Razorpay using UPI, Paytm, PhonePe, GPay, card, or generate a single-use UPI QR.</p>
+          <p>Pay through Razorpay using UPI apps, card, or netbanking.</p>
         </div>
         <span class="donation-secure-badge">Secured by Razorpay</span>
       </div>
-      <div class="donation-payment-link hidden" id="memberPaymentLinkBox">
-        <div>
-          <strong>Razorpay Payment Link</strong>
-          <p class="muted">Best for mobile users. Opens Razorpay secure payment page with UPI, Paytm, PhonePe and GPay options.</p>
-        </div>
-        <a class="primary pay-now-mobile" id="memberPaymentLink" href="#" target="_blank" rel="noopener">Pay Now by Razorpay / Paytm</a>
-      </div>
       <div class="section-head">
         <div>
-          <p class="eyebrow">Dynamic UPI QR</p>
-          <h2>Generate Razorpay QR</h2>
-          <p class="muted">Generate a single-use Razorpay QR using your member details.</p>
+          <p class="eyebrow">Razorpay API Payment</p>
+          <h2>Pay online</h2>
+          <p class="muted">Enter amount. Razorpay secure checkout will open for payment.</p>
         </div>
       </div>
-      <form id="memberDonationQrForm" class="grid-form">
+      <form id="memberDonationPayForm" class="grid-form">
         <label>Fund
           <select name="fundType" required>
             <option>Horata Fund</option>
@@ -695,11 +689,11 @@ function memberDonationPanel(donations = []) {
           <input name="amount" type="number" min="1" step="1" required placeholder="500">
         </label>
         <div class="full modal-actions">
-          <button class="primary" type="submit">Generate Dynamic QR</button>
+          <button class="primary" type="submit">Pay Now</button>
         </div>
-        <div class="message full" id="memberDonationQrMessage"></div>
+        <div class="message full" id="memberDonationPayMessage"></div>
       </form>
-      <div class="donation-qr-preview hidden" id="memberDonationQrPreview"></div>
+      <div class="donation-qr-preview hidden" id="memberDonationPayResult"></div>
     </section>
     <section class="box public-form-card member-dashboard-card donation-history-card">
       <h2>My Donation Receipts</h2>
@@ -1106,7 +1100,6 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   document.querySelectorAll("[data-member-tab]").forEach((button) => {
     button.addEventListener("click", () => showMemberPanel(button.dataset.memberTab));
   });
-  loadDonationPaymentLink("memberPaymentLinkBox", "memberPaymentLink");
 
   bindMemberImageUpload({
     inputId: "memberPhotoInput",
@@ -1237,35 +1230,66 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
     }
   });
 
-  const donationQrForm = document.querySelector("#memberDonationQrForm");
-  donationQrForm.addEventListener("submit", async (event) => {
+  const donationPayForm = document.querySelector("#memberDonationPayForm");
+  donationPayForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const message = document.querySelector("#memberDonationQrMessage");
-    const preview = document.querySelector("#memberDonationQrPreview");
+    const button = donationPayForm.querySelector('button[type="submit"]');
+    const message = document.querySelector("#memberDonationPayMessage");
+    const preview = document.querySelector("#memberDonationPayResult");
     message.textContent = "";
     preview.classList.add("hidden");
     preview.innerHTML = "";
+    button.disabled = true;
     try {
-      const data = await request("/api/member-donations/razorpay-qr", {
+      requireRazorpay();
+      const data = await request("/api/member-donations/razorpay-order", {
         method: "POST",
-        body: JSON.stringify(formObject(donationQrForm))
+        body: JSON.stringify(formObject(donationPayForm))
       });
-      preview.classList.remove("hidden");
-      preview.innerHTML = `
-        <div class="qr-box">
-          <h3>Scan and pay ${escapeHtml(rupees(data.donation.amount))}</h3>
-          ${data.donation.razorpayQrUrl ? `<img src="${escapeHtml(data.donation.razorpayQrUrl)}" alt="Razorpay QR code">` : ""}
-          ${data.donation.razorpayShortUrl ? `
-            <div class="qr-pay-actions">
-              <a class="primary pay-now-mobile" href="${escapeHtml(data.donation.razorpayShortUrl)}" target="_blank" rel="noopener">Pay Now on Mobile</a>
-            </div>
-            <p class="qr-mobile-tip">Mobile nalli idre button tap madi. Desktop nalli QR scan madi.</p>
-          ` : ""}
-          <p class="muted">This QR is single-use and valid for 30 minutes. After payment, refresh this page to see status.</p>
-        </div>
-      `;
+      const checkout = new window.Razorpay({
+        key: data.keyId,
+        amount: data.order.amount,
+        currency: data.order.currency || "INR",
+        name: "KLSWA Donation",
+        description: data.donation.fundType,
+        order_id: data.order.id,
+        prefill: {
+          name: data.member.name,
+          contact: data.member.phoneNumber
+        },
+        notes: {
+          donationId: data.donation.id,
+          memberId: data.member.id,
+          fundType: data.donation.fundType
+        },
+        theme: { color: "#0f6f4d" },
+        handler: async (response) => {
+          try {
+            const verified = await request("/api/member-donations/razorpay-verify", {
+              method: "POST",
+              body: JSON.stringify({ ...response, donationId: data.donation.id })
+            });
+            showDonationPaidResult(preview, verified.donation);
+            donationPayForm.reset();
+            message.textContent = "Donation payment completed successfully.";
+            const session = await request("/api/member-me");
+            renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+            showMemberPanel("donations");
+          } catch (error) {
+            message.textContent = error.message;
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            message.textContent = "Payment window closed. If amount was debited, please contact admin with payment ID.";
+          }
+        }
+      });
+      checkout.open();
     } catch (error) {
       message.textContent = error.message;
+    } finally {
+      button.disabled = false;
     }
   });
 

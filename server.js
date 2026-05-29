@@ -464,11 +464,6 @@ function razorpayConfigured() {
   return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 }
 
-function razorpayPaymentLink() {
-  const link = String(process.env.RAZORPAY_PAYMENT_LINK || process.env.RAZORPAY_PAYTM_LINK || "").trim();
-  return /^https:\/\/.+/i.test(link) ? link : "";
-}
-
 function razorpayRequest(pathname, payload) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
@@ -606,40 +601,33 @@ async function api(req, res, pathname) {
     return json(res, 200, await store.getPublicSummary());
   }
 
-  if (pathname === "/api/donation-payment-link" && req.method === "GET") {
-    return json(res, 200, { paymentLink: razorpayPaymentLink() });
-  }
-
-  if (pathname === "/api/public-donations/razorpay-qr" && req.method === "POST") {
+  if (pathname === "/api/public-donations/razorpay-order" && req.method === "POST") {
     if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured yet." });
     const raw = asObject(await parseBody(req));
     const donorName = String(raw.name || "").trim();
     const donorPhone = String(raw.phoneNumber || "").trim();
     if (!donorName) return json(res, 400, { error: "Name is required" });
     if (!/^\d{10}$/.test(donorPhone)) return json(res, 400, { error: "Enter a valid 10-digit phone number" });
-    const body = normalizeDonationBody({ ...raw, paymentMethod: "Razorpay Dynamic QR" });
+    const body = normalizeDonationBody({ ...raw, paymentMethod: "Razorpay" });
     if (!DONATION_FUNDS.includes(body.fundType)) return json(res, 400, { error: "Select donation fund" });
     if (!Number.isFinite(body.amount) || body.amount < 1) return json(res, 400, { error: "Enter donation amount" });
     const amountPaise = Math.round(body.amount * 100);
+    const publicDonorId = `public-${crypto.randomUUID()}`;
     const publicDonor = {
-      id: `public-${crypto.randomUUID()}`,
+      id: publicDonorId,
       name: donorName,
       phoneNumber: donorPhone,
       lsNumber: String(raw.lsNumber || "").trim(),
       district: "",
       taluk: ""
     };
-    const referenceId = `klswa_public_qr_${Date.now()}`;
-    const qr = await razorpayRequest("/v1/payments/qr_codes", {
-      type: "upi_qr",
-      name: "KLSWA Donation",
-      usage: "single_use",
-      fixed_amount: true,
-      payment_amount: amountPaise,
-      description: `${body.fundType} donation by ${donorName}`,
-      close_by: Math.floor(Date.now() / 1000) + 30 * 60,
+    const receipt = `klswa_public_${Date.now()}`;
+    const order = await razorpayRequest("/v1/orders", {
+      amount: amountPaise,
+      currency: "INR",
+      receipt,
       notes: {
-        referenceId,
+        donorId: publicDonorId,
         donorName,
         donorPhone,
         fundType: body.fundType,
@@ -648,14 +636,40 @@ async function api(req, res, pathname) {
     });
     const donation = await store.createDonation(publicDonor, {
       ...body,
-      paymentMethod: "Razorpay Dynamic QR",
-      status: "QR Generated",
-      razorpayQrId: qr.id,
-      razorpayQrUrl: qr.image_url || "",
-      razorpayShortUrl: qr.short_url || "",
-      manualReference: referenceId
+      paymentMethod: "Razorpay",
+      status: "Payment Started",
+      razorpayOrderId: order.id
     });
-    return json(res, 201, { donation, qr });
+    return json(res, 201, {
+      keyId: process.env.RAZORPAY_KEY_ID,
+      order,
+      donation,
+      donor: publicDonor
+    });
+  }
+
+  if (pathname === "/api/public-donations/razorpay-verify" && req.method === "POST") {
+    if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured" });
+    const body = asObject(await parseBody(req));
+    if (!verifyRazorpaySignature(body.razorpay_order_id, body.razorpay_payment_id, body.razorpay_signature)) {
+      return json(res, 400, { error: "Payment verification failed" });
+    }
+    const donation = await store.updateDonationPaymentByOrder(body.donationId, body.razorpay_order_id, {
+      status: "Paid",
+      razorpayPaymentId: body.razorpay_payment_id,
+      razorpaySignature: body.razorpay_signature
+    });
+    if (!donation) return json(res, 404, { error: "Donation record not found" });
+    await tryCreateAuditLogs([{
+      memberId: donation.memberId,
+      memberName: donation.memberName,
+      action: "Donation paid",
+      field: donation.fundType,
+      oldValue: "Payment Started",
+      newValue: `${currency(donation.amount)} Razorpay ${donation.razorpayPaymentId}`,
+      ...auditActor({ id: donation.memberId, name: donation.memberName, role: "public" })
+    }]);
+    return json(res, 200, { donation });
   }
 
   if (pathname === "/api/public-taluk-team-contacts" && req.method === "GET") {
@@ -927,44 +941,6 @@ async function api(req, res, pathname) {
     });
   }
 
-  if (pathname === "/api/member-donations/razorpay-qr" && req.method === "POST") {
-    const member = await currentMember(req);
-    if (!member) return json(res, 401, { error: "Member login required" });
-    if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured yet. Please use manual payment option." });
-    const body = normalizeDonationBody({ ...(asObject(await parseBody(req))), paymentMethod: "Razorpay Dynamic QR" });
-    if (!DONATION_FUNDS.includes(body.fundType)) return json(res, 400, { error: "Select donation fund" });
-    if (!Number.isFinite(body.amount) || body.amount < 1) return json(res, 400, { error: "Enter donation amount" });
-    const amountPaise = Math.round(body.amount * 100);
-    const referenceId = `klswa_qr_${Date.now()}_${member.id.slice(0, 8)}`;
-    const qr = await razorpayRequest("/v1/payments/qr_codes", {
-      type: "upi_qr",
-      name: "KLSWA Donation",
-      usage: "single_use",
-      fixed_amount: true,
-      payment_amount: amountPaise,
-      description: `${body.fundType} donation by ${member.name}`,
-      close_by: Math.floor(Date.now() / 1000) + 30 * 60,
-      notes: {
-        referenceId,
-        memberId: member.id,
-        memberName: member.name,
-        fundType: body.fundType,
-        district: member.district || "",
-        taluk: member.taluk || ""
-      }
-    });
-    const donation = await store.createDonation(member, {
-      ...body,
-      paymentMethod: "Razorpay Dynamic QR",
-      status: "QR Generated",
-      razorpayQrId: qr.id,
-      razorpayQrUrl: qr.image_url || "",
-      razorpayShortUrl: qr.short_url || "",
-      manualReference: referenceId
-    });
-    return json(res, 201, { donation, qr });
-  }
-
   if (pathname === "/api/member-donations/razorpay-verify" && req.method === "POST") {
     const member = await currentMember(req);
     if (!member) return json(res, 401, { error: "Member login required" });
@@ -976,11 +952,12 @@ async function api(req, res, pathname) {
     const donations = await store.listDonations({ ...member, role: "member" }, { limit: 100 });
     const target = donations.find((item) => item.id === body.donationId && item.razorpayOrderId === body.razorpay_order_id);
     if (!target) return json(res, 404, { error: "Donation record not found" });
-    const donation = await store.updateDonationPayment(target.id, {
+    const donation = await store.updateDonationPaymentByOrder(body.donationId, body.razorpay_order_id, {
       status: "Paid",
       razorpayPaymentId: body.razorpay_payment_id,
       razorpaySignature: body.razorpay_signature
     });
+    if (!donation) return json(res, 404, { error: "Donation record not found" });
     await tryCreateAuditLogs([{
       memberId: member.id,
       memberName: member.name,
@@ -1830,7 +1807,8 @@ const server = http.createServer(async (req, res) => {
       "/api/public-membership",
       "/api/public-status",
       "/api/public-strike-suggestion",
-      "/api/public-donations/razorpay-qr",
+      "/api/public-donations/razorpay-order",
+      "/api/public-donations/razorpay-verify",
       "/api/member-activate",
       "/api/member-login",
       "/api/member-me",
@@ -1839,7 +1817,6 @@ const server = http.createServer(async (req, res) => {
       "/api/member-problems",
       "/api/member-donations/manual",
       "/api/member-donations/razorpay-order",
-      "/api/member-donations/razorpay-qr",
       "/api/member-donations/razorpay-verify",
       "/api/member-correction-request",
       "/api/member-forgot-password",
@@ -1848,6 +1825,8 @@ const server = http.createServer(async (req, res) => {
       console.error(`${url.pathname} failed:`, error);
       const publicMessage = url.pathname === "/api/public-status"
         ? "Could not check status. Please verify the phone number or LS number and try again."
+        : url.pathname.includes("donations")
+          ? "Donation payment failed. Please check the details and try again."
         : url.pathname.startsWith("/api/member")
           ? "Member request failed. Please check the details and try again."
         : "Could not submit membership. Please check all fields and try again.";

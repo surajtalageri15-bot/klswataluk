@@ -26,52 +26,78 @@ function formObject(form) {
   return Object.fromEntries(new FormData(form));
 }
 
-async function loadPublicPaymentLink() {
-  const box = document.querySelector("#publicPaymentLinkBox");
-  const link = document.querySelector("#publicPaymentLink");
-  if (!box || !link) return;
-  try {
-    const data = await request("/api/donation-payment-link");
-    if (!data.paymentLink) return;
-    link.href = data.paymentLink;
-    box.classList.remove("hidden");
-  } catch {
-    box.classList.add("hidden");
-  }
+function requireRazorpay() {
+  if (!window.Razorpay) throw new Error("Razorpay checkout did not load. Please refresh and try again.");
 }
 
-loadPublicPaymentLink();
+function showPaidResult(preview, donation) {
+  preview.classList.remove("hidden");
+  preview.innerHTML = `
+    <div class="qr-box">
+      <h3>Payment successful</h3>
+      <p><strong>${escapeHtml(rupees(donation.amount))}</strong> received for ${escapeHtml(donation.fundType)}.</p>
+      <p class="muted">Payment ID: ${escapeHtml(donation.razorpayPaymentId || "-")}</p>
+    </div>
+  `;
+}
 
-const qrForm = document.querySelector("#publicDonationQrForm");
-if (qrForm) {
-  qrForm.addEventListener("submit", async (event) => {
+const payForm = document.querySelector("#publicDonationPayForm");
+if (payForm) {
+  payForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const message = document.querySelector("#publicDonationQrMessage");
-    const preview = document.querySelector("#publicDonationQrPreview");
+    const button = payForm.querySelector('button[type="submit"]');
+    const message = document.querySelector("#publicDonationPayMessage");
+    const preview = document.querySelector("#publicDonationPayResult");
     message.textContent = "";
     preview.classList.add("hidden");
     preview.innerHTML = "";
+    button.disabled = true;
     try {
-      const data = await request("/api/public-donations/razorpay-qr", {
+      requireRazorpay();
+      const data = await request("/api/public-donations/razorpay-order", {
         method: "POST",
-        body: JSON.stringify(formObject(qrForm))
+        body: JSON.stringify(formObject(payForm))
       });
-      preview.classList.remove("hidden");
-      preview.innerHTML = `
-        <div class="qr-box">
-          <h3>Scan and pay ${escapeHtml(rupees(data.donation.amount))}</h3>
-          ${data.donation.razorpayQrUrl ? `<img src="${escapeHtml(data.donation.razorpayQrUrl)}" alt="Razorpay QR code">` : ""}
-          ${data.donation.razorpayShortUrl ? `
-            <div class="qr-pay-actions">
-              <a class="primary pay-now-mobile" href="${escapeHtml(data.donation.razorpayShortUrl)}" target="_blank" rel="noopener">Pay Now on Mobile</a>
-            </div>
-            <p class="qr-mobile-tip">Mobile nalli idre button tap madi. Desktop nalli QR scan madi.</p>
-          ` : ""}
-          <p class="muted">This QR is single-use and valid for 30 minutes. After successful payment, KLSWA admin can see it in successful donations.</p>
-        </div>
-      `;
+      const checkout = new window.Razorpay({
+        key: data.keyId,
+        amount: data.order.amount,
+        currency: data.order.currency || "INR",
+        name: "KLSWA Donation",
+        description: data.donation.fundType,
+        order_id: data.order.id,
+        prefill: {
+          name: data.donor.name,
+          contact: data.donor.phoneNumber
+        },
+        notes: {
+          donationId: data.donation.id,
+          fundType: data.donation.fundType
+        },
+        theme: { color: "#0f6f4d" },
+        handler: async (response) => {
+          try {
+            const verified = await request("/api/public-donations/razorpay-verify", {
+              method: "POST",
+              body: JSON.stringify({ ...response, donationId: data.donation.id })
+            });
+            showPaidResult(preview, verified.donation);
+            payForm.reset();
+            message.textContent = "Donation payment completed successfully.";
+          } catch (error) {
+            message.textContent = error.message;
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            message.textContent = "Payment window closed. If amount was debited, please contact admin with payment ID.";
+          }
+        }
+      });
+      checkout.open();
     } catch (error) {
       message.textContent = error.message;
+    } finally {
+      button.disabled = false;
     }
   });
 }
