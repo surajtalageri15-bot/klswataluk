@@ -281,6 +281,8 @@ function dayaMaranaPetitionHtml(member) {
     .title h3 { margin: 0; color: #9a2222; font-size: 24px; }
     .title p { margin: 6px 0 0; font-weight: 700; }
     .meta { display: flex; justify-content: space-between; gap: 16px; margin: 14px 0; font-weight: 700; }
+    .recipient-lines { min-width: 360px; }
+    .blank-line { display: block; width: 100%; border-bottom: 1px dotted #7c8c82; height: 22px; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; }
     th, td { border: 1px solid #d9e2dc; padding: 8px 10px; vertical-align: top; }
     th { background: #eaf3ed; color: #116047; text-align: left; }
@@ -309,7 +311,7 @@ function dayaMaranaPetitionHtml(member) {
     </div>
 
     <div class="meta">
-      <div>ಸ್ವೀಕರಿಸುವವರು,<br>ಮಾನ್ಯ ಶ್ರೀ ಸಿದ್ದರಾಮಯ್ಯ ಅವರು,<br>ಗೌರವಾನ್ವಿತ ಮುಖ್ಯಮಂತ್ರಿಗಳು, ಕರ್ನಾಟಕ ಸರ್ಕಾರ,<br>ವಿಧಾನ ಸೌಧ, ಬೆಂಗಳೂರು - 560 001.</div>
+      <div class="recipient-lines">ಸ್ವೀಕರಿಸುವವರು / To,<br><span class="blank-line"></span><span class="blank-line"></span><span class="blank-line"></span><span class="blank-line"></span></div>
       <div>ದಿನಾಂಕ: ${escapeHtml(today)}</div>
     </div>
 
