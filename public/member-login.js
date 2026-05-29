@@ -30,6 +30,20 @@ function formObject(form) {
   return Object.fromEntries(new FormData(form));
 }
 
+async function loadDonationPaymentLink(containerId, linkId) {
+  const box = document.querySelector(`#${containerId}`);
+  const link = document.querySelector(`#${linkId}`);
+  if (!box || !link) return;
+  try {
+    const data = await request("/api/donation-payment-link");
+    if (!data.paymentLink) return;
+    link.href = data.paymentLink;
+    box.classList.remove("hidden");
+  } catch {
+    box.classList.add("hidden");
+  }
+}
+
 function batchYearOptions() {
   const end = Math.max(2026, new Date().getFullYear());
   return Array.from({ length: end - 1998 + 1 }, (_, index) => String(end - index));
@@ -651,9 +665,16 @@ function memberDonationPanel(donations = []) {
         <div>
           <p class="eyebrow">KLSWA Secure Donation</p>
           <h2>Horata & Legal Samiti Fund</h2>
-          <p>Generate a Razorpay UPI QR, scan it from any UPI app, and pay directly.</p>
+          <p>Pay through Razorpay using UPI, Paytm, PhonePe, GPay, card, or generate a single-use UPI QR.</p>
         </div>
         <span class="donation-secure-badge">Secured by Razorpay</span>
+      </div>
+      <div class="donation-payment-link hidden" id="memberPaymentLinkBox">
+        <div>
+          <strong>Razorpay Payment Link</strong>
+          <p class="muted">Best for mobile users. Opens Razorpay secure payment page with UPI, Paytm, PhonePe and GPay options.</p>
+        </div>
+        <a class="primary pay-now-mobile" id="memberPaymentLink" href="#" target="_blank" rel="noopener">Pay Now by Razorpay / Paytm</a>
       </div>
       <div class="section-head">
         <div>
@@ -1085,6 +1106,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
   document.querySelectorAll("[data-member-tab]").forEach((button) => {
     button.addEventListener("click", () => showMemberPanel(button.dataset.memberTab));
   });
+  loadDonationPaymentLink("memberPaymentLinkBox", "memberPaymentLink");
 
   bindMemberImageUpload({
     inputId: "memberPhotoInput",

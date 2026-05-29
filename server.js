@@ -464,6 +464,11 @@ function razorpayConfigured() {
   return Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 }
 
+function razorpayPaymentLink() {
+  const link = String(process.env.RAZORPAY_PAYMENT_LINK || process.env.RAZORPAY_PAYTM_LINK || "").trim();
+  return /^https:\/\/.+/i.test(link) ? link : "";
+}
+
 function razorpayRequest(pathname, payload) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
@@ -599,6 +604,10 @@ async function api(req, res, pathname) {
 
   if (pathname === "/api/public-summary" && req.method === "GET") {
     return json(res, 200, await store.getPublicSummary());
+  }
+
+  if (pathname === "/api/donation-payment-link" && req.method === "GET") {
+    return json(res, 200, { paymentLink: razorpayPaymentLink() });
   }
 
   if (pathname === "/api/public-donations/razorpay-qr" && req.method === "POST") {

@@ -26,6 +26,22 @@ function formObject(form) {
   return Object.fromEntries(new FormData(form));
 }
 
+async function loadPublicPaymentLink() {
+  const box = document.querySelector("#publicPaymentLinkBox");
+  const link = document.querySelector("#publicPaymentLink");
+  if (!box || !link) return;
+  try {
+    const data = await request("/api/donation-payment-link");
+    if (!data.paymentLink) return;
+    link.href = data.paymentLink;
+    box.classList.remove("hidden");
+  } catch {
+    box.classList.add("hidden");
+  }
+}
+
+loadPublicPaymentLink();
+
 const qrForm = document.querySelector("#publicDonationQrForm");
 if (qrForm) {
   qrForm.addEventListener("submit", async (event) => {

@@ -19,9 +19,16 @@
         <div>
           <p class="eyebrow">KLSWA Secure Donation</p>
           <h2>Horata & Legal Samiti Fund</h2>
-          <p>Generate a single-use Razorpay UPI QR for the exact amount and scan it from any UPI app.</p>
+          <p>Pay through Razorpay using UPI, Paytm, PhonePe, GPay, card, or generate a single-use UPI QR.</p>
         </div>
         <span class="donation-secure-badge">Secured by Razorpay</span>
+      </div>
+      <div class="donation-payment-link hidden" id="publicPaymentLinkBox">
+        <div>
+          <strong>Razorpay Payment Link</strong>
+          <p class="muted">Best for mobile users. Opens Razorpay secure payment page with UPI, Paytm, PhonePe and GPay options.</p>
+        </div>
+        <a class="primary pay-now-mobile" id="publicPaymentLink" href="#" target="_blank" rel="noopener">Pay Now by Razorpay / Paytm</a>
       </div>
       <div class="section-head">
         <div>
@@ -74,6 +81,6 @@
       </div>
     </section>
   </main>
-  <script src="/donation.js?v=20260529-qr-only"></script>
+  <script src="/donation.js?v=20260529-payment-link"></script>
 </body>
 </html>
