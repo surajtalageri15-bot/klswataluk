@@ -830,6 +830,20 @@ function teamChatReplyTarget() {
   return state.teamChatMessages.find((message) => message.id === teamChatReplyToId) || null;
 }
 
+function chatAttachment(message) {
+  if (!message.attachmentUrl) return "";
+  const isImage = String(message.attachmentType || "").startsWith("image/");
+  return `
+    <a class="chat-attachment ${isImage ? "image-attachment" : ""}" href="${escapeHtml(message.attachmentUrl)}" target="_blank" rel="noopener">
+      ${isImage ? `<img src="${escapeHtml(message.attachmentUrl)}" alt="${escapeHtml(message.attachmentName || "Chat attachment")}">` : `<span class="attachment-icon">PDF</span>`}
+      <span>
+        <strong>${escapeHtml(message.attachmentName || "Open attachment")}</strong>
+        <small>${escapeHtml(message.attachmentType || "Attachment")}</small>
+      </span>
+    </a>
+  `;
+}
+
 function teamWhatsAppMessage(link) {
   return [
     "KLSWA Taluk Technical Team WhatsApp Group",
@@ -934,6 +948,7 @@ function renderTeamChat() {
               <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
             </div>
             <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+            ${chatAttachment(message)}
             <div class="chat-actions">
               <button class="secondary" type="button" data-reply-chat="${escapeHtml(message.id)}">Reply</button>
             </div>
@@ -952,7 +967,10 @@ function renderTeamChat() {
           </div>
         ` : ""}
         <label>Message
-          <textarea name="body" rows="3" maxlength="1000" required placeholder="Type message for your team group"></textarea>
+          <textarea name="body" rows="3" maxlength="1000" placeholder="Type message for your team group"></textarea>
+        </label>
+        <label>Attach PDF / image
+          <input name="attachmentFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp">
         </label>
         ${["admin", "state_president", "division", "district_technical_head"].includes(state.user.role) ? `
           <label class="check">
@@ -999,9 +1017,24 @@ function renderTeamChat() {
     event.preventDefault();
     const form = event.currentTarget;
     const payload = Object.fromEntries(new FormData(form));
+    const file = form.querySelector('input[name="attachmentFile"]').files?.[0];
     const message = document.querySelector("#teamChatMessage");
     message.textContent = "";
     try {
+      delete payload.attachmentFile;
+      if (!String(payload.body || "").trim() && !file) {
+        throw new Error("Type a message or attach a file.");
+      }
+      if (file) {
+        if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+          throw new Error("Upload PDF, JPG, PNG, or WEBP file only.");
+        }
+        if (file.size > 8 * 1024 * 1024) {
+          throw new Error("Attachment must be less than 8 MB.");
+        }
+        payload.attachmentData = await fileToDataUrl(file);
+        payload.attachmentName = file.name;
+      }
       await request("/api/team-chat", {
         method: "POST",
         body: JSON.stringify(payload)

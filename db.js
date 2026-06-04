@@ -169,6 +169,9 @@ function toTeamChatMessage(row) {
     taluk: row.taluk || "",
     pinned: row.pinned || false,
     replyToId: row.reply_to_id || "",
+    attachmentUrl: row.attachment_url || "",
+    attachmentName: row.attachment_name || "",
+    attachmentType: row.attachment_type || "",
     createdAt: row.created_at
   };
 }
@@ -410,6 +413,9 @@ async function initDb() {
       taluk text,
       pinned boolean not null default false,
       reply_to_id text,
+      attachment_url text,
+      attachment_name text,
+      attachment_type text,
       created_at timestamptz not null default now()
     );
 
@@ -539,6 +545,9 @@ async function initDb() {
     alter table members add column if not exists member_login_active boolean not null default false;
     alter table team_chat_messages add column if not exists pinned boolean not null default false;
     alter table team_chat_messages add column if not exists reply_to_id text;
+    alter table team_chat_messages add column if not exists attachment_url text;
+    alter table team_chat_messages add column if not exists attachment_name text;
+    alter table team_chat_messages add column if not exists attachment_type text;
     alter table member_problems add column if not exists document_type text;
     alter table member_problems add column if not exists document_url text;
     alter table member_problems add column if not exists document_name text;
@@ -1986,15 +1995,22 @@ async function createTeamChatMessage(user, body, options = {}) {
     taluk: scope.taluk,
     pinned: Boolean(options.pinned && ["admin", "state_president", "division", "district_technical_head"].includes(user.role)),
     replyToId: String(options.replyToId || "").trim(),
+    attachmentUrl: String(options.attachmentUrl || "").trim(),
+    attachmentName: String(options.attachmentName || "").trim(),
+    attachmentType: String(options.attachmentType || "").trim(),
     createdAt: new Date().toISOString()
   };
 
   if (hasPostgres) {
     const result = await pool.query(
       `insert into team_chat_messages (
-        id, body, author_id, author_name, author_role, district, taluk, pinned, reply_to_id, created_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning *`,
-      [item.id, item.body, item.authorId, item.authorName, item.authorRole, item.district, item.taluk, item.pinned, item.replyToId, item.createdAt]
+        id, body, author_id, author_name, author_role, district, taluk, pinned, reply_to_id,
+        attachment_url, attachment_name, attachment_type, created_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) returning *`,
+      [
+        item.id, item.body, item.authorId, item.authorName, item.authorRole, item.district, item.taluk,
+        item.pinned, item.replyToId, item.attachmentUrl, item.attachmentName, item.attachmentType, item.createdAt
+      ]
     );
     return toTeamChatMessage(result.rows[0]);
   }

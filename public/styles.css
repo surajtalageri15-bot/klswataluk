@@ -2627,6 +2627,48 @@ textarea {
   margin-top: 10px;
 }
 
+.chat-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--green-dark);
+  text-decoration: none;
+}
+
+.chat-attachment img {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+
+.chat-attachment span:last-child {
+  min-width: 0;
+}
+
+.chat-attachment strong,
+.chat-attachment small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.attachment-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 8px;
+  background: #b43232;
+  color: #fff;
+  font-weight: 900;
+}
+
 .chat-meta {
   display: flex;
   flex-wrap: wrap;

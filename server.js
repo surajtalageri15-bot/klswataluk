@@ -13,6 +13,7 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 const SLIDER_DIR = path.join(PUBLIC_DIR, "uploads", "slider");
 const MEMBER_PHOTO_DIR = path.join(PUBLIC_DIR, "uploads", "members");
 const MEMBER_DOCUMENT_DIR = path.join(PUBLIC_DIR, "uploads", "member-documents");
+const TEAM_CHAT_UPLOAD_DIR = path.join(PUBLIC_DIR, "uploads", "team-chat");
 
 const sessions = new Map();
 const memberSessions = new Map();
@@ -176,6 +177,32 @@ function parseMemberPdf(body) {
     throw error;
   }
   return buffer;
+}
+
+function parseTeamChatAttachment(body) {
+  const fileData = String(body.attachmentData || "");
+  if (!fileData) return null;
+  const match = fileData.match(/^data:(application\/pdf|image\/jpe?g|image\/png|image\/webp);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    const error = new Error("Upload PDF, JPG, PNG, or WEBP file only");
+    error.status = 400;
+    throw error;
+  }
+  const buffer = Buffer.from(match[2], "base64");
+  if (!buffer.length || buffer.length > 8 * 1024 * 1024) {
+    const error = new Error("Attachment must be less than 8 MB");
+    error.status = 400;
+    throw error;
+  }
+  const mimeType = match[1];
+  const extension = {
+    "application/pdf": ".pdf",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp"
+  }[mimeType] || "";
+  return { buffer, mimeType, extension };
 }
 
 const talukPermissionDefaults = {
@@ -1266,9 +1293,25 @@ async function api(req, res, pathname) {
   if (pathname === "/api/team-chat" && req.method === "POST") {
     if (!canUseTeamChat(user)) return json(res, 403, { error: "Team chat access required" });
     const body = asObject(await parseBody(req));
-    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body, {
+    const attachment = parseTeamChatAttachment(body);
+    let attachmentUrl = "";
+    let attachmentName = "";
+    let attachmentType = "";
+    if (attachment) {
+      await fs.mkdir(TEAM_CHAT_UPLOAD_DIR, { recursive: true });
+      attachmentName = safeFileName(body.attachmentName || `team-chat-${Date.now()}${attachment.extension}`);
+      if (!path.extname(attachmentName)) attachmentName += attachment.extension;
+      const fileName = `${String(user.id || "team").replace(/[^a-zA-Z0-9_-]/g, "")}-${Date.now()}-${attachmentName}`;
+      await fs.writeFile(path.join(TEAM_CHAT_UPLOAD_DIR, fileName), attachment.buffer);
+      attachmentUrl = `/uploads/team-chat/${fileName}`;
+      attachmentType = attachment.mimeType;
+    }
+    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body || (attachment ? `Attachment: ${attachmentName}` : ""), {
       pinned: body.pinned === true || body.pinned === "true" || body.pinned === "on",
-      replyToId: body.replyToId
+      replyToId: body.replyToId,
+      attachmentUrl,
+      attachmentName,
+      attachmentType
     }) });
   }
 
