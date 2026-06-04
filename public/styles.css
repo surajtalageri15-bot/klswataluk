@@ -2299,12 +2299,6 @@ textarea {
   word-break: break-all;
 }
 
-.batch-invite-card .invite-link {
-  color: var(--green-dark);
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
 .duplicate-list {
   display: grid;
   gap: 16px;
