@@ -15,6 +15,7 @@ const state = {
   dataCorrectionRequests: [],
   memberProblems: [],
   donations: { donations: [], summary: { totalAmount: 0, pendingAmount: 0, verifiedAmount: 0, count: 0, byFund: {} }, razorpayConfigured: false },
+  usefulLinks: [],
   serviceBookMembers: [],
   problemFilters: { search: "", status: "" },
   donationFilters: { search: "", status: "Paid", fundType: "" },
@@ -490,6 +491,12 @@ async function loadSliderPhotos() {
   state.sliderPhotos = data.photos || [];
 }
 
+async function loadUsefulLinks() {
+  if (state.user?.role !== "admin") return;
+  const data = await request("/api/admin/useful-links");
+  state.usefulLinks = data.links || [];
+}
+
 function renderApp() {
   const unreadChat = unreadChatCount();
   app.innerHTML = `
@@ -510,6 +517,7 @@ function renderApp() {
           ${["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(state.user.role) ? `<button data-tab="serviceBooks" class="${state.tab === "serviceBooks" ? "active" : ""}">Service Books</button>` : ""}
           ${state.user.role === "state_president" ? `<button data-tab="messages" class="${state.tab === "messages" ? "active" : ""}">Messages</button>` : ""}
           ${state.user.role === "admin" ? `<button data-tab="homeSlider" class="${state.tab === "homeSlider" ? "active" : ""}">Home Slider</button>` : ""}
+          ${state.user.role === "admin" ? `<button data-tab="usefulLinks" class="${state.tab === "usefulLinks" ? "active" : ""}">Useful Links</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="sessionAnalytics" class="${state.tab === "sessionAnalytics" ? "active" : ""}">Team Time</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
@@ -560,6 +568,7 @@ function renderApp() {
       if (state.tab === "audit") await loadAuditLogs();
       if (state.tab === "backupRestore") await loadSliderPhotos();
       if (state.tab === "homeSlider") await loadSliderPhotos();
+      if (state.tab === "usefulLinks") await loadUsefulLinks();
       renderApp();
     });
   });
@@ -580,6 +589,7 @@ function renderApp() {
   if (state.tab === "serviceBooks") renderServiceBooksControl();
   if (state.tab === "messages") renderMessages();
   if (state.tab === "homeSlider") renderHomeSlider();
+  if (state.tab === "usefulLinks") renderUsefulLinksAdmin();
   if (state.tab === "users") renderUsers();
   if (state.tab === "sessionAnalytics") renderSessionAnalytics();
   if (state.tab === "teamChat") renderTeamChat();
@@ -601,6 +611,7 @@ function pageTitle() {
   if (state.tab === "serviceBooks") return state.user.role === "taluk" ? "Taluk Member Service Books" : "State Service Book Control";
   if (state.tab === "messages") return "State President Messages";
   if (state.tab === "homeSlider") return "Homepage Slider Photos";
+  if (state.tab === "usefulLinks") return "Useful Links";
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "sessionAnalytics") return "Team Time Analytics";
   if (state.tab === "teamChat") return "Team Chat";
@@ -3781,6 +3792,86 @@ function sliderUploadCard(slot) {
       </label>
     </article>
   `;
+}
+
+function renderUsefulLinksAdmin() {
+  const links = state.usefulLinks.length ? state.usefulLinks : [{ title: "", url: "", category: "Survey", description: "", active: true }];
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <div>
+          <h2>Admin-managed Useful Links</h2>
+          <p class="muted">Add survey department links. Active links will show on the public links page.</p>
+        </div>
+        <a class="secondary" href="/links.html" target="_blank" rel="noopener">Open public page</a>
+      </div>
+      <form id="usefulLinksForm" class="useful-links-editor">
+        <div id="usefulLinksRows">
+          ${links.map((link, index) => usefulLinkRow(link, index)).join("")}
+        </div>
+        <div class="actions">
+          <button class="secondary" id="addUsefulLink" type="button">+ Add link</button>
+          <button class="primary" type="submit">Save links</button>
+        </div>
+        <div class="message" id="usefulLinksMessage"></div>
+      </form>
+    </section>
+  `;
+  bindUsefulLinksEditor();
+}
+
+function usefulLinkRow(link = {}, index = 0) {
+  return `
+    <article class="useful-link-row" data-useful-link-row>
+      <div class="form-grid">
+        <label>Title <input name="title" value="${escapeHtml(link.title || "")}" maxlength="120" placeholder="Mojini / Survey Login"></label>
+        <label>Category <input name="category" value="${escapeHtml(link.category || "")}" maxlength="60" placeholder="Survey"></label>
+        <label class="full">URL <input name="url" value="${escapeHtml(link.url || "")}" placeholder="https://..."></label>
+        <label class="full">Description <textarea name="description" rows="2" maxlength="240" placeholder="Short use of this link">${escapeHtml(link.description || "")}</textarea></label>
+        <label class="check"><input name="active" type="checkbox" ${link.active !== false ? "checked" : ""}> Active</label>
+        <button class="danger" type="button" data-remove-useful-link>Remove</button>
+      </div>
+    </article>
+  `;
+}
+
+function collectUsefulLinks() {
+  return [...document.querySelectorAll("[data-useful-link-row]")].map((row) => ({
+    title: row.querySelector('[name="title"]').value,
+    category: row.querySelector('[name="category"]').value,
+    url: row.querySelector('[name="url"]').value,
+    description: row.querySelector('[name="description"]').value,
+    active: row.querySelector('[name="active"]').checked
+  })).filter((item) => item.title.trim() || item.url.trim());
+}
+
+function bindUsefulLinksEditor() {
+  const rows = document.querySelector("#usefulLinksRows");
+  document.querySelector("#addUsefulLink").addEventListener("click", () => {
+    rows.insertAdjacentHTML("beforeend", usefulLinkRow({ active: true }));
+  });
+  rows.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-useful-link]");
+    if (!button) return;
+    button.closest("[data-useful-link-row]").remove();
+  });
+  document.querySelector("#usefulLinksForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#usefulLinksMessage");
+    message.textContent = "";
+    try {
+      const data = await request("/api/admin/useful-links", {
+        method: "PUT",
+        body: JSON.stringify({ links: collectUsefulLinks() })
+      });
+      state.usefulLinks = data.links || [];
+      message.textContent = "Useful links saved.";
+      message.classList.add("success");
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.remove("success");
+    }
+  });
 }
 
 function fileToDataUrl(file) {

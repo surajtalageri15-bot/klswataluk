@@ -858,6 +858,50 @@ async function updateAppSetting(key, value) {
   return { key: safeKey, value: safeValue };
 }
 
+const defaultUsefulLinks = [
+  { title: "Mojini / Survey Login", url: "https://bhoomojini.karnataka.gov.in", category: "Survey", description: "Mojini and survey related official services.", active: true },
+  { title: "Bhoomi Online RTC", url: "https://landrecords.karnataka.gov.in", category: "Land Records", description: "RTC and Karnataka land records services.", active: true },
+  { title: "Revenue Maps", url: "https://landrecords.karnataka.gov.in/service84", category: "Maps", description: "Village maps and revenue map reference.", active: true },
+  { title: "Kaveri Online Services", url: "https://kaveri.karnataka.gov.in", category: "Registration", description: "Registration and property document services.", active: true },
+  { title: "Survey Settlement & Land Records", url: "https://landrecords.karnataka.gov.in", category: "Department", description: "Karnataka land records department portal.", active: true }
+];
+
+function normalizeUsefulLinks(value) {
+  const rows = Array.isArray(value) ? value : defaultUsefulLinks;
+  return rows.map((item) => ({
+    title: String(item.title || "").trim().slice(0, 120),
+    url: String(item.url || "").trim(),
+    category: String(item.category || "General").trim().slice(0, 60),
+    description: String(item.description || "").trim().slice(0, 240),
+    active: item.active !== false
+  })).filter((item) => item.title && /^https?:\/\//i.test(item.url)).slice(0, 30);
+}
+
+async function listUsefulLinks({ activeOnly = false } = {}) {
+  let raw = "";
+  if (hasPostgres) {
+    const result = await pool.query("select value from app_meta where key = 'usefulLinks'");
+    raw = result.rows[0]?.value || "";
+  } else {
+    const db = await readJsonDb();
+    raw = db.meta?.usefulLinks || "";
+  }
+  let parsed = defaultUsefulLinks;
+  try {
+    parsed = raw ? JSON.parse(raw) : defaultUsefulLinks;
+  } catch {
+    parsed = defaultUsefulLinks;
+  }
+  const links = normalizeUsefulLinks(parsed);
+  return activeOnly ? links.filter((item) => item.active) : links;
+}
+
+async function saveUsefulLinks(links = []) {
+  const normalized = normalizeUsefulLinks(links);
+  await updateAppSetting("usefulLinks", JSON.stringify(normalized));
+  return normalized;
+}
+
 async function getPublicSummary() {
   let members = [];
   let updatedAt = new Date().toISOString();
@@ -3373,6 +3417,8 @@ module.exports = {
   getUserById,
   getDashboard,
   updateAppSetting,
+  listUsefulLinks,
+  saveUsefulLinks,
   getPublicSummary,
   listMembers,
   getMember,

@@ -628,6 +628,10 @@ async function api(req, res, pathname) {
     return json(res, 200, await store.getPublicSummary());
   }
 
+  if (pathname === "/api/useful-links" && req.method === "GET") {
+    return json(res, 200, { links: await store.listUsefulLinks({ activeOnly: true }) });
+  }
+
   if (pathname === "/api/public-donations/razorpay-order" && req.method === "POST") {
     if (!razorpayConfigured()) return json(res, 400, { error: "Razorpay is not configured yet." });
     const raw = asObject(await parseBody(req));
@@ -1159,6 +1163,18 @@ async function api(req, res, pathname) {
       return json(res, 400, { error: "Enter a valid WhatsApp group invite link" });
     }
     return json(res, 200, { setting: await store.updateAppSetting("teamWhatsAppLink", link) });
+  }
+
+  if (pathname === "/api/admin/useful-links" && req.method === "GET") {
+    requireAdmin(user);
+    return json(res, 200, { links: await store.listUsefulLinks() });
+  }
+
+  if (pathname === "/api/admin/useful-links" && req.method === "PUT") {
+    requireAdmin(user);
+    const body = asObject(await parseBody(req));
+    const links = Array.isArray(body.links) ? body.links : [];
+    return json(res, 200, { links: await store.saveUsefulLinks(links) });
   }
 
   if (pathname === "/api/session-analytics" && req.method === "GET") {
