@@ -106,6 +106,10 @@ const batchWhatsAppInvite = {
   link: "https://chat.whatsapp.com/GdfkNIBn6mh6k1XPEpQ7wp"
 };
 
+function currentBatchWhatsAppLink() {
+  return state.dashboard?.meta?.[`batch${batchWhatsAppInvite.batchYear}WhatsAppLink`] || batchWhatsAppInvite.link;
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -840,11 +844,12 @@ function teamWhatsAppMessage(link) {
 }
 
 function batchWhatsAppMessage() {
+  const link = currentBatchWhatsAppLink();
   return [
     `KLSWA Batch ${batchWhatsAppInvite.batchYear} Members WhatsApp Group`,
     "",
     `This invite is only for Batch ${batchWhatsAppInvite.batchYear} members.`,
-    `Join link: ${batchWhatsAppInvite.link}`,
+    `Join link: ${link}`,
     "",
     "Please join using your registered mobile number.",
     "Do not share member data, screenshots, or screen recordings outside the approved group."
@@ -854,6 +859,7 @@ function batchWhatsAppMessage() {
 function renderBatchWhatsAppInviteCard() {
   if (state.user.role !== "admin") return "";
   const exportParams = { batchYear: batchWhatsAppInvite.batchYear };
+  const link = currentBatchWhatsAppLink();
   return `
     <section class="box section whatsapp-card batch-invite-card">
       <div class="section-head">
@@ -863,13 +869,17 @@ function renderBatchWhatsAppInviteCard() {
         </div>
         <span class="badge">Batch only</span>
       </div>
-      <p class="notice"><strong>Group link:</strong> <span class="invite-link">${escapeHtml(batchWhatsAppInvite.link)}</span></p>
+      <p class="notice"><strong>Group link:</strong> <span class="invite-link">${escapeHtml(link)}</span></p>
       <div class="toolbar">
-        <a class="primary" href="${escapeHtml(batchWhatsAppInvite.link)}" target="_blank" rel="noopener">Open Batch Group</a>
+        <a class="primary" href="${escapeHtml(link)}" target="_blank" rel="noopener">Open Batch Group</a>
         <button class="secondary" id="copyBatchWhatsApp" type="button">Copy invite message</button>
         <button class="secondary" id="viewBatchMembers" type="button">View Batch ${escapeHtml(batchWhatsAppInvite.batchYear)}</button>
         <a class="secondary" href="${exportUrl("/api/exports/members", exportParams)}">Export Batch ${escapeHtml(batchWhatsAppInvite.batchYear)} CSV</a>
       </div>
+      <form id="batchWhatsAppForm" class="toolbar">
+        <input name="link" value="${escapeHtml(link)}" placeholder="https://chat.whatsapp.com/...">
+        <button class="secondary" type="submit">Save group link</button>
+      </form>
       <div class="message success" id="batchWhatsAppStatus"></div>
     </section>
   `;
@@ -961,6 +971,25 @@ function bindBatchWhatsAppInviteCard() {
       state.tab = "members";
       await loadMembers(1);
       renderApp();
+    });
+  }
+  const form = document.querySelector("#batchWhatsAppForm");
+  if (form) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const link = String(new FormData(form).get("link") || "").trim();
+      const status = document.querySelector("#batchWhatsAppStatus");
+      try {
+        await request("/api/batch-whatsapp-link", {
+          method: "PUT",
+          body: JSON.stringify({ batchYear: batchWhatsAppInvite.batchYear, link })
+        });
+        await loadDashboard();
+        status.textContent = `Batch ${batchWhatsAppInvite.batchYear} WhatsApp group link saved.`;
+        renderApp();
+      } catch (error) {
+        status.textContent = error.message;
+      }
     });
   }
 }
@@ -1905,11 +1934,12 @@ function whatsAppLink(member) {
 
 function batchWhatsAppMemberLink(member) {
   const phone = String(member.phoneNumber || "").replace(/\D/g, "");
+  const link = currentBatchWhatsAppLink();
   const message = [
     `Dear ${member.name || "member"},`,
     "",
     `KLSWA Batch ${batchWhatsAppInvite.batchYear} WhatsApp group invite link:`,
-    batchWhatsAppInvite.link,
+    link,
     "",
     `This group is only for Batch ${batchWhatsAppInvite.batchYear} members. Please join using your registered mobile number.`
   ].join("\n");
