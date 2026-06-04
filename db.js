@@ -176,6 +176,32 @@ function toTeamChatMessage(row) {
   };
 }
 
+function toMemberSupportMessage(row) {
+  if (!row) return row;
+  if (!hasPostgres) return row;
+  return {
+    id: row.id,
+    memberId: row.member_id || "",
+    memberName: row.member_name || "",
+    lsNumber: row.ls_number || "",
+    phoneNumber: row.phone_number || "",
+    district: row.district || "",
+    taluk: row.taluk || "",
+    category: row.category || "Other",
+    body: row.body || "",
+    status: row.status || "Open",
+    authorType: row.author_type || "member",
+    authorId: row.author_id || "",
+    authorName: row.author_name || "",
+    replyToId: row.reply_to_id || "",
+    attachmentUrl: row.attachment_url || "",
+    attachmentName: row.attachment_name || "",
+    attachmentType: row.attachment_type || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
 function toMemberNote(row) {
   if (!row) return row;
   if (!hasPostgres) return row;
@@ -419,6 +445,28 @@ async function initDb() {
       created_at timestamptz not null default now()
     );
 
+    create table if not exists member_support_messages (
+      id text primary key,
+      member_id text not null,
+      member_name text not null,
+      ls_number text,
+      phone_number text,
+      district text,
+      taluk text,
+      category text not null default 'Other',
+      body text not null,
+      status text not null default 'Open',
+      author_type text not null default 'member',
+      author_id text,
+      author_name text,
+      reply_to_id text,
+      attachment_url text,
+      attachment_name text,
+      attachment_type text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
     create table if not exists member_notes (
       id text primary key,
       member_id text not null,
@@ -508,6 +556,8 @@ async function initDb() {
     create index if not exists idx_data_correction_requests_member on data_correction_requests (member_id);
     create index if not exists idx_president_messages_active on president_messages (active, created_at desc);
     create index if not exists idx_team_chat_messages_scope on team_chat_messages (district, taluk, created_at desc);
+    create index if not exists idx_member_support_scope on member_support_messages (district, taluk, created_at desc);
+    create index if not exists idx_member_support_member on member_support_messages (member_id, created_at desc);
     create index if not exists idx_member_notes_member on member_notes (member_id, created_at desc);
     create index if not exists idx_member_problems_scope on member_problems (district, taluk, status, created_at desc);
     create index if not exists idx_member_problems_member on member_problems (member_id, created_at desc);
@@ -2066,6 +2116,204 @@ async function createTeamChatMessage(user, body, options = {}) {
   return item;
 }
 
+function memberSupportVisibleTo(user, message) {
+  if (!user || !message) return false;
+  if (user.role === "member") return String(message.memberId || "") === String(user.id || "");
+  if (["admin", "state_president"].includes(user.role)) return true;
+  if (user.role === "division") return divisionDistricts(user.district).includes(canonicalDistrict(message.district));
+  const district = canonicalDistrict(user.district || "");
+  if (canonicalDistrict(message.district) !== district) return false;
+  if (user.role === "taluk") {
+    return normalizedTaluk(district, message.taluk || "") === normalizedTaluk(district, user.taluk || "");
+  }
+  return ["district", "district_technical_head"].includes(user.role);
+}
+
+function memberSupportReplyPreview(message = {}) {
+  return {
+    id: message.id || "",
+    authorName: message.authorName || "",
+    body: String(message.body || "").slice(0, 160),
+    createdAt: message.createdAt || ""
+  };
+}
+
+function withMemberSupportReplies(messages = []) {
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  return messages.map((message) => {
+    const parent = byId.get(message.replyToId);
+    return parent ? { ...message, replyTo: memberSupportReplyPreview(parent) } : message;
+  });
+}
+
+async function listMemberSupportMessages(userOrMember, limit = 100) {
+  const safeLimit = Math.min(300, Math.max(20, Number(limit || 100)));
+  const isMember = userOrMember?.role === "member";
+  if (hasPostgres) {
+    if (isMember) {
+      const result = await pool.query(
+        "select * from member_support_messages where member_id = $1 order by created_at desc limit $2",
+        [userOrMember.id, safeLimit]
+      );
+      return withMemberSupportReplies(result.rows.map(toMemberSupportMessage).reverse());
+    }
+    if (["admin", "state_president"].includes(userOrMember.role)) {
+      const result = await pool.query("select * from member_support_messages order by created_at desc limit $1", [safeLimit]);
+      return withMemberSupportReplies(result.rows.map(toMemberSupportMessage).reverse());
+    }
+    if (userOrMember.role === "division") {
+      const districts = divisionDistricts(userOrMember.district);
+      if (!districts.length) return [];
+      const placeholders = districts.map((_, index) => `$${index + 1}`).join(", ");
+      const result = await pool.query(
+        `select * from member_support_messages
+         where district in (${placeholders})
+         order by created_at desc limit $${districts.length + 1}`,
+        [...districts, safeLimit]
+      );
+      return withMemberSupportReplies(result.rows.map(toMemberSupportMessage).reverse());
+    }
+    const district = canonicalDistrict(userOrMember.district || "");
+    const taluk = userOrMember.role === "taluk" ? normalizedTaluk(district, userOrMember.taluk || "") : "";
+    const result = await pool.query(
+      `select * from member_support_messages
+       where district = $1 and ($2 = '' or lower(coalesce(taluk, '')) = lower($2))
+       order by created_at desc limit $3`,
+      [district, taluk, safeLimit]
+    );
+    return withMemberSupportReplies(result.rows.map(toMemberSupportMessage).reverse());
+  }
+
+  const db = await readJsonDb();
+  db.memberSupportMessages ||= [];
+  let rows = db.memberSupportMessages;
+  if (isMember) {
+    rows = rows.filter((item) => String(item.memberId || "") === String(userOrMember.id || ""));
+  } else if (!["admin", "state_president"].includes(userOrMember.role)) {
+    if (userOrMember.role === "division") {
+      const districts = divisionDistricts(userOrMember.district);
+      rows = rows.filter((item) => districts.includes(canonicalDistrict(item.district)));
+    } else {
+      const district = canonicalDistrict(userOrMember.district || "");
+      const taluk = userOrMember.role === "taluk" ? normalizedTaluk(district, userOrMember.taluk || "") : "";
+      rows = rows.filter((item) => canonicalDistrict(item.district) === district
+        && (!taluk || normalizedTaluk(district, item.taluk || "") === taluk));
+    }
+  }
+  return rows
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
+    .slice(-safeLimit)
+    .map((item) => ({ ...item, replyToId: item.replyToId || item.reply_to_id || "" }))
+    .map((item, index, list) => {
+      const parent = list.find((message) => message.id === item.replyToId);
+      return parent ? { ...item, replyTo: memberSupportReplyPreview(parent) } : item;
+    });
+}
+
+async function createMemberSupportMessage(actor, body, options = {}) {
+  const text = String(body || "").trim();
+  if (!text && !options.attachmentUrl) {
+    const error = new Error("Type a message or attach a file");
+    error.status = 400;
+    throw error;
+  }
+  if (text.length > 1200) {
+    const error = new Error("Message must be 1200 characters or less");
+    error.status = 400;
+    throw error;
+  }
+
+  let member = actor?.role === "member" ? actor : null;
+  if (!member) {
+    if (options.replyToId) {
+      const existing = (await listMemberSupportMessages(actor, 300)).find((item) => item.id === options.replyToId);
+      if (existing) member = await getMember(existing.memberId);
+    }
+    if (!member && options.memberId) member = await getMember(options.memberId);
+    if (!member) {
+      const error = new Error("Select a member support chat to reply");
+      error.status = 400;
+      throw error;
+    }
+    if (!memberVisibleTo(actor, member)) {
+      const error = new Error("This member is outside your scope");
+      error.status = 403;
+      throw error;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const item = {
+    id: crypto.randomUUID(),
+    memberId: member.id,
+    memberName: member.name || "",
+    lsNumber: member.lsNumber || "",
+    phoneNumber: member.phoneNumber || "",
+    district: canonicalDistrict(member.district || ""),
+    taluk: normalizedTaluk(canonicalDistrict(member.district || ""), member.taluk || ""),
+    category: String(options.category || "Other").trim().slice(0, 80) || "Other",
+    body: text || `Attachment: ${options.attachmentName || "file"}`,
+    status: String(options.status || "Open").trim().slice(0, 40) || "Open",
+    authorType: actor.role === "member" ? "member" : "team",
+    authorId: actor.id || "",
+    authorName: actor.name || actor.username || member.name || "",
+    replyToId: String(options.replyToId || "").trim(),
+    attachmentUrl: String(options.attachmentUrl || "").trim(),
+    attachmentName: String(options.attachmentName || "").trim(),
+    attachmentType: String(options.attachmentType || "").trim(),
+    createdAt: now,
+    updatedAt: now
+  };
+
+  if (hasPostgres) {
+    const result = await pool.query(
+      `insert into member_support_messages (
+        id, member_id, member_name, ls_number, phone_number, district, taluk, category, body, status,
+        author_type, author_id, author_name, reply_to_id, attachment_url, attachment_name, attachment_type, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) returning *`,
+      [
+        item.id, item.memberId, item.memberName, item.lsNumber, item.phoneNumber, item.district, item.taluk,
+        item.category, item.body, item.status, item.authorType, item.authorId, item.authorName, item.replyToId,
+        item.attachmentUrl, item.attachmentName, item.attachmentType, item.createdAt, item.updatedAt
+      ]
+    );
+    return toMemberSupportMessage(result.rows[0]);
+  }
+
+  const db = await readJsonDb();
+  db.memberSupportMessages ||= [];
+  db.memberSupportMessages.push(item);
+  await writeJsonDb(db);
+  return item;
+}
+
+async function updateMemberSupportStatus(user, id, status) {
+  const safeStatus = String(status || "").trim().slice(0, 40);
+  if (!safeStatus) {
+    const error = new Error("Status is required");
+    error.status = 400;
+    throw error;
+  }
+  const visible = await listMemberSupportMessages(user, 300);
+  const current = visible.find((item) => item.id === id);
+  if (!current) return null;
+  if (hasPostgres) {
+    const result = await pool.query(
+      "update member_support_messages set status = $1, updated_at = $2 where id = $3 returning *",
+      [safeStatus, new Date().toISOString(), id]
+    );
+    return toMemberSupportMessage(result.rows[0]);
+  }
+  const db = await readJsonDb();
+  db.memberSupportMessages ||= [];
+  const target = db.memberSupportMessages.find((item) => item.id === id);
+  if (!target) return null;
+  target.status = safeStatus;
+  target.updatedAt = new Date().toISOString();
+  await writeJsonDb(db);
+  return target;
+}
+
 async function listMemberNotes(user, memberId) {
   const member = await getMember(memberId);
   if (!member || !memberVisibleTo(user, member)) return null;
@@ -3276,6 +3524,7 @@ const backupTables = [
   "data_correction_requests",
   "president_messages",
   "team_chat_messages",
+  "member_support_messages",
   "member_notes",
   "member_problems",
   "user_sessions",
@@ -3291,6 +3540,7 @@ const jsonBackupKeys = {
   data_correction_requests: "dataCorrectionRequests",
   president_messages: "presidentMessages",
   team_chat_messages: "teamChatMessages",
+  member_support_messages: "memberSupportMessages",
   member_notes: "memberNotes",
   member_problems: "memberProblems",
   user_sessions: "userSessions",
@@ -3380,6 +3630,7 @@ async function restoreBackup(backup, restoredBy = {}) {
       dataCorrectionRequests: backup.tables.data_correction_requests || [],
       presidentMessages: backup.tables.president_messages || [],
       teamChatMessages: backup.tables.team_chat_messages || [],
+      memberSupportMessages: backup.tables.member_support_messages || [],
       memberNotes: backup.tables.member_notes || [],
       memberProblems: backup.tables.member_problems || [],
       userSessions: backup.tables.user_sessions || [],
@@ -3467,6 +3718,9 @@ module.exports = {
   listPresidentMessagesForMember,
   listTeamChatMessages,
   createTeamChatMessage,
+  listMemberSupportMessages,
+  createMemberSupportMessage,
+  updateMemberSupportStatus,
   listMemberNotes,
   createMemberNote,
   createMemberProblem,

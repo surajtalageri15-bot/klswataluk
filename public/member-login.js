@@ -106,7 +106,7 @@ function bindMemberImageUpload({ inputId, messageId, endpoint, emptyMessage, siz
         body: JSON.stringify({ imageData })
       });
       const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || [], session.supportMessages || []);
     } catch (error) {
       message.textContent = error.message;
     } finally {
@@ -927,6 +927,70 @@ function emptyMemberPanel(title, text) {
   `;
 }
 
+function memberSupportAttachment(message) {
+  if (!message.attachmentUrl) return "";
+  const isImage = String(message.attachmentType || "").startsWith("image/");
+  return `
+    <a class="chat-attachment ${isImage ? "image-attachment" : ""}" href="${escapeHtml(message.attachmentUrl)}" target="_blank" rel="noopener">
+      ${isImage ? `<img src="${escapeHtml(message.attachmentUrl)}" alt="${escapeHtml(message.attachmentName || "Support attachment")}">` : `<span class="attachment-icon">PDF</span>`}
+      <span>
+        <strong>${escapeHtml(message.attachmentName || "Open attachment")}</strong>
+        <small>${escapeHtml(message.attachmentType || "Attachment")}</small>
+      </span>
+    </a>
+  `;
+}
+
+function memberSupportChatPanel(messages = []) {
+  return `
+    <section class="box public-form-card member-dashboard-card">
+      <div class="section-head">
+        <div>
+          <h2>Taluk Support Chat</h2>
+          <p class="muted">Send questions or documents to your same taluk technical team. Replies will appear here.</p>
+        </div>
+        <span class="badge">${messages.filter((item) => !["Resolved", "Closed"].includes(item.status)).length} Open</span>
+      </div>
+      <div class="chat-list member-support-list">
+        ${messages.map((message) => `
+          <article class="chat-message ${message.authorType === "member" ? "member-authored" : "team-authored"}">
+            ${message.replyTo ? `
+              <div class="reply-preview">
+                <span>Replying to ${escapeHtml(message.replyTo.authorName || "Team")}</span>
+                <p>${escapeHtml(message.replyTo.body)}</p>
+              </div>
+            ` : ""}
+            <div class="chat-meta">
+              <strong>${escapeHtml(message.authorName || "KLSWA")}</strong>
+              <span class="badge">${escapeHtml(message.authorType === "member" ? "You" : "Taluk Team")}</span>
+              <span class="badge">${escapeHtml(message.category || "Other")}</span>
+              <span class="badge">${escapeHtml(message.status || "Open")}</span>
+              <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
+            </div>
+            <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+            ${memberSupportAttachment(message)}
+          </article>
+        `).join("") || `<p class="muted">No support chat messages yet.</p>`}
+      </div>
+      <form id="memberSupportChatForm" class="form-grid">
+        <label>Category
+          <select name="category">
+            ${options(["Missing Data", "Correction", "Legal Notice", "Membership", "Service Book", "Other"], "Other")}
+          </select>
+        </label>
+        <label>Message
+          <textarea name="body" rows="4" maxlength="1200" placeholder="Type your message to taluk technical team"></textarea>
+        </label>
+        <label>Attach PDF / image
+          <input name="attachmentFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp">
+        </label>
+        <div class="message" id="memberSupportChatMessage"></div>
+        <button class="primary" type="submit">Send to taluk team</button>
+      </form>
+    </section>
+  `;
+}
+
 function memberUploadSlot({
   title,
   description,
@@ -964,7 +1028,7 @@ function showMemberPanel(panelName) {
   });
 }
 
-function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = [], correctionRequests = [], donations = []) {
+function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTeam = null, problems = [], correctionRequests = [], donations = [], supportMessages = []) {
   setMemberDashboardMode(true);
   const noticesPanel = renderPresidentMessages(presidentMessages) || emptyMemberPanel("State President Notices", "No active notices available right now.");
   const missingPanel = missingDataForm(member, correctionRequests) || emptyMemberPanel("Missing Data", "No missing profile fields found.");
@@ -986,6 +1050,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
           <button type="button" data-member-tab="missing">Missing Data</button>
           <button type="button" data-member-tab="documents">Office / Legal Documents</button>
           <button type="button" data-member-tab="problems">Problems / Grievance</button>
+          <button type="button" data-member-tab="supportChat">Taluk Support Chat</button>
           <button type="button" data-member-tab="donations">Donations</button>
           <button type="button" data-member-tab="contact">Contact Taluk Team</button>
           <button type="button" data-member-tab="notices">President Notices</button>
@@ -1044,6 +1109,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
         <div class="member-panel" data-member-panel="missing">${missingPanel}</div>
         <div class="member-panel" data-member-panel="documents">${memberDocumentForm()}</div>
         <div class="member-panel" data-member-panel="problems">${memberProblemForm()}${renderMyProblems(problems)}</div>
+        <div class="member-panel" data-member-panel="supportChat">${memberSupportChatPanel(supportMessages)}</div>
         <div class="member-panel" data-member-panel="donations">${memberDonationPanel(donations)}</div>
         <div class="member-panel" data-member-panel="contact">${renderTalukTeamContact(member, talukTeam)}</div>
         <div class="member-panel" data-member-panel="notices">${noticesPanel}</div>
@@ -1165,7 +1231,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
           })
         });
         const session = await request("/api/member-me");
-        renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+        renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || [], session.supportMessages || []);
       } catch (error) {
         document.querySelector("#missingDataMessage").textContent = error.message;
       }
@@ -1187,7 +1253,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       problemForm.reset();
       message.textContent = "Problem submitted to leadership.";
       const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || [], session.supportMessages || []);
     } catch (error) {
       message.textContent = error.message;
     }
@@ -1224,9 +1290,43 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
       documentForm.reset();
       message.textContent = "Document uploaded for legal/team review.";
       const session = await request("/api/member-me");
-      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || [], session.supportMessages || []);
     } catch (error) {
       message.textContent = error.message;
+    }
+  });
+
+  const supportChatForm = document.querySelector("#memberSupportChatForm");
+  supportChatForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = document.querySelector("#memberSupportChatMessage");
+    message.textContent = "";
+    const payload = formObject(supportChatForm);
+    const file = supportChatForm.querySelector('input[name="attachmentFile"]').files?.[0];
+    try {
+      delete payload.attachmentFile;
+      if (!String(payload.body || "").trim() && !file) throw new Error("Type a message or attach a file.");
+      if (file) {
+        if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+          throw new Error("Upload PDF, JPG, PNG, or WEBP file only.");
+        }
+        if (file.size > 8 * 1024 * 1024) throw new Error("Attachment must be less than 8 MB.");
+        payload.attachmentData = await fileToDataUrl(file);
+        payload.attachmentName = file.name;
+      }
+      await request("/api/member-support-chat", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      supportChatForm.reset();
+      message.textContent = "Message sent to your taluk technical team.";
+      message.classList.add("success");
+      const session = await request("/api/member-me");
+      renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || [], session.supportMessages || []);
+      showMemberPanel("supportChat");
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.remove("success");
     }
   });
 
@@ -1273,7 +1373,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
             donationPayForm.reset();
             message.textContent = "Donation payment completed successfully.";
             const session = await request("/api/member-me");
-            renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+            renderDashboard(session.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || [], session.supportMessages || []);
             showMemberPanel("donations");
           } catch (error) {
             message.textContent = error.message;
@@ -1314,7 +1414,7 @@ function renderDashboard(member, auditLogs = [], presidentMessages = [], talukTe
 async function loadMemberSession() {
   try {
     const data = await request("/api/member-me");
-    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null, data.problems || [], data.correctionRequests || [], data.donations || []);
+    renderDashboard(data.member, data.auditLogs || [], data.presidentMessages || [], data.talukTeam || null, data.problems || [], data.correctionRequests || [], data.donations || [], data.supportMessages || []);
   } catch {
     dashboard.innerHTML = "";
     setMemberDashboardMode(false);
@@ -1346,7 +1446,7 @@ loginForm.addEventListener("submit", async (event) => {
     });
     loginForm.reset();
     const session = await request("/api/member-me");
-    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || []);
+    renderDashboard(session.member || data.member, session.auditLogs || [], session.presidentMessages || [], session.talukTeam || null, session.problems || [], session.correctionRequests || [], session.donations || [], session.supportMessages || []);
   } catch (error) {
     loginMessage.textContent = error.message;
   }

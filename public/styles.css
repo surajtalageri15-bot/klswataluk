@@ -2589,6 +2589,19 @@ textarea {
   background: #fff9eb;
 }
 
+.chat-message.member-authored {
+  border-left: 4px solid rgba(20, 108, 76, 0.55);
+}
+
+.chat-message.team-authored {
+  border-left: 4px solid rgba(188, 132, 45, 0.65);
+  background: #fffdf6;
+}
+
+.member-support-list {
+  user-select: text;
+}
+
 .secure-chat {
   position: relative;
 }

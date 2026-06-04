@@ -8,6 +8,7 @@ const state = {
   members: { rows: [], page: 1, size: 25, total: 0 },
   teamRequests: [],
   teamChatMessages: [],
+  memberSupportMessages: [],
   auditLogs: [],
   presidentMessages: [],
   missingData: { rows: [], total: 0 },
@@ -41,6 +42,7 @@ const state = {
 let latestJoinLink = "";
 let heartbeatTimer = null;
 let teamChatReplyToId = "";
+let memberSupportReplyToId = "";
 
 const app = document.querySelector("#app");
 
@@ -446,6 +448,13 @@ async function loadTeamChat() {
   state.teamChatMessages = data.messages || [];
 }
 
+async function loadMemberSupport() {
+  if (state.user?.role === "taluk" && !canTaluk("teamChat")) return;
+  if (!["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(state.user.role)) return;
+  const data = await request("/api/member-support?limit=200");
+  state.memberSupportMessages = data.messages || [];
+}
+
 async function loadMemberProblems() {
   if (!["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head", "taluk"].includes(state.user.role)) return;
   const params = new URLSearchParams({
@@ -521,6 +530,7 @@ function renderApp() {
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="users" class="${state.tab === "users" ? "active" : ""}">Taluk Team</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) ? `<button data-tab="sessionAnalytics" class="${state.tab === "sessionAnalytics" ? "active" : ""}">Team Time</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="teamChat" class="${state.tab === "teamChat" ? "active" : ""}">Team Chat${unreadChat ? ` <span class="nav-badge">${unreadChat}</span>` : ""}</button>` : ""}
+          ${["admin", "state_president", "division", "district", "district_technical_head"].includes(state.user.role) || (state.user.role === "taluk" && canTaluk("teamChat")) ? `<button data-tab="memberSupport" class="${state.tab === "memberSupport" ? "active" : ""}">Member Support</button>` : ""}
           ${["admin", "state_president", "division", "district", "district_technical_head", "legal_team_head"].includes(state.user.role) ? `<button data-tab="memberProblems" class="${state.tab === "memberProblems" ? "active" : ""}">${state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems"}</button>` : ""}
           ${canViewDonations() ? `<button data-tab="donations" class="${state.tab === "donations" ? "active" : ""}">Donations</button>` : ""}
           ${["admin", "state_president"].includes(state.user.role) ? `<button data-tab="duplicates" class="${state.tab === "duplicates" ? "active" : ""}">Duplicates</button>` : ""}
@@ -561,6 +571,7 @@ function renderApp() {
       if (state.tab === "users") await loadUsers();
       if (state.tab === "sessionAnalytics") await loadSessionAnalytics();
       if (state.tab === "teamChat") await loadTeamChat();
+      if (state.tab === "memberSupport") await loadMemberSupport();
       if (state.tab === "memberProblems") await loadMemberProblems();
       if (state.tab === "donations") await loadDonations();
       if (state.tab === "duplicates") await loadDuplicates();
@@ -593,6 +604,7 @@ function renderApp() {
   if (state.tab === "users") renderUsers();
   if (state.tab === "sessionAnalytics") renderSessionAnalytics();
   if (state.tab === "teamChat") renderTeamChat();
+  if (state.tab === "memberSupport") renderMemberSupport();
   if (state.tab === "memberProblems") renderMemberProblems();
   if (state.tab === "donations") renderDonations();
   if (state.tab === "duplicates") renderDuplicates();
@@ -615,6 +627,7 @@ function pageTitle() {
   if (state.tab === "users") return "Taluk Team Assignment";
   if (state.tab === "sessionAnalytics") return "Team Time Analytics";
   if (state.tab === "teamChat") return "Team Chat";
+  if (state.tab === "memberSupport") return "Member Support";
   if (state.tab === "memberProblems") return state.user.role === "legal_team_head" ? "Legal Notices" : "Member Problems";
   if (state.tab === "donations") return "Donation / Fund Reports";
   if (state.tab === "duplicates") return "Duplicate Detection";
@@ -841,6 +854,10 @@ function teamChatReplyTarget() {
   return state.teamChatMessages.find((message) => message.id === teamChatReplyToId) || null;
 }
 
+function memberSupportReplyTarget() {
+  return state.memberSupportMessages.find((message) => message.id === memberSupportReplyToId) || null;
+}
+
 function chatAttachment(message) {
   if (!message.attachmentUrl) return "";
   const isImage = String(message.attachmentType || "").startsWith("image/");
@@ -1054,6 +1071,143 @@ function renderTeamChat() {
       teamChatReplyToId = "";
       await loadTeamChat();
       renderTeamChat();
+    } catch (error) {
+      message.textContent = error.message;
+    }
+  });
+}
+
+function renderMemberSupport() {
+  const replyTarget = memberSupportReplyTarget();
+  const openCount = state.memberSupportMessages.filter((message) => !["Resolved", "Closed"].includes(message.status)).length;
+  document.querySelector("#view").innerHTML = `
+    <section class="box section">
+      <div class="section-head">
+        <div>
+          <h2>Member support chat</h2>
+          <p class="muted">Members from your scope can chat with their taluk technical team. Keep each reply official and record-based.</p>
+        </div>
+        <div class="actions">
+          <span class="badge">${openCount} Open</span>
+          <button class="secondary" id="refreshMemberSupport">Refresh</button>
+        </div>
+      </div>
+      <div class="chat-list">
+        ${state.memberSupportMessages.map((message) => `
+          <article class="chat-message member-support-message">
+            ${message.replyTo ? `
+              <div class="reply-preview">
+                <span>Replying to ${escapeHtml(message.replyTo.authorName || "Member")}</span>
+                <p>${escapeHtml(message.replyTo.body)}</p>
+              </div>
+            ` : ""}
+            <div class="chat-meta">
+              <strong>${escapeHtml(message.authorName || message.memberName || "Member")}</strong>
+              <span class="badge">${escapeHtml(message.authorType === "member" ? "Member" : "Team")}</span>
+              <span class="badge">${escapeHtml(message.category || "Other")}</span>
+              <span class="badge">${escapeHtml(message.status || "Open")}</span>
+              <span class="muted">${escapeHtml(message.memberName || "")} / ${escapeHtml(message.lsNumber || "")}</span>
+              <span class="muted">${escapeHtml(message.district || "")} / ${escapeHtml(message.taluk || "")}</span>
+              <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
+            </div>
+            <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+            ${chatAttachment(message)}
+            <div class="chat-actions">
+              <button class="secondary" type="button" data-reply-member-support="${escapeHtml(message.id)}">Reply</button>
+              <select data-support-status="${escapeHtml(message.id)}">
+                ${["Open", "In progress", "Need admin help", "Resolved", "Closed"].map((status) => `<option value="${status}" ${message.status === status ? "selected" : ""}>${status}</option>`).join("")}
+              </select>
+            </div>
+          </article>
+        `).join("") || `<p class="muted">No member support chats yet.</p>`}
+      </div>
+      <form id="memberSupportForm" class="chat-form">
+        <input type="hidden" name="replyToId" value="${escapeHtml(replyTarget?.id || "")}">
+        <input type="hidden" name="memberId" value="${escapeHtml(replyTarget?.memberId || "")}">
+        ${replyTarget ? `
+          <div class="reply-compose">
+            <div>
+              <span class="muted">Replying to ${escapeHtml(replyTarget.memberName || replyTarget.authorName || "Member")}</span>
+              <strong>${escapeHtml(String(replyTarget.body || "").slice(0, 120))}</strong>
+            </div>
+            <button class="secondary" type="button" id="clearMemberSupportReply">Cancel reply</button>
+          </div>
+        ` : `<div class="notice">Select Reply on a member message before sending a response.</div>`}
+        <label>Reply message
+          <textarea name="body" rows="3" maxlength="1200" placeholder="Reply to the selected member"></textarea>
+        </label>
+        <label>Attach PDF / image
+          <input name="attachmentFile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp">
+        </label>
+        <label>Status
+          <select name="status">
+            ${["Open", "In progress", "Need admin help", "Resolved", "Closed"].map((status) => `<option value="${status}">${status}</option>`).join("")}
+          </select>
+        </label>
+        <div class="message" id="memberSupportMessage"></div>
+        <div class="actions">
+          <button class="primary" type="submit" ${replyTarget ? "" : "disabled"}>Send reply</button>
+        </div>
+      </form>
+    </section>
+  `;
+
+  document.querySelector("#refreshMemberSupport").addEventListener("click", async () => {
+    await loadMemberSupport();
+    renderMemberSupport();
+  });
+  document.querySelectorAll("[data-reply-member-support]").forEach((button) => {
+    button.addEventListener("click", () => {
+      memberSupportReplyToId = button.dataset.replyMemberSupport;
+      renderMemberSupport();
+      document.querySelector('#memberSupportForm textarea[name="body"]')?.focus();
+    });
+  });
+  document.querySelector("#clearMemberSupportReply")?.addEventListener("click", () => {
+    memberSupportReplyToId = "";
+    renderMemberSupport();
+  });
+  document.querySelectorAll("[data-support-status]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      try {
+        await request(`/api/member-support/${select.dataset.supportStatus}/status`, {
+          method: "PUT",
+          body: JSON.stringify({ status: select.value })
+        });
+        await loadMemberSupport();
+        renderMemberSupport();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+  });
+  document.querySelector("#memberSupportForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const payload = Object.fromEntries(new FormData(form));
+    const file = form.querySelector('input[name="attachmentFile"]').files?.[0];
+    const message = document.querySelector("#memberSupportMessage");
+    message.textContent = "";
+    try {
+      delete payload.attachmentFile;
+      if (!payload.replyToId || !payload.memberId) throw new Error("Select a member message to reply.");
+      if (!String(payload.body || "").trim() && !file) throw new Error("Type a message or attach a file.");
+      if (file) {
+        if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+          throw new Error("Upload PDF, JPG, PNG, or WEBP file only.");
+        }
+        if (file.size > 8 * 1024 * 1024) throw new Error("Attachment must be less than 8 MB.");
+        payload.attachmentData = await fileToDataUrl(file);
+        payload.attachmentName = file.name;
+      }
+      await request("/api/member-support", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      form.reset();
+      memberSupportReplyToId = "";
+      await loadMemberSupport();
+      renderMemberSupport();
     } catch (error) {
       message.textContent = error.message;
     }

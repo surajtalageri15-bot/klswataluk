@@ -14,6 +14,7 @@ const SLIDER_DIR = path.join(PUBLIC_DIR, "uploads", "slider");
 const MEMBER_PHOTO_DIR = path.join(PUBLIC_DIR, "uploads", "members");
 const MEMBER_DOCUMENT_DIR = path.join(PUBLIC_DIR, "uploads", "member-documents");
 const TEAM_CHAT_UPLOAD_DIR = path.join(PUBLIC_DIR, "uploads", "team-chat");
+const MEMBER_SUPPORT_UPLOAD_DIR = path.join(PUBLIC_DIR, "uploads", "member-support");
 
 const sessions = new Map();
 const memberSessions = new Map();
@@ -205,6 +206,21 @@ function parseTeamChatAttachment(body) {
   return { buffer, mimeType, extension };
 }
 
+async function saveChatAttachment({ body, directory, prefix }) {
+  const attachment = parseTeamChatAttachment(body);
+  if (!attachment) return { attachmentUrl: "", attachmentName: "", attachmentType: "" };
+  await fs.mkdir(directory, { recursive: true });
+  let attachmentName = safeFileName(body.attachmentName || `${prefix}-${Date.now()}${attachment.extension}`);
+  if (!path.extname(attachmentName)) attachmentName += attachment.extension;
+  const fileName = `${String(prefix || "chat").replace(/[^a-zA-Z0-9_-]/g, "")}-${Date.now()}-${attachmentName}`;
+  await fs.writeFile(path.join(directory, fileName), attachment.buffer);
+  return {
+    attachmentUrl: `/uploads/${path.basename(directory)}/${fileName}`,
+    attachmentName,
+    attachmentType: attachment.mimeType
+  };
+}
+
 const talukPermissionDefaults = {
   createMembership: true,
   approveMembership: true,
@@ -305,6 +321,12 @@ function canCorrectTaluks(user) {
 }
 
 function canUseTeamChat(user) {
+  if (!user) return false;
+  if (user.role === "taluk") return hasTalukPermission(user, "teamChat");
+  return ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role);
+}
+
+function canUseMemberSupport(user) {
   if (!user) return false;
   if (user.role === "taluk") return hasTalukPermission(user, "teamChat");
   return ["admin", "state_president", "division", "district", "district_technical_head"].includes(user.role);
@@ -915,7 +937,31 @@ async function api(req, res, pathname) {
     const problems = await store.listMemberProblems({ ...member, role: "member" }, { limit: 100 });
     const correctionRequests = await store.listMemberDataCorrectionRequests(member.id, 20);
     const donations = await store.listDonations({ ...member, role: "member" }, { limit: 100 });
-    return json(res, 200, { member: safeMember, auditLogs, presidentMessages, talukTeam, problems, correctionRequests, donations });
+    const supportMessages = await store.listMemberSupportMessages({ ...member, role: "member" }, 150);
+    return json(res, 200, { member: safeMember, auditLogs, presidentMessages, talukTeam, problems, correctionRequests, donations, supportMessages });
+  }
+
+  if (pathname === "/api/member-support-chat" && req.method === "GET") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    return json(res, 200, { messages: await store.listMemberSupportMessages({ ...member, role: "member" }, 150) });
+  }
+
+  if (pathname === "/api/member-support-chat" && req.method === "POST") {
+    const member = await currentMember(req);
+    if (!member) return json(res, 401, { error: "Member login required" });
+    const body = asObject(await parseBody(req));
+    const attachment = await saveChatAttachment({
+      body,
+      directory: MEMBER_SUPPORT_UPLOAD_DIR,
+      prefix: member.id || "member"
+    });
+    const message = await store.createMemberSupportMessage({ ...member, role: "member" }, body.body || (attachment.attachmentUrl ? `Attachment: ${attachment.attachmentName}` : ""), {
+      category: body.category,
+      replyToId: body.replyToId,
+      ...attachment
+    });
+    return json(res, 201, { message });
   }
 
   if (pathname === "/api/member-donations/manual" && req.method === "POST") {
@@ -1309,26 +1355,53 @@ async function api(req, res, pathname) {
   if (pathname === "/api/team-chat" && req.method === "POST") {
     if (!canUseTeamChat(user)) return json(res, 403, { error: "Team chat access required" });
     const body = asObject(await parseBody(req));
-    const attachment = parseTeamChatAttachment(body);
-    let attachmentUrl = "";
-    let attachmentName = "";
-    let attachmentType = "";
-    if (attachment) {
-      await fs.mkdir(TEAM_CHAT_UPLOAD_DIR, { recursive: true });
-      attachmentName = safeFileName(body.attachmentName || `team-chat-${Date.now()}${attachment.extension}`);
-      if (!path.extname(attachmentName)) attachmentName += attachment.extension;
-      const fileName = `${String(user.id || "team").replace(/[^a-zA-Z0-9_-]/g, "")}-${Date.now()}-${attachmentName}`;
-      await fs.writeFile(path.join(TEAM_CHAT_UPLOAD_DIR, fileName), attachment.buffer);
-      attachmentUrl = `/uploads/team-chat/${fileName}`;
-      attachmentType = attachment.mimeType;
-    }
-    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body || (attachment ? `Attachment: ${attachmentName}` : ""), {
+    const { attachmentUrl, attachmentName, attachmentType } = await saveChatAttachment({
+      body,
+      directory: TEAM_CHAT_UPLOAD_DIR,
+      prefix: user.id || "team"
+    });
+    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body || (attachmentUrl ? `Attachment: ${attachmentName}` : ""), {
       pinned: body.pinned === true || body.pinned === "true" || body.pinned === "on",
       replyToId: body.replyToId,
       attachmentUrl,
       attachmentName,
       attachmentType
     }) });
+  }
+
+  if (pathname === "/api/member-support" && req.method === "GET") {
+    if (!canUseMemberSupport(user)) return json(res, 403, { error: "Member support access required" });
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    return json(res, 200, {
+      messages: await store.listMemberSupportMessages(user, Number(url.searchParams.get("limit") || 150))
+    });
+  }
+
+  if (pathname === "/api/member-support" && req.method === "POST") {
+    if (!canUseMemberSupport(user)) return json(res, 403, { error: "Member support access required" });
+    const body = asObject(await parseBody(req));
+    const attachment = await saveChatAttachment({
+      body,
+      directory: MEMBER_SUPPORT_UPLOAD_DIR,
+      prefix: user.id || "team"
+    });
+    const message = await store.createMemberSupportMessage(user, body.body || (attachment.attachmentUrl ? `Attachment: ${attachment.attachmentName}` : ""), {
+      memberId: body.memberId,
+      category: body.category,
+      status: body.status,
+      replyToId: body.replyToId,
+      ...attachment
+    });
+    return json(res, 201, { message });
+  }
+
+  const supportStatusMatch = pathname.match(/^\/api\/member-support\/([^/]+)\/status$/);
+  if (supportStatusMatch && req.method === "PUT") {
+    if (!canUseMemberSupport(user)) return json(res, 403, { error: "Member support access required" });
+    const body = asObject(await parseBody(req));
+    const message = await store.updateMemberSupportStatus(user, supportStatusMatch[1], body.status);
+    if (!message) return json(res, 404, { error: "Support message not found" });
+    return json(res, 200, { message });
   }
 
   if (pathname === "/api/members" && req.method === "GET") {
