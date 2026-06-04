@@ -101,6 +101,10 @@ const workflowPendingStatuses = ["Pending Taluk Review", "Pending District Revie
 const memberStatusOptions = ["Active", ...workflowPendingStatuses, "Inactive", "Needs correction", "Rejected"];
 const editableMemberStatusOptions = ["Active", "Inactive", ...workflowPendingStatuses, "Needs correction", "Rejected"];
 const inactiveMemberRemark = "Member submitted application but is currently inactive. Kept in records for admin follow-up.";
+const batchWhatsAppInvite = {
+  batchYear: "2021",
+  link: "https://chat.whatsapp.com/GdfkNIBn6mh6k1XPEpQ7wp"
+};
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -835,6 +839,43 @@ function teamWhatsAppMessage(link) {
   ].join("\n");
 }
 
+function batchWhatsAppMessage() {
+  return [
+    `KLSWA Batch ${batchWhatsAppInvite.batchYear} Members WhatsApp Group`,
+    "",
+    `This invite is only for Batch ${batchWhatsAppInvite.batchYear} members.`,
+    `Join link: ${batchWhatsAppInvite.link}`,
+    "",
+    "Please join using your registered mobile number.",
+    "Do not share member data, screenshots, or screen recordings outside the approved group."
+  ].join("\n");
+}
+
+function renderBatchWhatsAppInviteCard() {
+  if (!["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(state.user.role)) return "";
+  const canExport = state.user.role !== "taluk" || canTaluk("exportReports");
+  const exportParams = { batchYear: batchWhatsAppInvite.batchYear };
+  return `
+    <section class="box section whatsapp-card batch-invite-card">
+      <div class="section-head">
+        <div>
+          <h2>Batch ${escapeHtml(batchWhatsAppInvite.batchYear)} WhatsApp Invite</h2>
+          <p class="muted">Use only for Batch ${escapeHtml(batchWhatsAppInvite.batchYear)} members. Direct auto push to WhatsApp groups is not supported by WhatsApp.</p>
+        </div>
+        <span class="badge">Batch only</span>
+      </div>
+      <p class="notice"><strong>Group link:</strong> <span class="invite-link">${escapeHtml(batchWhatsAppInvite.link)}</span></p>
+      <div class="toolbar">
+        <a class="primary" href="${escapeHtml(batchWhatsAppInvite.link)}" target="_blank" rel="noopener">Open Batch Group</a>
+        <button class="secondary" id="copyBatchWhatsApp" type="button">Copy invite message</button>
+        <button class="secondary" id="viewBatchMembers" type="button">View Batch ${escapeHtml(batchWhatsAppInvite.batchYear)}</button>
+        ${canExport ? `<a class="secondary" href="${exportUrl("/api/exports/members", exportParams)}">Export Batch ${escapeHtml(batchWhatsAppInvite.batchYear)} CSV</a>` : ""}
+      </div>
+      <div class="message success" id="batchWhatsAppStatus"></div>
+    </section>
+  `;
+}
+
 function renderTeamWhatsAppCard() {
   if (!["admin", "division", "district_technical_head", "taluk"].includes(state.user.role)) return "";
   const link = state.dashboard?.meta?.teamWhatsAppLink || state.teamWhatsAppLink || "https://chat.whatsapp.com/FiFDrzqoKAU1y1479O9xn9";
@@ -891,6 +932,36 @@ function bindTeamWhatsAppCard() {
       } catch (error) {
         message.textContent = error.message;
       }
+    });
+  }
+}
+
+function bindBatchWhatsAppInviteCard() {
+  const copy = document.querySelector("#copyBatchWhatsApp");
+  if (copy) {
+    copy.addEventListener("click", async () => {
+      await copyText(batchWhatsAppMessage());
+      const status = document.querySelector("#batchWhatsAppStatus");
+      status.textContent = `Batch ${batchWhatsAppInvite.batchYear} invite message copied. Paste it in WhatsApp.`;
+      setTimeout(() => { status.textContent = ""; }, 2200);
+    });
+  }
+  const view = document.querySelector("#viewBatchMembers");
+  if (view) {
+    view.addEventListener("click", async () => {
+      state.filters = {
+        ...state.filters,
+        search: "",
+        status: "",
+        gender: "",
+        district: state.user.role === "taluk" ? state.user.district : "",
+        taluk: state.user.role === "taluk" ? state.user.taluk : "",
+        batchYear: batchWhatsAppInvite.batchYear,
+        missingOnly: false
+      };
+      state.tab = "members";
+      await loadMembers(1);
+      renderApp();
     });
   }
 }
@@ -1676,6 +1747,7 @@ function renderDashboard() {
       `}
     </div>
     ${renderTeamWhatsAppCard()}
+    ${renderBatchWhatsAppInviteCard()}
     ${renderTalukWorkDashboard()}
     <div class="chart-grid">
       <section class="box section">
@@ -1714,6 +1786,7 @@ function renderDashboard() {
   const pdfButton = document.querySelector("#districtPerformancePdf");
   if (pdfButton) pdfButton.addEventListener("click", () => exportDistrictPerformancePdf(performance));
   bindTeamWhatsAppCard();
+  bindBatchWhatsAppInviteCard();
   document.querySelectorAll("[data-open-work-tab]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.tab = button.dataset.openWorkTab;
