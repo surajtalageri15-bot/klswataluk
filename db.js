@@ -168,6 +168,7 @@ function toTeamChatMessage(row) {
     district: row.district || "",
     taluk: row.taluk || "",
     pinned: row.pinned || false,
+    replyToId: row.reply_to_id || "",
     createdAt: row.created_at
   };
 }
@@ -408,6 +409,7 @@ async function initDb() {
       district text,
       taluk text,
       pinned boolean not null default false,
+      reply_to_id text,
       created_at timestamptz not null default now()
     );
 
@@ -536,6 +538,7 @@ async function initDb() {
     alter table members add column if not exists member_password text;
     alter table members add column if not exists member_login_active boolean not null default false;
     alter table team_chat_messages add column if not exists pinned boolean not null default false;
+    alter table team_chat_messages add column if not exists reply_to_id text;
     alter table member_problems add column if not exists document_type text;
     alter table member_problems add column if not exists document_url text;
     alter table member_problems add column if not exists document_name text;
@@ -1893,7 +1896,7 @@ async function listTeamChatMessages(user, limit = 100) {
   if (hasPostgres) {
     if (["admin", "state_president"].includes(user.role)) {
       const result = await pool.query("select * from team_chat_messages order by pinned desc, created_at desc limit $1", [safeLimit]);
-      return result.rows.map(toTeamChatMessage).reverse();
+      return withTeamChatReplies(result.rows.map(toTeamChatMessage).reverse());
     }
     if (user.role === "division") {
       const districts = divisionDistricts(user.district);
@@ -1905,7 +1908,7 @@ async function listTeamChatMessages(user, limit = 100) {
          order by pinned desc, created_at desc limit $${districts.length + 1}`,
         [...districts, safeLimit]
       );
-      return result.rows.map(toTeamChatMessage).reverse();
+      return withTeamChatReplies(result.rows.map(toTeamChatMessage).reverse());
     }
     const district = canonicalDistrict(user.district || "");
     const taluk = user.role === "taluk" ? normalizedTaluk(district, user.taluk || "") : "";
@@ -1915,7 +1918,7 @@ async function listTeamChatMessages(user, limit = 100) {
        order by pinned desc, created_at desc limit $3`,
       [district, taluk, safeLimit]
     );
-    return result.rows.map(toTeamChatMessage).reverse();
+    return withTeamChatReplies(result.rows.map(toTeamChatMessage).reverse());
   }
 
   const db = await readJsonDb();
@@ -1934,7 +1937,29 @@ async function listTeamChatMessages(user, limit = 100) {
   }
   return rows
     .sort((a, b) => Number(Boolean(a.pinned)) - Number(Boolean(b.pinned)) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")))
-    .slice(-safeLimit);
+    .slice(-safeLimit)
+    .map((item) => ({ ...item, replyToId: item.replyToId || item.reply_to_id || "" }))
+    .map((item, index, list) => {
+      const parent = list.find((message) => message.id === item.replyToId);
+      return parent ? { ...item, replyTo: teamChatReplyPreview(parent) } : item;
+    });
+}
+
+function teamChatReplyPreview(message = {}) {
+  return {
+    id: message.id || "",
+    authorName: message.authorName || "",
+    body: String(message.body || "").slice(0, 160),
+    createdAt: message.createdAt || ""
+  };
+}
+
+function withTeamChatReplies(messages = []) {
+  const byId = new Map(messages.map((message) => [message.id, message]));
+  return messages.map((message) => {
+    const parent = byId.get(message.replyToId);
+    return parent ? { ...message, replyTo: teamChatReplyPreview(parent) } : message;
+  });
 }
 
 async function createTeamChatMessage(user, body, options = {}) {
@@ -1960,15 +1985,16 @@ async function createTeamChatMessage(user, body, options = {}) {
     district: scope.district,
     taluk: scope.taluk,
     pinned: Boolean(options.pinned && ["admin", "state_president", "division", "district_technical_head"].includes(user.role)),
+    replyToId: String(options.replyToId || "").trim(),
     createdAt: new Date().toISOString()
   };
 
   if (hasPostgres) {
     const result = await pool.query(
       `insert into team_chat_messages (
-        id, body, author_id, author_name, author_role, district, taluk, pinned, created_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
-      [item.id, item.body, item.authorId, item.authorName, item.authorRole, item.district, item.taluk, item.pinned, item.createdAt]
+        id, body, author_id, author_name, author_role, district, taluk, pinned, reply_to_id, created_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) returning *`,
+      [item.id, item.body, item.authorId, item.authorName, item.authorRole, item.district, item.taluk, item.pinned, item.replyToId, item.createdAt]
     );
     return toTeamChatMessage(result.rows[0]);
   }

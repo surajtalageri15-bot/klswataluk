@@ -39,6 +39,7 @@ const state = {
 
 let latestJoinLink = "";
 let heartbeatTimer = null;
+let teamChatReplyToId = "";
 
 const app = document.querySelector("#app");
 
@@ -825,6 +826,10 @@ function unreadChatCount() {
   return state.teamChatMessages.filter((message) => new Date(message.createdAt).getTime() > lastRead).length;
 }
 
+function teamChatReplyTarget() {
+  return state.teamChatMessages.find((message) => message.id === teamChatReplyToId) || null;
+}
+
 function teamWhatsAppMessage(link) {
   return [
     "KLSWA Taluk Technical Team WhatsApp Group",
@@ -901,6 +906,7 @@ function markTeamChatRead() {
 
 function renderTeamChat() {
   markTeamChatRead();
+  const replyTarget = teamChatReplyTarget();
   document.querySelector("#view").innerHTML = `
     <section class="box section secure-chat" data-watermark="${escapeHtml(chatWatermark())}">
       <div class="section-head">
@@ -914,6 +920,12 @@ function renderTeamChat() {
       <div class="chat-list">
         ${state.teamChatMessages.map((message) => `
           <article class="chat-message ${message.pinned ? "pinned" : ""}">
+            ${message.replyTo ? `
+              <div class="reply-preview">
+                <span>Replying to ${escapeHtml(message.replyTo.authorName || "Team")}</span>
+                <p>${escapeHtml(message.replyTo.body)}</p>
+              </div>
+            ` : ""}
             <div class="chat-meta">
               <strong>${escapeHtml(message.authorName || "Team")}</strong>
               ${message.pinned ? `<span class="badge">Pinned</span>` : ""}
@@ -922,10 +934,23 @@ function renderTeamChat() {
               <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
             </div>
             <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+            <div class="chat-actions">
+              <button class="secondary" type="button" data-reply-chat="${escapeHtml(message.id)}">Reply</button>
+            </div>
           </article>
         `).join("") || `<p class="muted">No chat messages yet.</p>`}
       </div>
       <form id="teamChatForm" class="chat-form">
+        <input type="hidden" name="replyToId" value="${escapeHtml(replyTarget?.id || "")}">
+        ${replyTarget ? `
+          <div class="reply-compose">
+            <div>
+              <span class="muted">Replying to ${escapeHtml(replyTarget.authorName || "Team")}</span>
+              <strong>${escapeHtml(String(replyTarget.body || "").slice(0, 120))}</strong>
+            </div>
+            <button class="secondary" type="button" id="clearTeamChatReply">Cancel reply</button>
+          </div>
+        ` : ""}
         <label>Message
           <textarea name="body" rows="3" maxlength="1000" required placeholder="Type message for your team group"></textarea>
         </label>
@@ -959,6 +984,17 @@ function renderTeamChat() {
     await loadTeamChat();
     renderTeamChat();
   });
+  document.querySelectorAll("[data-reply-chat]").forEach((button) => {
+    button.addEventListener("click", () => {
+      teamChatReplyToId = button.dataset.replyChat;
+      renderTeamChat();
+      document.querySelector('#teamChatForm textarea[name="body"]')?.focus();
+    });
+  });
+  document.querySelector("#clearTeamChatReply")?.addEventListener("click", () => {
+    teamChatReplyToId = "";
+    renderTeamChat();
+  });
   document.querySelector("#teamChatForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -971,6 +1007,7 @@ function renderTeamChat() {
         body: JSON.stringify(payload)
       });
       form.reset();
+      teamChatReplyToId = "";
       await loadTeamChat();
       renderTeamChat();
     } catch (error) {

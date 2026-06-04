@@ -1266,7 +1266,10 @@ async function api(req, res, pathname) {
   if (pathname === "/api/team-chat" && req.method === "POST") {
     if (!canUseTeamChat(user)) return json(res, 403, { error: "Team chat access required" });
     const body = asObject(await parseBody(req));
-    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body, { pinned: body.pinned === true || body.pinned === "true" || body.pinned === "on" }) });
+    return json(res, 201, { message: await store.createTeamChatMessage(user, body.body, {
+      pinned: body.pinned === true || body.pinned === "true" || body.pinned === "on",
+      replyToId: body.replyToId
+    }) });
   }
 
   if (pathname === "/api/members" && req.method === "GET") {
