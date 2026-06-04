@@ -808,6 +808,7 @@ async function getDashboard(user) {
     const metaRows = (await pool.query("select key, value from app_meta")).rows;
     const meta = Object.fromEntries(metaRows.map((row) => [row.key, row.value]));
     const summary = summarize(members);
+    summary.districts = masterLists(user).districts.length;
     summary.taluks = masterTalukCount(user);
     const charts = dashboardCharts(members, user);
     charts.pendingCorrections = await pendingCorrectionChart(user);
@@ -816,6 +817,7 @@ async function getDashboard(user) {
   const db = await readJsonDb();
   const members = db.members.filter((member) => memberVisibleTo(user, member));
   const summary = summarize(members);
+  summary.districts = masterLists(user).districts.length;
   summary.taluks = masterTalukCount(user);
   const charts = dashboardCharts(members, user);
   charts.pendingCorrections = await pendingCorrectionChart(user, db.members);
