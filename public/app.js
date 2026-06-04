@@ -1903,6 +1903,23 @@ function whatsAppLink(member) {
   return `https://wa.me/91${encodeURIComponent(phone)}?text=${encodeURIComponent(followupMessage(member))}`;
 }
 
+function batchWhatsAppMemberLink(member) {
+  const phone = String(member.phoneNumber || "").replace(/\D/g, "");
+  const message = [
+    `Dear ${member.name || "member"},`,
+    "",
+    `KLSWA Batch ${batchWhatsAppInvite.batchYear} WhatsApp group invite link:`,
+    batchWhatsAppInvite.link,
+    "",
+    `This group is only for Batch ${batchWhatsAppInvite.batchYear} members. Please join using your registered mobile number.`
+  ].join("\n");
+  return `https://wa.me/91${encodeURIComponent(phone)}?text=${encodeURIComponent(message)}`;
+}
+
+function isBatchWhatsAppMember(member) {
+  return String(member.batchYear || "").trim() === batchWhatsAppInvite.batchYear && String(member.phoneNumber || "").replace(/\D/g, "").length >= 10;
+}
+
 function renderDistrictPerformance(performance) {
   const missing = performance.missingTalukLogins || [];
   return `
@@ -2138,6 +2155,7 @@ function renderMembers() {
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Edit" data-edit="${member.id}">E</button>` : ""}
                   ${state.user.role === "admin" ? `<button class="secondary" data-login-control="${member.id}">Login</button>` : ""}
                   ${canRequestCorrection ? `<button class="secondary" data-request-correction="${member.id}">Request</button>` : ""}
+                  ${state.user.role === "admin" && isBatchWhatsAppMember(member) ? `<a class="secondary" href="${batchWhatsAppMemberLink(member)}" target="_blank" rel="noopener">Batch WhatsApp</a>` : ""}
                   <button class="secondary" data-member-notes="${member.id}">Notes</button>
                   ${state.user.role === "admin" ? `<button class="icon-btn" title="Delete" data-delete="${member.id}">D</button>` : ""}
                 </td>
