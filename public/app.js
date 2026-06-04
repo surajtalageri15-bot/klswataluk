@@ -852,8 +852,7 @@ function batchWhatsAppMessage() {
 }
 
 function renderBatchWhatsAppInviteCard() {
-  if (!["admin", "state_president", "division", "district", "district_technical_head", "taluk"].includes(state.user.role)) return "";
-  const canExport = state.user.role !== "taluk" || canTaluk("exportReports");
+  if (state.user.role !== "admin") return "";
   const exportParams = { batchYear: batchWhatsAppInvite.batchYear };
   return `
     <section class="box section whatsapp-card batch-invite-card">
@@ -869,7 +868,7 @@ function renderBatchWhatsAppInviteCard() {
         <a class="primary" href="${escapeHtml(batchWhatsAppInvite.link)}" target="_blank" rel="noopener">Open Batch Group</a>
         <button class="secondary" id="copyBatchWhatsApp" type="button">Copy invite message</button>
         <button class="secondary" id="viewBatchMembers" type="button">View Batch ${escapeHtml(batchWhatsAppInvite.batchYear)}</button>
-        ${canExport ? `<a class="secondary" href="${exportUrl("/api/exports/members", exportParams)}">Export Batch ${escapeHtml(batchWhatsAppInvite.batchYear)} CSV</a>` : ""}
+        <a class="secondary" href="${exportUrl("/api/exports/members", exportParams)}">Export Batch ${escapeHtml(batchWhatsAppInvite.batchYear)} CSV</a>
       </div>
       <div class="message success" id="batchWhatsAppStatus"></div>
     </section>
