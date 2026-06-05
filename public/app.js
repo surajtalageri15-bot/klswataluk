@@ -18,6 +18,7 @@ const state = {
   donations: { donations: [], summary: { totalAmount: 0, pendingAmount: 0, verifiedAmount: 0, count: 0, byFund: {} }, razorpayConfigured: false },
   usefulLinks: [],
   serviceBookMembers: [],
+  memberSupportFilters: { search: "", status: "", priority: "", escalatedOnly: false },
   problemFilters: { search: "", status: "" },
   donationFilters: { search: "", status: "Paid", fundType: "" },
   sessionAnalytics: { summary: { users: 0, sessionCount: 0, totalSeconds: 0, todaySeconds: 0, activeUsers: 0 }, rows: [] },
@@ -858,6 +859,96 @@ function memberSupportReplyTarget() {
   return state.memberSupportMessages.find((message) => message.id === memberSupportReplyToId) || null;
 }
 
+function supportAgeDays(message) {
+  const time = new Date(message.createdAt || message.updatedAt || Date.now()).getTime();
+  if (!Number.isFinite(time)) return 0;
+  return Math.max(0, Math.floor((Date.now() - time) / (1000 * 60 * 60 * 24)));
+}
+
+function supportNeedsReminder(message) {
+  return !["Resolved", "Closed"].includes(message.status) && supportAgeDays(message) >= 3;
+}
+
+function filteredMemberSupportMessages() {
+  const filters = state.memberSupportFilters;
+  const search = filters.search.trim().toLowerCase();
+  return state.memberSupportMessages.filter((message) => {
+    const haystack = [
+      message.memberName, message.lsNumber, message.phoneNumber, message.district, message.taluk,
+      message.body, message.category, message.assignedTo, message.documentCategory
+    ].join(" ").toLowerCase();
+    if (search && !haystack.includes(search)) return false;
+    if (filters.status && message.status !== filters.status) return false;
+    if (filters.priority && message.priority !== filters.priority) return false;
+    if (filters.escalatedOnly && message.status !== "Need admin help") return false;
+    return true;
+  });
+}
+
+function memberSupportWhatsappMessage(message) {
+  return [
+    "KLSWA Taluk Support Update",
+    `Member: ${message.memberName || "-"}`,
+    `LS No: ${message.lsNumber || "-"}`,
+    `Taluk: ${message.taluk || "-"}, District: ${message.district || "-"}`,
+    `Status: ${message.status || "Open"}`,
+    `Priority: ${message.priority || "Normal"}`,
+    `Assigned: ${message.assignedTo || "-"}`,
+    message.resolutionNote ? `Resolution note: ${message.resolutionNote}` : "",
+    "",
+    "Please check your KLSWA member login for full details."
+  ].filter(Boolean).join("\n");
+}
+
+function exportMemberSupportPdf(messages = []) {
+  const rows = messages.map((message) => `
+    <tr>
+      <td>${escapeHtml(message.memberName || "")}<br><small>${escapeHtml(message.lsNumber || "")}</small></td>
+      <td>${escapeHtml(message.district || "")}<br><small>${escapeHtml(message.taluk || "")}</small></td>
+      <td>${escapeHtml(message.category || "")}<br><small>${escapeHtml(message.documentCategory || "")}</small></td>
+      <td>${escapeHtml(message.priority || "Normal")}</td>
+      <td>${escapeHtml(message.status || "Open")}<br><small>${escapeHtml(message.assignedTo || "-")}</small></td>
+      <td>${escapeHtml(String(message.body || "").slice(0, 220))}</td>
+      <td>${message.resolutionNote ? escapeHtml(message.resolutionNote) : "-"}</td>
+      <td>${escapeHtml(new Date(message.createdAt).toLocaleDateString())}</td>
+    </tr>
+  `).join("");
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("Please allow popups to export PDF");
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(`
+    <!doctype html>
+    <html>
+    <head>
+      <title>KLSWA Member Support Report</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 18px; color: #17231d; }
+        h1 { margin: 0 0 6px; color: #0d4f38; }
+        p { margin: 0 0 14px; color: #5f6b60; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { border: 1px solid #d8e1d5; padding: 7px; vertical-align: top; text-align: left; }
+        th { background: #eef7ef; color: #0d4f38; }
+        small { color: #5f6b60; }
+        @media print { body { margin: 12px; } }
+      </style>
+    </head>
+    <body>
+      <h1>KLSWA Member Support Report</h1>
+      <p>Generated on ${escapeHtml(new Date().toLocaleString())} / ${messages.length} records</p>
+      <table>
+        <thead><tr><th>Member</th><th>Area</th><th>Category</th><th>Priority</th><th>Status</th><th>Message</th><th>Resolution</th><th>Date</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="8">No records</td></tr>`}</tbody>
+      </table>
+      <script>window.addEventListener("load", () => window.print());</script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
 function chatAttachment(message) {
   if (!message.attachmentUrl) return "";
   const isImage = String(message.attachmentType || "").startsWith("image/");
@@ -1080,6 +1171,10 @@ function renderTeamChat() {
 function renderMemberSupport() {
   const replyTarget = memberSupportReplyTarget();
   const openCount = state.memberSupportMessages.filter((message) => !["Resolved", "Closed"].includes(message.status)).length;
+  const unreadCount = state.memberSupportMessages.filter((message) => message.authorType === "member" && !["Resolved", "Closed"].includes(message.status)).length;
+  const escalatedCount = state.memberSupportMessages.filter((message) => message.status === "Need admin help").length;
+  const reminderCount = state.memberSupportMessages.filter(supportNeedsReminder).length;
+  const messages = filteredMemberSupportMessages();
   document.querySelector("#view").innerHTML = `
     <section class="box section">
       <div class="section-head">
@@ -1089,12 +1184,33 @@ function renderMemberSupport() {
         </div>
         <div class="actions">
           <span class="badge">${openCount} Open</span>
+          <span class="badge">${unreadCount} Member msgs</span>
+          <span class="badge">${escalatedCount} Escalated</span>
+          <span class="badge">${reminderCount} 3+ days</span>
           <button class="secondary" id="refreshMemberSupport">Refresh</button>
+          <button class="secondary" id="exportMemberSupport">Export PDF</button>
         </div>
       </div>
+      <div class="filters support-filters">
+        <label>Search <input id="memberSupportSearch" value="${escapeHtml(state.memberSupportFilters.search)}" placeholder="Name, LS, phone, taluk"></label>
+        <label>Status
+          <select id="memberSupportStatusFilter">
+            <option value="">All</option>
+            ${["Open", "In progress", "Need admin help", "Resolved", "Closed"].map((status) => `<option value="${status}" ${state.memberSupportFilters.status === status ? "selected" : ""}>${status}</option>`).join("")}
+          </select>
+        </label>
+        <label>Priority
+          <select id="memberSupportPriorityFilter">
+            <option value="">All</option>
+            ${["Low", "Normal", "Urgent"].map((priority) => `<option value="${priority}" ${state.memberSupportFilters.priority === priority ? "selected" : ""}>${priority}</option>`).join("")}
+          </select>
+        </label>
+        <label class="check"><input id="memberSupportEscalatedOnly" type="checkbox" ${state.memberSupportFilters.escalatedOnly ? "checked" : ""}> Escalation queue only</label>
+        <button class="secondary" id="applyMemberSupportFilters" type="button">Apply</button>
+      </div>
       <div class="chat-list">
-        ${state.memberSupportMessages.map((message) => `
-          <article class="chat-message member-support-message">
+        ${messages.map((message) => `
+          <article class="chat-message member-support-message ${supportNeedsReminder(message) ? "needs-reminder" : ""}">
             ${message.replyTo ? `
               <div class="reply-preview">
                 <span>Replying to ${escapeHtml(message.replyTo.authorName || "Member")}</span>
@@ -1105,21 +1221,42 @@ function renderMemberSupport() {
               <strong>${escapeHtml(message.authorName || message.memberName || "Member")}</strong>
               <span class="badge">${escapeHtml(message.authorType === "member" ? "Member" : "Team")}</span>
               <span class="badge">${escapeHtml(message.category || "Other")}</span>
+              <span class="badge">${escapeHtml(message.priority || "Normal")}</span>
               <span class="badge">${escapeHtml(message.status || "Open")}</span>
+              ${supportNeedsReminder(message) ? `<span class="badge danger-badge">3+ day reminder</span>` : ""}
               <span class="muted">${escapeHtml(message.memberName || "")} / ${escapeHtml(message.lsNumber || "")}</span>
               <span class="muted">${escapeHtml(message.district || "")} / ${escapeHtml(message.taluk || "")}</span>
+              ${message.assignedTo ? `<span class="muted">Assigned: ${escapeHtml(message.assignedTo)}</span>` : ""}
+              ${message.documentCategory ? `<span class="muted">Doc: ${escapeHtml(message.documentCategory)}</span>` : ""}
               <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
             </div>
             <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+            ${message.resolutionNote ? `<p class="notice">Resolution: ${escapeHtml(message.resolutionNote)}</p>` : ""}
             ${chatAttachment(message)}
             <div class="chat-actions">
               <button class="secondary" type="button" data-reply-member-support="${escapeHtml(message.id)}">Reply</button>
-              <select data-support-status="${escapeHtml(message.id)}">
-                ${["Open", "In progress", "Need admin help", "Resolved", "Closed"].map((status) => `<option value="${status}" ${message.status === status ? "selected" : ""}>${status}</option>`).join("")}
-              </select>
+              <button class="secondary" type="button" data-copy-support-whatsapp="${escapeHtml(message.id)}">Copy WhatsApp</button>
+              <details class="support-update-panel">
+                <summary>Update</summary>
+                <div class="form-grid">
+                  <label>Status
+                    <select data-support-status="${escapeHtml(message.id)}">
+                      ${["Open", "In progress", "Need admin help", "Resolved", "Closed"].map((status) => `<option value="${status}" ${message.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                    </select>
+                  </label>
+                  <label>Priority
+                    <select data-support-priority="${escapeHtml(message.id)}">
+                      ${["Low", "Normal", "Urgent"].map((priority) => `<option value="${priority}" ${message.priority === priority ? "selected" : ""}>${priority}</option>`).join("")}
+                    </select>
+                  </label>
+                  <label>Assigned to <input data-support-assigned="${escapeHtml(message.id)}" value="${escapeHtml(message.assignedTo || "")}" placeholder="Team member name"></label>
+                  <label>Resolution note <textarea data-support-resolution="${escapeHtml(message.id)}" rows="2" placeholder="Close/reply note">${escapeHtml(message.resolutionNote || "")}</textarea></label>
+                  <button class="primary" type="button" data-save-support-meta="${escapeHtml(message.id)}">Save update</button>
+                </div>
+              </details>
             </div>
           </article>
-        `).join("") || `<p class="muted">No member support chats yet.</p>`}
+        `).join("") || `<p class="muted">No member support chats match this filter.</p>`}
       </div>
       <form id="memberSupportForm" class="chat-form">
         <input type="hidden" name="replyToId" value="${escapeHtml(replyTarget?.id || "")}">
@@ -1144,6 +1281,13 @@ function renderMemberSupport() {
             ${["Open", "In progress", "Need admin help", "Resolved", "Closed"].map((status) => `<option value="${status}">${status}</option>`).join("")}
           </select>
         </label>
+        <label>Priority
+          <select name="priority">
+            ${["Normal", "Urgent", "Low"].map((priority) => `<option value="${priority}">${priority}</option>`).join("")}
+          </select>
+        </label>
+        <label>Assigned to <input name="assignedTo" value="${escapeHtml(replyTarget?.assignedTo || state.user.name || "")}" placeholder="Team member name"></label>
+        <label>Resolution note <textarea name="resolutionNote" rows="2" placeholder="Optional closing/action note"></textarea></label>
         <div class="message" id="memberSupportMessage"></div>
         <div class="actions">
           <button class="primary" type="submit" ${replyTarget ? "" : "disabled"}>Send reply</button>
@@ -1156,6 +1300,14 @@ function renderMemberSupport() {
     await loadMemberSupport();
     renderMemberSupport();
   });
+  document.querySelector("#applyMemberSupportFilters").addEventListener("click", () => {
+    state.memberSupportFilters.search = document.querySelector("#memberSupportSearch").value;
+    state.memberSupportFilters.status = document.querySelector("#memberSupportStatusFilter").value;
+    state.memberSupportFilters.priority = document.querySelector("#memberSupportPriorityFilter").value;
+    state.memberSupportFilters.escalatedOnly = document.querySelector("#memberSupportEscalatedOnly").checked;
+    renderMemberSupport();
+  });
+  document.querySelector("#exportMemberSupport").addEventListener("click", () => exportMemberSupportPdf(filteredMemberSupportMessages()));
   document.querySelectorAll("[data-reply-member-support]").forEach((button) => {
     button.addEventListener("click", () => {
       memberSupportReplyToId = button.dataset.replyMemberSupport;
@@ -1167,12 +1319,27 @@ function renderMemberSupport() {
     memberSupportReplyToId = "";
     renderMemberSupport();
   });
-  document.querySelectorAll("[data-support-status]").forEach((select) => {
-    select.addEventListener("change", async () => {
+  document.querySelectorAll("[data-copy-support-whatsapp]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const message = state.memberSupportMessages.find((item) => item.id === button.dataset.copySupportWhatsapp);
+      if (!message) return;
+      await copyText(memberSupportWhatsappMessage(message));
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = "Copy WhatsApp"; }, 1200);
+    });
+  });
+  document.querySelectorAll("[data-save-support-meta]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.saveSupportMeta;
       try {
-        await request(`/api/member-support/${select.dataset.supportStatus}/status`, {
+        await request(`/api/member-support/${id}/status`, {
           method: "PUT",
-          body: JSON.stringify({ status: select.value })
+          body: JSON.stringify({
+            status: document.querySelector(`[data-support-status="${CSS.escape(id)}"]`).value,
+            priority: document.querySelector(`[data-support-priority="${CSS.escape(id)}"]`).value,
+            assignedTo: document.querySelector(`[data-support-assigned="${CSS.escape(id)}"]`).value,
+            resolutionNote: document.querySelector(`[data-support-resolution="${CSS.escape(id)}"]`).value
+          })
         });
         await loadMemberSupport();
         renderMemberSupport();

@@ -188,6 +188,10 @@ function toMemberSupportMessage(row) {
     district: row.district || "",
     taluk: row.taluk || "",
     category: row.category || "Other",
+    priority: row.priority || "Normal",
+    assignedTo: row.assigned_to || "",
+    resolutionNote: row.resolution_note || "",
+    documentCategory: row.document_category || "",
     body: row.body || "",
     status: row.status || "Open",
     authorType: row.author_type || "member",
@@ -454,6 +458,10 @@ async function initDb() {
       district text,
       taluk text,
       category text not null default 'Other',
+      priority text not null default 'Normal',
+      assigned_to text,
+      resolution_note text,
+      document_category text,
       body text not null,
       status text not null default 'Open',
       author_type text not null default 'member',
@@ -598,6 +606,10 @@ async function initDb() {
     alter table team_chat_messages add column if not exists attachment_url text;
     alter table team_chat_messages add column if not exists attachment_name text;
     alter table team_chat_messages add column if not exists attachment_type text;
+    alter table member_support_messages add column if not exists priority text not null default 'Normal';
+    alter table member_support_messages add column if not exists assigned_to text;
+    alter table member_support_messages add column if not exists resolution_note text;
+    alter table member_support_messages add column if not exists document_category text;
     alter table member_problems add column if not exists document_type text;
     alter table member_problems add column if not exists document_url text;
     alter table member_problems add column if not exists document_name text;
@@ -2252,6 +2264,10 @@ async function createMemberSupportMessage(actor, body, options = {}) {
     district: canonicalDistrict(member.district || ""),
     taluk: normalizedTaluk(canonicalDistrict(member.district || ""), member.taluk || ""),
     category: String(options.category || "Other").trim().slice(0, 80) || "Other",
+    priority: ["Low", "Normal", "Urgent"].includes(String(options.priority || "")) ? String(options.priority) : "Normal",
+    assignedTo: String(options.assignedTo || "").trim().slice(0, 120),
+    resolutionNote: String(options.resolutionNote || "").trim().slice(0, 500),
+    documentCategory: String(options.documentCategory || "").trim().slice(0, 80),
     body: text || `Attachment: ${options.attachmentName || "file"}`,
     status: String(options.status || "Open").trim().slice(0, 40) || "Open",
     authorType: actor.role === "member" ? "member" : "team",
@@ -2268,12 +2284,13 @@ async function createMemberSupportMessage(actor, body, options = {}) {
   if (hasPostgres) {
     const result = await pool.query(
       `insert into member_support_messages (
-        id, member_id, member_name, ls_number, phone_number, district, taluk, category, body, status,
+        id, member_id, member_name, ls_number, phone_number, district, taluk, category, priority, assigned_to, resolution_note, document_category, body, status,
         author_type, author_id, author_name, reply_to_id, attachment_url, attachment_name, attachment_type, created_at, updated_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) returning *`,
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23) returning *`,
       [
         item.id, item.memberId, item.memberName, item.lsNumber, item.phoneNumber, item.district, item.taluk,
-        item.category, item.body, item.status, item.authorType, item.authorId, item.authorName, item.replyToId,
+        item.category, item.priority, item.assignedTo, item.resolutionNote, item.documentCategory, item.body, item.status,
+        item.authorType, item.authorId, item.authorName, item.replyToId,
         item.attachmentUrl, item.attachmentName, item.attachmentType, item.createdAt, item.updatedAt
       ]
     );
@@ -2287,20 +2304,26 @@ async function createMemberSupportMessage(actor, body, options = {}) {
   return item;
 }
 
-async function updateMemberSupportStatus(user, id, status) {
-  const safeStatus = String(status || "").trim().slice(0, 40);
+async function updateMemberSupportStatus(user, id, updates = {}) {
+  const data = typeof updates === "string" ? { status: updates } : (updates || {});
+  const safeStatus = String(data.status || "").trim().slice(0, 40);
   if (!safeStatus) {
     const error = new Error("Status is required");
     error.status = 400;
     throw error;
   }
+  const priority = ["Low", "Normal", "Urgent"].includes(String(data.priority || "")) ? String(data.priority) : "Normal";
+  const assignedTo = String(data.assignedTo || "").trim().slice(0, 120);
+  const resolutionNote = String(data.resolutionNote || "").trim().slice(0, 500);
   const visible = await listMemberSupportMessages(user, 300);
   const current = visible.find((item) => item.id === id);
   if (!current) return null;
   if (hasPostgres) {
     const result = await pool.query(
-      "update member_support_messages set status = $1, updated_at = $2 where id = $3 returning *",
-      [safeStatus, new Date().toISOString(), id]
+      `update member_support_messages
+       set status = $1, priority = $2, assigned_to = $3, resolution_note = $4, updated_at = $5
+       where id = $6 returning *`,
+      [safeStatus, priority, assignedTo, resolutionNote, new Date().toISOString(), id]
     );
     return toMemberSupportMessage(result.rows[0]);
   }
@@ -2309,6 +2332,9 @@ async function updateMemberSupportStatus(user, id, status) {
   const target = db.memberSupportMessages.find((item) => item.id === id);
   if (!target) return null;
   target.status = safeStatus;
+  target.priority = priority;
+  target.assignedTo = assignedTo;
+  target.resolutionNote = resolutionNote;
   target.updatedAt = new Date().toISOString();
   await writeJsonDb(db);
   return target;

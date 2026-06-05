@@ -2598,6 +2598,26 @@ textarea {
   background: #fffdf6;
 }
 
+.chat-message.needs-reminder {
+  border-color: rgba(170, 52, 52, 0.36);
+  background: #fff8f6;
+}
+
+.danger-badge {
+  background: #fff0ed;
+  color: #9b2d2d;
+}
+
+.support-update-panel {
+  width: 100%;
+}
+
+.support-update-panel summary {
+  cursor: pointer;
+  color: var(--green-dark);
+  font-weight: 850;
+}
+
 .member-support-list {
   user-select: text;
 }

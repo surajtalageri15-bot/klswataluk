@@ -964,10 +964,14 @@ function memberSupportChatPanel(messages = []) {
               <strong>${escapeHtml(message.authorName || "KLSWA")}</strong>
               <span class="badge">${escapeHtml(message.authorType === "member" ? "You" : "Taluk Team")}</span>
               <span class="badge">${escapeHtml(message.category || "Other")}</span>
+              <span class="badge">${escapeHtml(message.priority || "Normal")}</span>
               <span class="badge">${escapeHtml(message.status || "Open")}</span>
+              ${message.assignedTo ? `<span class="muted">Assigned: ${escapeHtml(message.assignedTo)}</span>` : ""}
+              ${message.documentCategory ? `<span class="muted">Doc: ${escapeHtml(message.documentCategory)}</span>` : ""}
               <span class="muted">${escapeHtml(new Date(message.createdAt).toLocaleString())}</span>
             </div>
             <p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p>
+            ${message.resolutionNote ? `<p class="notice">Resolution: ${escapeHtml(message.resolutionNote)}</p>` : ""}
             ${memberSupportAttachment(message)}
           </article>
         `).join("") || `<p class="muted">No support chat messages yet.</p>`}
@@ -976,6 +980,16 @@ function memberSupportChatPanel(messages = []) {
         <label>Category
           <select name="category">
             ${options(["Missing Data", "Correction", "Legal Notice", "Membership", "Service Book", "Other"], "Other")}
+          </select>
+        </label>
+        <label>Priority
+          <select name="priority">
+            ${options(["Normal", "Urgent", "Low"], "Normal")}
+          </select>
+        </label>
+        <label>Document category
+          <select name="documentCategory">
+            ${options(["", "Notice", "Akarband", "Swamitva", "Mutation", "Court / Legal", "Other"], "")}
           </select>
         </label>
         <label>Message

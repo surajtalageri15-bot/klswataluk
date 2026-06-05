@@ -958,6 +958,8 @@ async function api(req, res, pathname) {
     });
     const message = await store.createMemberSupportMessage({ ...member, role: "member" }, body.body || (attachment.attachmentUrl ? `Attachment: ${attachment.attachmentName}` : ""), {
       category: body.category,
+      priority: body.priority,
+      documentCategory: body.documentCategory,
       replyToId: body.replyToId,
       ...attachment
     });
@@ -1389,6 +1391,10 @@ async function api(req, res, pathname) {
       memberId: body.memberId,
       category: body.category,
       status: body.status,
+      priority: body.priority,
+      assignedTo: body.assignedTo,
+      resolutionNote: body.resolutionNote,
+      documentCategory: body.documentCategory,
       replyToId: body.replyToId,
       ...attachment
     });
@@ -1399,7 +1405,7 @@ async function api(req, res, pathname) {
   if (supportStatusMatch && req.method === "PUT") {
     if (!canUseMemberSupport(user)) return json(res, 403, { error: "Member support access required" });
     const body = asObject(await parseBody(req));
-    const message = await store.updateMemberSupportStatus(user, supportStatusMatch[1], body.status);
+    const message = await store.updateMemberSupportStatus(user, supportStatusMatch[1], body);
     if (!message) return json(res, 404, { error: "Support message not found" });
     return json(res, 200, { message });
   }
